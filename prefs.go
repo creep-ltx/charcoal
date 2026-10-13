@@ -1,6 +1,6 @@
 package main
 
-// Settings kept between runs, in ~/.config/charcool/prefs.json.
+// Settings kept between runs, in ~/.config/charcoal/prefs.json.
 
 import (
 	"encoding/json"
@@ -36,7 +36,7 @@ func prefsPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(d, "charcool", "prefs.json")
+	return filepath.Join(d, "charcoal", "prefs.json")
 }
 
 func loadPrefs() {

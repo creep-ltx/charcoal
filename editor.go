@@ -1057,7 +1057,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 
 func writeAtomic(p string, data []byte) error {
 	dir := filepath.Dir(p)
-	f, err := os.CreateTemp(dir, ".charcool-")
+	f, err := os.CreateTemp(dir, ".charcoal-")
 	if err != nil {
 		return err
 	}

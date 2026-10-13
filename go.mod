@@ -1,4 +1,4 @@
-module charcool
+module charcoal
 
 go 1.24
 

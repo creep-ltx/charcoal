@@ -6,7 +6,7 @@ package main
 // sends, printed by the C64's screen editor.
 //
 // The character set is the C64's character ROM, which is not ours to pass on:
-// it is read from chargen.bin in ~/.local/share/charcool/ (or the copies that
+// it is read from chargen.bin in ~/.local/share/charcoal/ (or the copies that
 // bbmp and VICE keep), see c64Paths. downloadChargen fetches it from the VICE
 // emulator's own repository, which distributes it.
 
@@ -28,7 +28,7 @@ func c64Paths() []string {
 		data = filepath.Join(home, ".local", "share")
 	}
 	return []string{
-		filepath.Join(data, "charcool", "chargen.bin"),
+		filepath.Join(data, "charcoal", "chargen.bin"),
 		filepath.Join(data, "bbmp", "extras", "chargen.bin"),
 		"/usr/share/vice/C64/chargen-901225-01.bin",
 		"/usr/share/vice/C64/chargen",

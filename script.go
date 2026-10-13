@@ -1,9 +1,9 @@
 package main
 
-// A test script for running without a person: CHARCOOL_SCRIPT holds steps
+// A test script for running without a person: CHARCOAL_SCRIPT holds steps
 // separated by ";" that are played into the window one per frame, e.g.
 //
-//	CHARCOOL_SCRIPT="click 100 200; rclick 10 10; move 50 60; drag 1 2 3 4; key ctrl+S; text abc; wheel 3; shot /tmp/a.png; quit"
+//	CHARCOAL_SCRIPT="click 100 200; rclick 10 10; move 50 60; drag 1 2 3 4; key ctrl+S; text abc; wheel 3; shot /tmp/a.png; quit"
 //
 // Used with SDL_VIDEODRIVER=offscreen to check the program headless.
 
@@ -20,7 +20,7 @@ import (
 var script []string
 
 func init() {
-	for _, s := range strings.Split(os.Getenv("CHARCOOL_SCRIPT"), ";") {
+	for _, s := range strings.Split(os.Getenv("CHARCOAL_SCRIPT"), ";") {
 		if s = strings.TrimSpace(s); s != "" {
 			script = append(script, s)
 		}

@@ -1,6 +1,6 @@
 package main
 
-// CharView: the same program started as "charview" (or "charcool --view"),
+// CharView: the same program started as "charview" (or "charedit --view"),
 // showing only the art, one file after the other.
 
 import (
@@ -149,9 +149,9 @@ func viewerKey(k string, ctrl bool) {
 	case "E":
 		if exe, err := os.Executable(); err == nil && a.path != "" {
 			if err := exec.Command(exe, a.path).Start(); err != nil {
-				a.msg("Could not start CharCool: " + err.Error())
+				a.msg("Could not start CharEdit: " + err.Error())
 			} else {
-				a.msg("Opened in CharCool")
+				a.msg("Opened in CharEdit")
 			}
 		}
 	case "Escape", "Q":

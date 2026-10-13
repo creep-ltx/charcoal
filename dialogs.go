@@ -52,7 +52,7 @@ type Confirm struct {
 }
 
 func (d *Confirm) draw(u *UI) {
-	in := u.window(centre(460, 140), "CharCool")
+	in := u.window(centre(460, 140), "Charcoal")
 	lines := wrap(d.text, in.w/charW)
 	for i, l := range lines {
 		u.fb.text(in.x, in.y+i*lineH, l, cText)
@@ -553,14 +553,14 @@ Dropping files on the window opens them.
 
 AMIGA, PC AND C64
 Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. C64 pages are PETSCII: 40 columns, the C64's two character sets (the Font gadget), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
-The C64 character set is the C64's ROM and does not come with the program: the first run offers to download it from the VICE emulator project (checked by its SHA-1), and so does Settings. A chargen.bin of your own (4096 bytes) in ~/.local/share/charcool/ works too.
+The C64 character set is the C64's ROM and does not come with the program: the first run offers to download it from the VICE emulator project (checked by its SHA-1), and so does Settings. A chargen.bin of your own (4096 bytes) in ~/.local/share/charcoal/ works too.
 
 SETTINGS
-Kept in ~/.config/charcool/prefs.json. "uiscale": 2 there doubles the whole window for big screens.`
+Kept in ~/.config/charcoal/prefs.json. "uiscale": 2 there doubles the whole window for big screens.`
 
 func (d *HelpReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(900, ui.fb.h*5/6), "CharCool - keys and mouse")
+	in := u.window(centre(900, ui.fb.h*5/6), "CharEdit - keys and mouse")
 	lines := wrap(helpText, in.w/charW-3)
 	textR := Rect{in.x, in.y, in.w - 20, in.h - gadH - 10}
 	rows := textR.h / lineH
@@ -602,7 +602,7 @@ func (d *HelpReq) key(k string, ctrl, shift bool) bool {
 
 const c64Why = "C64 pages (PETSCII) need the C64's character set. It is the C64's own ROM, so it does not come " +
 	"with this program, but the VICE emulator project hands it out. Download it from VICE now? (4 KB, checked " +
-	"before it is used, kept in ~/.local/share/charcool/.) You can also do this later under Settings."
+	"before it is used, kept in ~/.local/share/charcoal/.) You can also do this later under Settings."
 
 type C64Req struct {
 	after func() // what to do once the character set is here

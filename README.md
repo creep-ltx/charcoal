@@ -1,18 +1,18 @@
-# CharCool
+# Charcoal
 
-Characters, cool, and a pun on charcoal.
+Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer.
 
 An art viewer and editor for Amiga ANSI, PC ANSI and C64 PETSCII, drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA on a PC page
 (CP437), the C64's two character sets on a C64 page.
 
-    charcool [FILE...]     # opens its own window, one tab per file
+    charedit [FILE...]     # the editor: its own window, one tab per file
 
     charview FILE|FOLDER...   # just looks: n / Right / Space next, p / Left previous, q / Esc quits
 
-**CharView** is the same program started as `charview` (a link to `charcool`, or `charcool --view`): the art
+**CharView** is the same program started as `charview` (a link to `charedit`, or `charedit --view`): the art
 fills the window, fitted to its width, with one line at the bottom (i hides it). Up/Down/PgUp/PgDn/Home/End
-and the wheel scroll, +/- zoom (0 fits again), g grid, m plays the file at modem speed, e opens it in CharCool.
+and the wheel scroll, +/- zoom (0 fits again), g grid, m plays the file at modem speed, e opens it in CharEdit.
 A folder gives every art file in it (.ans .asc .nfo .diz .txt .bin .seq .pet .ice ...). It never changes the
 editor's settings.
 
@@ -22,10 +22,10 @@ Press the **?** gadget for every key.
 
 ## Build
 
-    go build -o charcool .     # needs Go and the SDL2 development files
+    go build -o charedit .     # needs Go and the SDL2 development files
     go test ./...             # the core: parser, writer, SAUCE
 
-`~/.local/bin/charcool` and `~/.local/bin/charview` link to the binary here.
+`~/.local/bin/charedit` and `~/.local/bin/charview` link to the binary here.
 
 ## What it does
 
@@ -39,7 +39,7 @@ Press the **?** gadget for every key.
 - **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
   character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's
   ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its
-  GitHub mirror), checked by SHA-1, into `~/.local/share/charcool/chargen.bin`; Settings can do it too. bbmp's
+  GitHub mirror), checked by SHA-1, into `~/.local/share/charcoal/chargen.bin`; Settings can do it too. bbmp's
   and an installed VICE's copies are used if present.
 - **Tabs and two pages at once**: every file opens in a tab; show one page, two side by side or one over the other
   (Ctrl+L), optionally scrolling together.
@@ -51,7 +51,7 @@ Press the **?** gadget for every key.
   Shift+click edits the colour).
 - Tools: Type, Draw (Shift+click = line), Colour, Fill, Pick (or middle click), Select (copy/cut/paste/stamp), Half.
 - Undo/redo, play at modem speed, save as ANSI, plain text, UTF-8, `.bin` or PNG; dropping a file on the window opens it.
-- Settings in `~/.config/charcool/prefs.json` (`"uiscale": 2` doubles the window for big screens).
+- Settings in `~/.config/charcoal/prefs.json` (`"uiscale": 2` doubles the window for big screens).
 
 ## Files
 
@@ -65,7 +65,7 @@ Press the **?** gadget for every key.
 | `fonts.go`, `fonts/` | the embedded fonts and their mirror tables; `cp437.go` the CP437 table |
 | `viewer.go` | CharView |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
-| `script.go` | `CHARCOOL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
+| `script.go` | `CHARCOAL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
 | `web/` | the first version, called amiansi, that ran in the browser (Python server + HTML/JS), kept for reference |
 
 ## Fonts
