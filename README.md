@@ -2,7 +2,8 @@
 
 Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer.
 
-An art viewer and editor for Amiga ANSI, PC ANSI, Atari ATASCII and Commodore PETSCII (PET, VIC-20, C64, C128), drawn with the real bitmap fonts: Topaz
+An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw),
+Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128) and ZX Spectrum screens, drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA on a PC page
 (CP437), the C64's two character sets on a C64 page.
 
@@ -57,6 +58,9 @@ Press the **?** gadget for every key.
 - **Atari ST page**: the ST's VT52 terminal in low (40x25, 16 colours), medium (80x25, 4) or high resolution
   (80x25, mono); each cell its own colours; `.vt` streams read and written, the resolution guessed from the pens
   and columns used. Font: EmuTOS's, downloaded on first use (GPL, so not built in), SHA-1 checked.
+- **ZX Spectrum page**: the 32x24 screen, ink/paper/bright/flash per cell, the 48K ROM's font (built in: Amstrad
+  allows passing the ROM on, `fonts/zx-spectrum-NOTICE.txt`) with the block graphics and UDGs. Saved as `.scr`
+  (6912 bytes); a `.scr` opens with each 8x8 cell matched to a character (drawings get the nearest one).
 - **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save; iCEDraw (.idf), ArtWorx (.adf) and
   TundraDraw (.tnd) open with their own fonts and colours. The same art in five formats (ansilove's test files,
   `testdata/alove`) gives the same page in all of them. PC attribute bytes are in BIOS colour order and are

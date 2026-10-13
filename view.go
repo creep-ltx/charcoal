@@ -27,6 +27,11 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 		bgc, it, ul = a.pal[a.doc.bg], false, false
 	case a.st():
 		bgc = a.pal[bg]
+	case a.zx():
+		if v&flashFlag != 0 && !a.blink { // flashing: ink and paper swap
+			fg, bg = bg, fg
+		}
+		bgc = a.pal[bg]
 	case a.ice:
 		bgc = a.pal[bg]
 	default:
@@ -299,10 +304,13 @@ func (a *App) drawBar(u *UI) int {
 	}
 	fl.gap()
 	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata files. ST: Atari ST VT52. PETSCII: PET, VIC-20, C64, C128, .seq files."
-	for _, m := range []string{"amiga", "pc", "atari", "st", "c64"} {
+	for _, m := range []string{"amiga", "pc", "atari", "st", "c64", "zx"} {
 		label := modeNames[m]
 		if m == "st" {
 			label = "ST"
+		}
+		if m == "zx" {
+			label = "ZX"
 		}
 		if u.button(fl.place(buttonW(label)), label, a.mode == m, modeHint) != nil {
 			a.setMode(m)
@@ -378,6 +386,10 @@ func (a *App) drawBar(u *UI) int {
 	})
 	fl.gap()
 	switch {
+	case a.zx():
+		r := fl.place(textW("32 x 24") + 8)
+		fb.text(r.x+4, r.y+3, "32 x 24", cText)
+		u.setHint(r, "The Spectrum's screen")
 	case a.st():
 		var names []string
 		cur := 0
@@ -449,7 +461,7 @@ func (a *App) drawBar(u *UI) int {
 			savePrefs()
 		}
 	}
-	if !a.screen() {
+	if a.pc() || a.amiga() {
 		r = fl.place(checkW("iCE"))
 		a.ice, _ = u.check(r.x, r.y, "iCE", a.ice, "Background colours 8-15 instead of blink (iCE colours)")
 	}
@@ -818,6 +830,9 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		a.ital = toggle("I", a.ital, "Italic (Amiga console SGR 3)")
 		a.under = toggle("U", a.under, "Underline (Amiga console SGR 4)")
 	}
+	if a.zx() {
+		a.flash = toggle("Flash", a.flash, "Flash: new cells swap ink and paper twice a second")
+	}
 	if a.screen() {
 		a.rev = toggle("Rev", a.rev, "Reverse: typing gives reversed characters, like RVS ON (Ctrl+R)")
 	}
@@ -912,7 +927,7 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		if i == bgNow {
 			fb.dashed(r.inset(-2), cOrange)
 		}
-		if a.screen() && i == a.doc.borderColour() { // the border: a mark under the swatch
+		if (a.screen() || a.zx()) && i == a.doc.borderColour() { // the border: a mark under the swatch
 			fb.fill(Rect{r.x + 4, r.y + r.h + 3, r.w - 8, 2}, cHi)
 		}
 		u.setHint(r, fmt.Sprintf("Colour %d: #%06X. Left: %s, right: %s, Shift+click: change it", i, a.pal[i]&0xFFFFFF, fgName, bgName))
@@ -922,7 +937,7 @@ func (a *App) drawPane(u *UI, pane Rect) {
 				openColour(i)
 			case c.button == 3:
 				a.setBg(i)
-			case c.button == 2 && a.screen():
+			case c.button == 2 && (a.screen() || a.zx()):
 				if a.doc.border != i {
 					a.pushUndo()
 					a.doc.border = i
@@ -983,7 +998,7 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		}
 		x = fb.text(x+charW*2, y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 	}
-	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52"}[a.mode]
+	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum"}[a.mode]
 	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, a.doc.rows), cText) + 24
 	name := a.path
 	if name == "" {

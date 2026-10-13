@@ -38,6 +38,7 @@ var palettes = []*Palette{
 		0x666666, 0xff6666, 0x66ff66, 0xffee55, 0x88aaff, 0xff88ff, 0x88ffff, 0xffffff),
 	c64Palette,
 	atariPalette,
+	zxPalette,
 	{id: "custom", name: "Custom"},
 }
 
@@ -84,6 +85,7 @@ func defaultFkeys() map[string][][]int {
 		"c64":   c64Fkeys,
 		"atari": atariFkeys,
 		"st":    stFkeys,
+		"zx":    zxFkeys,
 	}
 }
 
@@ -156,6 +158,7 @@ type App struct {
 	fg, bg, brush int
 	ital, under   bool
 	rev, insert   bool
+	flash         bool // ZX Spectrum: new cells flash
 	clip          *Block
 	clipText      string
 	fset, factive int
@@ -188,6 +191,7 @@ func (a *App) pc() bool    { return a.mode == "pc" }
 func (a *App) c64() bool   { return a.mode == "c64" }
 func (a *App) atari() bool { return a.mode == "atari" }
 func (a *App) st() bool    { return a.mode == "st" }
+func (a *App) zx() bool    { return a.mode == "zx" }
 
 // res is the Atari ST resolution of an ST page.
 func (a *App) res() STRes { return stResByID(a.stres) }
@@ -204,6 +208,9 @@ func (a *App) font() *Font {
 		if f := fontByID(a.res().font); f != nil {
 			return f
 		}
+	}
+	if a.zx() {
+		return zxFont
 	}
 	if a.c64() {
 		fam := a.mach().family
@@ -240,6 +247,9 @@ func (a *App) cellH() int {
 	if a.st() {
 		return map[bool]int{true: 16, false: 8}[a.res().font == "st8x16"]
 	}
+	if a.zx() {
+		return 8
+	}
 	if a.screen() || (a.ch8 && a.amiga()) || (a.font() == a.ownFont && a.ownFont != nil && a.ownFont.h8) {
 		return 8
 	}
@@ -262,6 +272,9 @@ func (a *App) styleFlags() uint32 {
 
 // cell makes a cell of the page in the brush's colours.
 func (a *App) cell(ch int) uint32 {
+	if a.zx() {
+		return zxCell(ch, a.fg, a.bg, a.fg > 7 || a.bg > 7, a.flash)
+	}
 	if a.screen() {
 		if a.rev {
 			ch |= 0x80
@@ -275,6 +288,9 @@ func (a *App) cell(ch int) uint32 {
 }
 
 func (a *App) brushCell() uint32 {
+	if a.zx() {
+		return a.cell(a.brush)
+	}
 	if a.atari() {
 		return makeCell(a.brush, 0, 0, 0)
 	}
@@ -313,6 +329,9 @@ func (a *App) setPalette() {
 	if a.atari() && p.id != "custom" && p.id != "atari" {
 		p = atariPalette
 	}
+	if a.zx() && p.id != "custom" {
+		p = zxPalette
+	}
 	if a.st() && p.id != "custom" { // the ST's colours are the resolution's
 		p = paletteByID(a.res().palette)
 	}
@@ -325,6 +344,9 @@ func (a *App) setPalette() {
 
 // printable: is this byte a glyph on the current page?
 func (a *App) printable(c int) bool {
+	if a.zx() {
+		return c >= 32 && c < 165
+	}
 	if a.screen() {
 		return true
 	}
@@ -335,6 +357,9 @@ func (a *App) printable(c int) bool {
 }
 
 func (a *App) charToByte(r rune) int {
+	if a.zx() {
+		return zxFromRune(r)
+	}
 	if a.c64() {
 		return petFromRune(r, a.lower())
 	}
@@ -363,6 +388,9 @@ func (a *App) runeOf(c int) rune {
 	}
 	if a.atari() {
 		return atariRune(c)
+	}
+	if a.zx() {
+		return zxRune(c)
 	}
 	return byteRune(c, a.amiga())
 }
@@ -790,7 +818,13 @@ func (a *App) reparse() {
 		a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
 		return
 	}
-	if a.st() {
+	if a.zx() {
+		d, approx := parseSCR(a.source)
+		a.doc = d
+		if approx > 0 {
+			a.msg(fmt.Sprintf("%d of 768 cells are drawings, not characters: shown as the nearest character", approx))
+		}
+	} else if a.st() {
 		a.doc = parseVT52(a.source, a.res(), a.forceCols)
 	} else if a.atari() {
 		a.doc = parseAta(a.source, a.forceCols)
@@ -933,6 +967,8 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		mode = "atari"
 	case sauce == nil && isVT52(b):
 		mode = "st"
+	case strings.HasSuffix(strings.ToLower(name), ".scr") && len(b) == 6912:
+		mode = "zx"
 	case sauce == nil && !utf && looksAtascii(b):
 		mode = "atari"
 	case strings.HasPrefix(sfont, "amiga"):
@@ -966,7 +1002,7 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	}
 	a.mode = mode
 	src := b
-	if utf && mode != "c64" && mode != "atari" && mode != "st" {
+	if utf && mode != "c64" && mode != "atari" && mode != "st" && mode != "zx" {
 		src = fromUtf8(b, mode == "amiga")
 		a.msg("Read as UTF-8 text")
 	}
@@ -991,6 +1027,8 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		a.saveFmt = "seq"
 	case mode == "atari":
 		a.saveFmt = "ata"
+	case mode == "zx":
+		a.saveFmt = "scr"
 	case mode == "st":
 		a.saveFmt = "vt52"
 		if r := guessSTRes(b); r != "" {
@@ -1108,7 +1146,7 @@ func (a *App) applyMode() {
 	a.setPalette()
 }
 
-var modeNames = map[string]string{"amiga": "Amiga", "pc": "PC", "c64": "PETSCII", "atari": "Atari", "st": "Atari ST"}
+var modeNames = map[string]string{"amiga": "Amiga", "pc": "PC", "c64": "PETSCII", "atari": "Atari", "st": "Atari ST", "zx": "ZX Spectrum"}
 
 func (a *App) setMode(m string) {
 	if m == a.mode {
@@ -1125,6 +1163,9 @@ func (a *App) setMode(m string) {
 	if m == "st" {
 		a.fg, a.bg = a.res().fg, a.res().bg
 	}
+	if m == "zx" {
+		a.fg, a.bg = 0, 7
+	}
 	was := a.mode
 	a.mode = m
 	switch {
@@ -1139,14 +1180,17 @@ func (a *App) setMode(m string) {
 			a.doc = newAtariDoc()
 		case m == "st":
 			a.doc = newSTDoc(a.res())
-		case was == "c64" || was == "atari" || was == "st":
+		case m == "zx":
+			a.doc = newZXDoc()
+			a.fg, a.bg = 0, 7
+		case was == "c64" || was == "atari" || was == "st" || was == "zx":
 			a.doc = newDoc(80, 25)
 		}
-		fmtID, ext := map[string]string{"c64": "seq", "atari": "ata", "st": "vt52"}[m], ""
+		fmtID, ext := map[string]string{"c64": "seq", "atari": "ata", "st": "vt52", "zx": "scr"}[m], ""
 		if fmtID == "" {
 			fmtID = "ansi"
 		}
-		ext = "." + map[string]string{"ansi": "ans", "seq": "seq", "ata": "ata", "vt52": "vt"}[fmtID]
+		ext = "." + map[string]string{"ansi": "ans", "seq": "seq", "ata": "ata", "vt52": "vt", "scr": "scr"}[fmtID]
 		a.saveFmt = fmtID
 		if a.path == "" {
 			a.name = "untitled" + ext
@@ -1229,7 +1273,7 @@ func (a *App) setSTRes(id string) {
 // (what is cut can be had back with Ctrl+Z).
 func (a *App) setRows(n int) {
 	n = max(1, min(100000, n))
-	if n == a.doc.rows {
+	if n == a.doc.rows || a.zx() { // a Spectrum screen is 24 rows
 		return
 	}
 	a.pushUndo()
@@ -1248,7 +1292,7 @@ func (a *App) setRows(n int) {
 
 func (a *App) setCols(n int) {
 	n = max(8, min(1000, n))
-	if n == a.doc.cols || a.c64() || a.st() || (a.atari() && n != 38 && n != 40) {
+	if n == a.doc.cols || a.c64() || a.st() || a.zx() || (a.atari() && n != 38 && n != 40) {
 		return // a machine's screen has the width it has
 	}
 	if a.source != nil && !a.dirty {
@@ -1291,6 +1335,10 @@ func (a *App) newTab(mode string) *Tab {
 		t.saveFmt, t.name = "seq", "untitled.seq"
 	}
 	t.stres = a.defSTRes
+	if mode == "zx" {
+		t.doc = newZXDoc()
+		t.saveFmt, t.name = "scr", "untitled.scr"
+	}
 	if mode == "st" {
 		t.doc = newSTDoc(stResByID(t.stres))
 		t.saveFmt, t.name = "vt52", "untitled.vt"
@@ -1477,7 +1525,8 @@ var formats = []Format{
 	{"seq", "PETSCII stream (.seq)", ".seq", "c64"},
 	{"ata", "ATASCII (.ata)", ".ata", "atari"},
 	{"vt52", "Atari ST VT52 (.vt)", ".vt", "st"},
-	{"utf8", "UTF-8 text, no colours (.txt)", ".txt", "amiga pc c64 atari st"},
+	{"scr", "ZX Spectrum screen (.scr)", ".scr", "zx"},
+	{"utf8", "UTF-8 text, no colours (.txt)", ".txt", "amiga pc c64 atari st zx"},
 	{"bin", "PC binary (.bin)", ".bin", "pc"},
 	{"pcb", "PCBoard @X codes (.pcb)", ".pcb", "pc"},
 	{"avt", "Avatar (.avt)", ".avt", "pc"},
@@ -1485,9 +1534,9 @@ var formats = []Format{
 	{"prg", "C64 program that shows it (.prg)", ".prg", "c64 (C64)"},
 	{"marq", "C array: PETSCII editor, Petmate (.c)", ".c", "c64"},
 	{"petmate", "Petmate workspace (.petmate)", ".petmate", "c64"},
-	{"png", "Picture (.png)", ".png", "amiga pc c64 atari st"},
-	{"png2", "Picture, twice the size (.png)", ".png", "amiga pc c64 atari st"},
-	{"html", "Web page (.html)", ".html", "amiga pc c64 atari st"},
+	{"png", "Picture (.png)", ".png", "amiga pc c64 atari st zx"},
+	{"png2", "Picture, twice the size (.png)", ".png", "amiga pc c64 atari st zx"},
+	{"html", "Web page (.html)", ".html", "amiga pc c64 atari st zx"},
 }
 
 // modeFormats are the formats the current page can be saved in.
@@ -1541,6 +1590,8 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		return writeAta(d, info.clear), nil
 	case "vt52":
 		return writeVT52(d, a.res()), nil
+	case "scr":
+		return writeSCR(d), nil
 	case "utf8":
 		return []byte(strings.Join(docText(d, a.runeOf, 0, 0, 0, 0), nl) + nl), nil
 	case "bin":
@@ -1579,7 +1630,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		}
 		border := 0
 		fb := &FB{}
-		if a.screen() { // with the machine's border around it
+		if a.screen() || a.zx() { // with the machine's border around it
 			border = 32 * z
 			fb.resize(d.cols*8*z+2*border, rows*H*z+2*border)
 			fb.fill(Rect{0, 0, fb.w, fb.h}, a.pal[d.borderColour()])
@@ -1640,7 +1691,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	if strings.Contains(" ansi text bin seq ata vt52 xbin marq petmate prg pcb avt ", " "+fmtID+" ") { // the page's own file; the others are exports
+	if strings.Contains(" ansi text bin seq ata vt52 scr xbin marq petmate prg pcb avt ", " "+fmtID+" ") { // the page's own file; the others are exports
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
 		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg", "pcb": "pcb", "avt": "avt"}[fmtID]
@@ -1673,8 +1724,8 @@ func (a *App) play() {
 		a.stopPlay(true)
 		return
 	}
-	if a.source != nil && a.sourceBin && !a.dirty {
-		a.msg("A .bin file has no codes to play")
+	if (a.source != nil && a.sourceBin && !a.dirty) || a.zx() {
+		a.msg("This file has no codes to play: it is a picture of the screen")
 		return
 	}
 	b := a.source

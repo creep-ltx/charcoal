@@ -104,8 +104,8 @@ type FileReq struct {
 	lastSel int
 }
 
-var openAs = []string{"auto", "amiga", "pc", "atari", "st", "c64"}
-var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "Atari ST VT52", "C64 PETSCII"}
+var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "c64"}
+var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "Atari ST VT52", "ZX Spectrum", "C64 PETSCII"}
 
 func openOpenRequester() {
 	d := &FileReq{sel: -1}
@@ -317,7 +317,7 @@ func (d *FileReq) draw(u *UI) {
 		fb.text(in.x, y+3, "Open as", cText)
 		names := openAsNames
 		if !a.hasC64 {
-			names = names[:5]
+			names = names[:6]
 		}
 		u.choice("as", Rect{in.x + 72, y, choiceW(names), gadH}, names, d.choice, "", func(i int) { d.choice = i })
 	}
@@ -560,6 +560,8 @@ Dropping files on the window opens them.
 AMIGA, PC, ATARI AND C64
 Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. Atari pages are ATASCII, the Atari 8-bit computers' text screen: inverse characters (Rev), one background, one text colour for the whole screen (left click a colour) and a border (middle click); .ata files, with EOL line ends and ESC before control characters. Width 38 (the screen editor's margins) or 40 (terminals) is guessed from the file and can be switched; the page is never wider. The font is AltirraOS's, free to pass on. PETSCII pages are exactly as wide as the machine's screen (the Machine gadget sets it): PET 40 or 80 columns (one colour: green, amber or white screen), VIC-20 (22 x 23, 8 text colours), C64 (40 x 25), C128 (40 columns, or 80 on the VDC with its RGBI colours). Each has its two character sets (the Font gadget: upper case + graphics, or lower + upper case), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
 Atari ST pages are the ST's VT52 terminal in one of its resolutions (the Resolution gadget): low 40 x 25 in 16 colours, medium 80 x 25 in 4, high 80 x 25 in black and white with taller characters. Each cell has its own colour and background (ESC b, ESC c); files are the VT52 stream (.vt). The font is EmuTOS's, downloaded on first use.
+
+ZX Spectrum pages are its 32 x 24 screen: a character per cell with ink (left click), paper (right click), bright (colours 8-15; ink and paper share it) and Flash; middle click sets the border. Codes 128-143 are the Spectrum's block graphics, 144-164 its user-defined graphics. Saved as .scr, the 6912-byte screen every Spectrum emulator loads; a .scr that is a drawing opens with each cell as the nearest character.
 
 SAVE AS
 ANSI, plain text, UTF-8 text, PC .bin, ATASCII .ata, XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border) and a web page (.html). Typing a file ending picks the format.

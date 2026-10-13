@@ -1,0 +1,7 @@
+zx-spectrum-48-charset.font is bytes 0x3D00-0x3FFF (the character set, codes 32-127) of the ZX Spectrum
+48K ROM (48.rom, SHA-1 5ea7c2b824672e914525d1d5c419d71b84a426a2) as distributed with the Fuse emulator.
+
+From Fuse's roms/README.copyright: "These are copyright Amstrad, who allow distribution of the ROMs but
+retain the copyright. You may not sell the ROMs or embed the ROMs in hardware, although it is allowed to
+sell a product which contains the ROMs, so long as the charge is being made for the product, not for the
+ROMs themselves."

@@ -48,11 +48,11 @@ func loadPrefs() {
 	if b, err := os.ReadFile(prefsPath()); err == nil {
 		json.Unmarshal(b, &prefs)
 	}
-	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper", "atari": "atari", "st": "st8x8"}
+	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper", "atari": "atari", "st": "st8x8", "zx": "zx"}
 	for k, v := range prefs.Font {
 		a.defFont[k] = v
 	}
-	a.defPalette = map[string]string{"amiga": "amiga", "pc": "vga", "c64": "c64", "atari": "atari", "st": "st"}
+	a.defPalette = map[string]string{"amiga": "amiga", "pc": "vga", "c64": "c64", "atari": "atari", "st": "st", "zx": "zx"}
 	for k, v := range prefs.Palette {
 		a.defPalette[k] = v
 	}
@@ -64,7 +64,7 @@ func loadPrefs() {
 	a.defMachine = machineByID(prefs.Machine).id
 	a.defSTRes = stResByID(prefs.STRes).id
 	a.fkeys = defaultFkeys()
-	for _, m := range []string{"amiga", "pc", "c64", "atari", "st"} {
+	for _, m := range []string{"amiga", "pc", "c64", "atari", "st", "zx"} {
 		if f := prefs.Fkeys[m]; len(f) > 0 {
 			a.fkeys[m] = f
 		}
