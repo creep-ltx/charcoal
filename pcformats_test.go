@@ -1,6 +1,58 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
+
+// Avatar blink (audit #17), PCBoard tab and @ codes (audit #18).
+func TestPCFormatsRoundTripDetails(t *testing.T) {
+	d := newDoc(80, 1)
+	d.set(0, 0, attrCell('B', 0x9E)) // blink / bright background
+	d.set(1, 0, attrCell('n', 0x1E))
+	if back := parseAvatar(writeAvatar(d, false), 80); back.get(0, 0) != d.get(0, 0) || back.get(1, 0) != d.get(1, 0) {
+		t.Fatalf("avatar blink: %08x %08x", back.get(0, 0), back.get(1, 0))
+	}
+	d = newDoc(80, 1)
+	for i, c := range []byte("a\tb@X1F@CLS@@POS:5@c") {
+		d.set(i, 0, attrCell(c, 0x07))
+	}
+	out := writePCBoard(d, false)
+	if bytes.IndexByte(out, 0x09) >= 0 {
+		t.Fatal("PCBoard wrote a tab")
+	}
+	if got := row(parsePCBoard(out, 80), 0); got != "a b@X1F@CLS@@POS:5@c" {
+		t.Fatalf("PCBoard: %q", got)
+	}
+}
+
+// SAUCE after iCEDraw, ArtWorx and TundraDraw data (audit #9).
+func TestOwnFormatsWithSauce(t *testing.T) {
+	sauce := makeSauce(SauceInfo{title: "x", cols: 80, rows: 1}, 0)
+	// iCEDraw: x1 = 2, x2 = 3 (two columns); the palette ends in zeros.
+	idf := []byte{4, '1', '.', '4', 2, 0, 0, 0, 3, 0, 0, 0, 'A', 0x1F, 'B', 0x2E}
+	font := make([]byte, 4096)
+	font[4095] = 0x55
+	pal := make([]byte, 48)
+	pal[0] = 63
+	idf = append(append(append(idf, font...), pal...), sauce...)
+	d, info, err := parseIDF(idf)
+	if err != nil || d.cols != 2 || d.rows != 1 || info.font.bits[4095] != 0x55 || info.pal[0]&0xFFFFFF != 0xFF0000 {
+		t.Fatalf("idf: %v", err)
+	}
+	// ArtWorx: the SAUCE bytes are not cells.
+	adf := append(make([]byte, 1+192+4096), 'Q', 0x07)
+	d, _, err = parseADF(append(adf, sauce...))
+	if err != nil || d.rows != 1 || cellCh(d.get(0, 0)) != 'Q' || cellCh(d.get(1, 0)) != ' ' {
+		t.Fatalf("adf: %v", err)
+	}
+	// TundraDraw: one character, then SAUCE.
+	tnd := append(append([]byte{24}, "TUNDRA24"...), 'T')
+	d, _, err = parseTundra(append(tnd, sauce...))
+	if err != nil || d.rows != 1 || row(d, 0) != "T" {
+		t.Fatalf("tnd: %v %q", err, row(d, 0))
+	}
+}
 
 func TestPCFormats(t *testing.T) {
 	d := newDoc(80, 3)
