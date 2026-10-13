@@ -12,7 +12,7 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FONTS = os.path.join(HERE, '..', 'fonts')
+FONTS = os.path.join(HERE, '..', '..', 'fonts')
 OUT = os.path.join(HERE, '..', 'app', 'fonts.js')
 
 # id, name shown, file, SAUCE font name (TInfoS), SyncTERM font number
