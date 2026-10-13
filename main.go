@@ -1,5 +1,6 @@
-// Charcoal: CharEdit and CharView, an Amiga ANSI, PC ANSI and C64 PETSCII art editor and viewer, drawn with
-// the real bitmap fonts.
+// Charcoal: CharEdit and CharView, a character art editor and viewer for Amiga ANSI, PC ANSI, Atari
+// ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum and teletext pages,
+// drawn with the real bitmap fonts.
 //
 //	charedit [FILE...]
 //	charview FILE|FOLDER...
@@ -26,6 +27,9 @@ var (
 	scale    = 1
 )
 
+// maxUIScale is the biggest window scale (Settings offers 1x to this).
+const maxUIScale = 4
+
 func setClipboard(s string) { sdl.SetClipboardText(s) }
 func getClipboard() string {
 	s, _ := sdl.GetClipboardText()
@@ -39,11 +43,11 @@ func main() {
 		viewer = &Viewer{info: true}
 	}
 	if viewer != nil && len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
-		fmt.Println("usage: charview FILE|FOLDER...\nShows Amiga ANSI, PC ANSI and C64 PETSCII art. n / Right / Space next, p / Left previous, q / Esc quit.")
+		fmt.Println("usage: charview FILE|FOLDER...\nShows Amiga and PC ANSI, Atari, Atari ST, PETSCII (PET, VIC-20, C64, C128), ZX Spectrum and teletext art.\nn / Right / Space next, p / Left previous, a auto-scroll, m play, e edit, q / Esc quit.")
 		return
 	}
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
-		fmt.Println("usage: charedit [FILE...]\nAn Amiga ANSI, PC ANSI and C64 PETSCII art viewer and editor. Press ? in the window for the keys.")
+		fmt.Println("usage: charedit [FILE...]\nA character art editor for Amiga and PC ANSI, Atari, Atari ST, PETSCII (PET, VIC-20, C64, C128),\nZX Spectrum and teletext pages. Press ? in the window for the keys.")
 		return
 	}
 	a = &App{tool: "draw", fg: 7, brush: 0x2F, charHover: -1, layout: "one"}
@@ -51,8 +55,11 @@ func main() {
 	loadSTFonts()
 	loadPrefs()
 	uiFont = fontByID("topaz2")
-	mode := prefs.Mode
-	if mode != "pc" && !(mode == "c64" && a.hasC64) {
+	mode := prefs.Mode // the last page type, if it can be had without a download
+	switch {
+	case mode == "c64" && a.hasC64, mode == "st" && hasSTFont():
+	case mode == "pc", mode == "atari", mode == "zx", mode == "tt":
+	default:
 		mode = "amiga"
 	}
 	a.ch8Default, a.smearDefault = prefs.Ch8, prefs.Smear
@@ -101,7 +108,7 @@ func main() {
 	defer sdl.Quit()
 	sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "0")
 	sdl.SetHint(sdl.HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0")
-	scale = max(1, min(4, prefs.UIScale))
+	scale = max(1, min(maxUIScale, prefs.UIScale))
 	w, h := 1400, 940
 	if prefs.Width > 200 && prefs.Height > 200 {
 		w, h = prefs.Width, prefs.Height
@@ -135,6 +142,8 @@ func main() {
 		wait := time.Until(nextBlink)
 		if a.playing != nil || len(script) > 0 || (viewer != nil && viewer.auto) {
 			wait = 15 * time.Millisecond
+		} else if download.what != "" {
+			wait = min(wait, 100*time.Millisecond) // look for the end of the download
 		}
 		ev := sdl.WaitEventTimeout(max(1, int(wait/time.Millisecond)))
 		for ; ev != nil; ev = sdl.PollEvent() {
@@ -145,6 +154,9 @@ func main() {
 		if time.Now().After(nextBlink) {
 			a.blink = !a.blink
 			nextBlink = time.Now().Add(500 * time.Millisecond)
+			redraw = true
+		}
+		if pollDownload() {
 			redraw = true
 		}
 		if a.playing != nil {
@@ -224,12 +236,26 @@ func present() {
 
 func requestQuit() {
 	if n := a.anyDirty(); n > 0 {
-		text := "A page has changes that are not saved. Quit and throw them away?"
+		text := "A page has changes that are not saved. Save them before quitting?"
 		if n > 1 {
-			text = fmt.Sprintf("%d pages have changes that are not saved. Quit and throw them away?", n)
+			text = fmt.Sprintf("%d pages have changes that are not saved. Save them before quitting?", n)
 		}
-		a.dialog = &Confirm{text: text, button: "Quit", yes: func() { a.quit = true }}
+		a.dialog = &Confirm{text: text, button: "Quit, throw away", yes: func() { a.quit = true }, save: saveAllThenQuit}
 		return
+	}
+	a.quit = true
+}
+
+// saveAllThenQuit saves every changed page, one after the other (asking for a
+// name where a page has none), and quits once all are saved. A page that
+// cannot be saved stops it, with the reason on the status line.
+func saveAllThenQuit() {
+	for _, t := range a.tabs {
+		if t.dirty {
+			a.focusTab(t)
+			a.saveThen(saveAllThenQuit)
+			return
+		}
 	}
 	a.quit = true
 }
@@ -258,7 +284,7 @@ func handleEvent(ev sdl.Event) bool {
 			a.pageRelease()
 			return true
 		}
-		c := &Click{x: ui.mx, y: ui.my, button: int(e.Button), shift: shiftHeld(), double: e.Clicks >= 2}
+		c := &Click{x: ui.mx, y: ui.my, button: int(e.Button), shift: shiftHeld()}
 		if ui.popup != nil {
 			ui.popupClick(c)
 			return true
@@ -284,9 +310,12 @@ func handleEvent(ev sdl.Event) bool {
 			keyDown(e)
 		}
 	case *sdl.DropEvent:
-		if e.Type == sdl.DROPFILE && a.dialog == nil {
-			p := e.File
-			a.openPath(p, "auto")
+		if e.Type == sdl.DROPFILE {
+			if a.dialog != nil {
+				a.msg("Close the requester first, then drop " + filepath.Base(e.File) + " again")
+			} else {
+				a.openPath(e.File, "auto")
+			}
 		}
 	default:
 		return false
@@ -302,7 +331,10 @@ func textInput(s string) {
 	if viewer != nil {
 		return
 	}
-	if a.dialog != nil || a.playing != nil || ui.popup != nil || sdl.GetModState()&(sdl.KMOD_CTRL|sdl.KMOD_LALT) != 0 {
+	// Ctrl and left Alt are shortcuts; right Alt is AltGr, which Windows reports
+	// as left Ctrl + right Alt, and it types @ { [ \ $ | ~ on many keyboards.
+	mod := sdl.GetModState()
+	if a.dialog != nil || a.playing != nil || ui.popup != nil || (mod&sdl.KMOD_RALT == 0 && mod&(sdl.KMOD_CTRL|sdl.KMOD_LALT) != 0) {
 		return
 	}
 	for _, r := range s {
@@ -322,7 +354,7 @@ func textInput(s string) {
 func keyDown(e *sdl.KeyboardEvent) {
 	k := sdl.GetKeyName(e.Keysym.Sym)
 	mod := sdl.Keymod(e.Keysym.Mod)
-	ctrl, shift := mod&sdl.KMOD_CTRL != 0, mod&sdl.KMOD_SHIFT != 0
+	ctrl, shift := mod&sdl.KMOD_CTRL != 0 && mod&sdl.KMOD_RALT == 0, mod&sdl.KMOD_SHIFT != 0 // AltGr is no Ctrl
 	if ui.popup != nil {
 		if k == "Escape" {
 			ui.popup = nil
@@ -349,6 +381,9 @@ func keyDown(e *sdl.KeyboardEvent) {
 		if a.dialog == nil && (k == "Escape" || k == "Tab") {
 			ui.focus = nil
 			return
+		}
+		if a.dialog == nil && !ctrl {
+			return // F-keys, arrows and the rest stay off the page while the W/H field has the keys
 		}
 	}
 	if a.dialog != nil {
@@ -432,11 +467,9 @@ func editorKey(k string, ctrl, shift, alt bool) {
 				a.setFg((a.fgNow() + 1) % 16)
 			}
 		case "=", "+", "Keypad +":
-			a.zoom = min(8, a.zoom+1)
-			savePrefs()
+			a.setZoom(a.zoom + 1)
 		case "-", "Keypad -":
-			a.zoom = max(1, a.zoom-1)
-			savePrefs()
+			a.setZoom(a.zoom - 1)
 		}
 		return
 	}
@@ -451,7 +484,9 @@ func editorKey(k string, ctrl, shift, alt bool) {
 	}
 	var fk int
 	if n, _ := fmt.Sscanf(k, "F%d", &fk); n == 1 && fk >= 1 && fk <= 10 {
-		a.typeByte(a.fkeys[a.mode][a.fset][fk-1])
+		if sets := a.fkeys[a.mode]; a.fset < len(sets) && fk <= len(sets[a.fset]) {
+			a.typeByte(sets[a.fset][fk-1])
+		}
 		return
 	}
 	visRows := max(1, a.page.h/(a.cellH()*a.zoom))

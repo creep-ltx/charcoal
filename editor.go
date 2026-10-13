@@ -106,6 +106,7 @@ type Hover struct {
 type Snap struct {
 	doc    *Doc
 	cx, cy int
+	gen    int // the page's generation (see nextGen)
 }
 type Play struct {
 	bytes []byte
@@ -118,7 +119,7 @@ type Play struct {
 // Tab is one open page with everything that belongs to it.
 type Tab struct {
 	doc                 *Doc
-	mode                string // "amiga", "pc" or "c64"
+	mode                string // "amiga", "pc", "c64" (PETSCII), "atari", "st", "zx" or "tt" (teletext)
 	fontFor, paletteFor map[string]string
 	zoom                int
 	ch8, smear, ice     bool
@@ -135,6 +136,9 @@ type Tab struct {
 	selecting           bool
 	float               *Block
 	undo, redo          []Snap
+	gen, savedGen       int  // the page's generation now and when it was last read or saved
+	inRun               bool // typing goes on in one undo step
+	runX, runY          int  // where the run of typing left the cursor
 	hover, last         *Hover
 	playing             *Play
 	scrollX, scrollY    int
@@ -440,7 +444,13 @@ func (a *App) msg(s string) {
 
 // ---------------------------------------------------------------- undo
 
-func (a *App) snapshot() Snap { return Snap{a.doc.clone(), a.cx, a.cy} }
+// Every state of a page has a generation number; the one it was saved in is
+// remembered, so undoing back to it makes the page unchanged again.
+var genSeq int
+
+func nextGen() int { genSeq++; return genSeq }
+
+func (a *App) snapshot() Snap { return Snap{a.doc.clone(), a.cx, a.cy, a.gen} }
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
 // keeps fewer steps instead of eating the memory.
@@ -452,14 +462,36 @@ func (a *App) pushUndo() {
 	for _, s := range a.undo {
 		total += len(s.doc.cells)
 	}
-	for len(a.undo) > 1 && (len(a.undo) > 300 || total > undoBudget) {
-		total -= len(a.undo[0].doc.cells)
-		a.undo = a.undo[1:]
+	drop := 0
+	for len(a.undo)-drop > 1 && (len(a.undo)-drop > 300 || total > undoBudget) {
+		total -= len(a.undo[drop].doc.cells)
+		drop++
 	}
+	if drop > 0 { // move the rest down and let go of the dropped pages
+		n := copy(a.undo, a.undo[drop:])
+		clear(a.undo[n:])
+		a.undo = a.undo[:n]
+	}
+	clear(a.redo)
 	a.redo = a.redo[:0]
+	a.gen = nextGen()
+	a.inRun = false
 	a.dirty = true
 }
-func (a *App) restore(s Snap) { a.doc, a.cx, a.cy = s.doc, s.cx, s.cy }
+
+// markSaved: the page as it is now is what the file holds.
+func (a *App) markSaved() {
+	a.dirty = false
+	a.savedGen = a.gen
+	a.inRun = false
+}
+
+func (a *App) restore(s Snap) {
+	a.doc, a.cx, a.cy, a.gen = s.doc, s.cx, s.cy, s.gen
+	a.dirty = a.gen != a.savedGen
+	a.inRun = false
+}
+
 func (a *App) doUndo() {
 	if len(a.undo) == 0 {
 		a.msg("Nothing to undo")
@@ -467,8 +499,8 @@ func (a *App) doUndo() {
 	}
 	a.redo = append(a.redo, a.snapshot())
 	a.restore(a.undo[len(a.undo)-1])
+	a.undo[len(a.undo)-1] = Snap{}
 	a.undo = a.undo[:len(a.undo)-1]
-	a.dirty = true
 }
 func (a *App) doRedo() {
 	if len(a.redo) == 0 {
@@ -477,26 +509,44 @@ func (a *App) doRedo() {
 	}
 	a.undo = append(a.undo, a.snapshot())
 	a.restore(a.redo[len(a.redo)-1])
+	a.redo[len(a.redo)-1] = Snap{}
 	a.redo = a.redo[:len(a.redo)-1]
-	a.dirty = true
 }
 
 // ---------------------------------------------------------------- editing
 
+// maxRows is the most rows the page may have: a Spectrum screen is 24 rows, a
+// teletext page 25, every other page as many as the page size limit allows.
+func (a *App) maxRows() int {
+	switch {
+	case a.zx():
+		return 24
+	case a.tt():
+		return 25
+	}
+	return maxRowsFor(a.doc.cols)
+}
+
+// setCell sets a cell; a cell below the last row adds rows, up to maxRows.
 func (a *App) setCell(x, y int, v uint32) {
-	if x < 0 || x >= a.doc.cols || y < 0 {
+	if x < 0 || x >= a.doc.cols || y < 0 || y >= a.maxRows() {
 		return
 	}
 	a.doc.set(x, y, v)
 }
 
 func (a *App) typeByte(b int) {
-	a.pushUndo()
+	// A run of typing is one undo step: the run goes on while the cursor is
+	// where the last character left it.
+	if !a.inRun || a.cx != a.runX || a.cy != a.runY {
+		a.pushUndo()
+	}
+	a.dirty = true
 	d := a.doc
 	if a.cx >= d.cols {
 		a.cx, a.cy = 0, a.cy+1
 	}
-	if a.insert {
+	if a.insert && a.cy < d.rows {
 		for x := d.cols - 1; x > a.cx; x-- {
 			d.set(x, a.cy, d.get(x-1, a.cy))
 		}
@@ -507,13 +557,16 @@ func (a *App) typeByte(b int) {
 		a.cx, a.cy = 0, a.cy+1
 	}
 	a.moved()
+	a.inRun, a.runX, a.runY = true, a.cx, a.cy
 }
 
 func (a *App) moved() {
 	a.cx = max(0, min(a.doc.cols-1, a.cx))
-	a.cy = max(0, a.cy)
+	a.cy = max(0, min(a.maxRows()-1, a.cy))
 	if a.cy >= a.doc.rows { // going past the last row adds rows to the page
+		run := a.inRun
 		a.pushUndo()
+		a.inRun = run
 		a.doc.ensureRows(a.cy + 1)
 	}
 	a.blink = true
@@ -773,7 +826,7 @@ func (a *App) copySel(cut bool) {
 func (a *App) clearSel() {
 	r := a.selRect()
 	a.pushUndo()
-	for y := r.y; y < r.y+r.h; y++ {
+	for y := r.y; y < min(r.y+r.h, a.doc.rows); y++ { // clearing never adds rows
 		for x := r.x; x < r.x+r.w; x++ {
 			a.doc.set(x, y, blank)
 		}
@@ -809,9 +862,7 @@ func (a *App) stamp(x0, y0 int, transparent bool) {
 			if transparent && isBlank(v) {
 				continue
 			}
-			if x0+x < a.doc.cols {
-				a.doc.set(x0+x, y0+y, v)
-			}
+			a.setCell(x0+x, y0+y, v) // a block below the last row adds rows, up to the page's limit
 		}
 	}
 }
@@ -994,7 +1045,11 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	if kind != "" && (as == "auto" || as == "c64") {
 		if !a.hasC64 {
 			t := a.Tab
-			openC64Req(func() { a.focusTab(t); a.loadBytes(b, name, path, as) })
+			openC64Req(func() {
+				if a.backTo(t) {
+					a.loadBytes(b, name, path, as)
+				}
+			})
 			return
 		}
 		scr, err := a.screens(b, kind)
@@ -1060,7 +1115,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	if mode == "st" && !hasSTFont() {
 		t := a.Tab
 		openSTReq(func() {
-			a.focusTab(t)
+			if !a.backTo(t) {
+				return
+			}
 			a.forceCols = 0
 			a.setMode("st")
 		})
@@ -1069,7 +1126,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		// Shown as PC for now; with the character set it is read again as PETSCII.
 		t := a.Tab
 		openC64Req(func() {
-			a.focusTab(t)
+			if !a.backTo(t) {
+				return
+			}
 			a.forceCols = 0
 			a.setMode("c64")
 		})
@@ -1124,7 +1183,8 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.undo, a.redo = nil, nil
 	a.reparse()
 	a.applyMode()
-	a.dirty = false
+	a.gen = nextGen()
+	a.markSaved()
 	a.scrollX, a.scrollY = 0, 0
 	if a.doc.fullest {
 		a.msg("An animation that ends nearly empty: showing its fullest picture (Play shows it all)")
@@ -1211,18 +1271,27 @@ func (a *App) finishLoad(b []byte, name, path string, sauce *Sauce, fmtID string
 	a.undo, a.redo = nil, nil
 	a.reparse()
 	a.applyMode()
-	a.dirty = false
+	a.gen = nextGen()
+	a.markSaved()
 	a.scrollX, a.scrollY = 0, 0
 }
 
+// applyMode makes the shared tool and F-key set fit the page being worked on,
+// and sets up its look (applyLook).
 func (a *App) applyMode() {
-	a.doc.glyph0 = a.screen()
-	if a.tool == "half" && !a.pc() {
+	a.applyLook()
+	if a.tool == "half" && !a.pc() && !a.tt() { // Half on PC pages, Sixel on teletext
 		a.setTool("draw")
 	}
 	if a.fset >= len(a.fkeys[a.mode]) {
 		a.fset = 0
 	}
+}
+
+// applyLook sets up how the current tab's page is drawn and nothing else, so
+// it may run for every page on show, every frame.
+func (a *App) applyLook() {
+	a.doc.glyph0 = a.screen()
 	a.setPalette()
 }
 
@@ -1232,12 +1301,23 @@ func (a *App) setMode(m string) {
 	if m == a.mode {
 		return
 	}
+	a.endPlay()
 	if m == "c64" && !a.hasC64 {
-		openC64Req(func() { a.setMode("c64") })
+		t := a.Tab
+		openC64Req(func() {
+			if a.backTo(t) {
+				a.setMode("c64")
+			}
+		})
 		return
 	}
 	if m == "st" && !hasSTFont() {
-		openSTReq(func() { a.setMode("st") })
+		t := a.Tab
+		openSTReq(func() {
+			if a.backTo(t) {
+				a.setMode("st")
+			}
+		})
 		return
 	}
 	if m == "st" {
@@ -1288,8 +1368,14 @@ func (a *App) setMode(m string) {
 // character set, palette and width.
 func (a *App) setMachine(id string) {
 	m := machineByID(id)
+	a.endPlay()
 	if !hasROM(m.family) {
-		openC64Req(func() { a.setMachine(id) })
+		t := a.Tab
+		openC64Req(func() {
+			if a.backTo(t) {
+				a.setMachine(id)
+			}
+		})
 		return
 	}
 	lower := a.lower()
@@ -1333,6 +1419,7 @@ func newSTDoc(r STRes) *Doc {
 // setSTRes changes an ST page's resolution: its width, font and colours.
 func (a *App) setSTRes(id string) {
 	r := stResByID(id)
+	a.endPlay()
 	a.stres, a.defSTRes = id, id
 	a.paletteFor["st"] = r.palette
 	a.setPalette()
@@ -1354,7 +1441,8 @@ func (a *App) setSTRes(id string) {
 // setRows sets the page's height: more empty rows at the bottom, or fewer
 // (what is cut can be had back with Ctrl+Z).
 func (a *App) setRows(n int) {
-	n = max(1, min(100000, n))
+	a.endPlay()
+	n = max(1, min(a.maxRows(), n))
 	if n == a.doc.rows || a.zx() || a.tt() { // a Spectrum screen is 24 rows, a teletext page 25
 		return
 	}
@@ -1373,6 +1461,7 @@ func (a *App) setRows(n int) {
 }
 
 func (a *App) setCols(n int) {
+	a.endPlay()
 	n = max(8, min(1000, n))
 	if n == a.doc.cols || a.c64() || a.st() || a.zx() || a.tt() || (a.atari() && n != 38 && n != 40) {
 		return // a machine's screen has the width it has
@@ -1391,6 +1480,7 @@ func (a *App) setCols(n int) {
 func newAtariDoc() *Doc {
 	d := newDoc(40, 24)
 	d.bg, d.ink, d.border = atariBg, atariInk, 0
+	d.glyph0 = true // as parseAta: character 0 is the heart, not an empty cell
 	return d
 }
 
@@ -1448,6 +1538,7 @@ func (a *App) focusTab(t *Tab) {
 		return
 	}
 	if a.Tab != nil {
+		a.endPlay() // a tab plays only while it is the one being worked on
 		a.Tab.hover = nil
 	}
 	pane := 0
@@ -1460,6 +1551,15 @@ func (a *App) focusTab(t *Tab) {
 	a.shown[pane] = t
 	a.Tab = t
 	a.applyMode()
+}
+
+// backTo goes back to tab t after a download, if it is still open.
+func (a *App) backTo(t *Tab) bool {
+	if a.tabIndex(t) < 0 {
+		return false
+	}
+	a.focusTab(t)
+	return true
 }
 
 func (a *App) tabIndex(t *Tab) int {
@@ -1482,11 +1582,18 @@ func (a *App) addTab() {
 
 func (a *App) closeTab(t *Tab) {
 	if t.dirty {
-		a.dialog = &Confirm{text: "\"" + t.name + "\" has changes that are not saved. Close it and throw them away?",
-			button: "Throw away", yes: func() { t.dirty = false; a.closeTab(t) }}
+		a.dialog = &Confirm{text: "\"" + t.name + "\" has changes that are not saved. Save them before closing?",
+			button: "Throw away", yes: func() { t.dirty = false; a.closeTab(t) },
+			save: func() {
+				a.focusTab(t)
+				a.saveThen(func() { a.closeTab(t) })
+			}}
 		return
 	}
 	i := a.tabIndex(t)
+	if i < 0 {
+		return
+	}
 	a.tabs = append(a.tabs[:i], a.tabs[i+1:]...)
 	if len(a.tabs) == 0 {
 		a.newTab(t.mode)
@@ -1497,9 +1604,36 @@ func (a *App) closeTab(t *Tab) {
 			a.shown[p] = next
 		}
 	}
+	if a.layout != "one" && a.shown[0] == a.shown[1] { // never the same tab in both panes
+		a.shown[1] = nil
+		for _, o := range a.tabs {
+			if o != a.shown[0] {
+				a.shown[1] = o
+				break
+			}
+		}
+		if a.shown[1] == nil { // only one tab is left
+			a.layout = "one"
+		}
+	}
 	if a.Tab == t {
 		a.Tab = nil
 		a.focusTab(next)
+	}
+}
+
+// saveThen saves the current tab and then does then: at once when it has a
+// file, after the requester when it has none. Nothing is done if saving fails.
+func (a *App) saveThen(then func()) {
+	if a.path == "" {
+		openSaveRequester()
+		if d, ok := a.dialog.(*FileReq); ok {
+			d.after = then
+		}
+		return
+	}
+	if a.writeOut(a.path, a.saveFmt) && !a.dirty {
+		then()
 	}
 }
 
@@ -1539,6 +1673,7 @@ func (a *App) openPath(path, as string) {
 			return
 		}
 	}
+	a.endPlay()
 	if !a.pristine() {
 		a.focusTab(a.newTab(a.mode))
 	}
@@ -1589,7 +1724,7 @@ func (a *App) flip(vertical bool) {
 		b := a.doc.copyRect(r.x, r.y, r.w, r.h)
 		mirror(b)
 		a.pushUndo()
-		for y := 0; y < b.h; y++ {
+		for y := 0; y < min(b.h, a.doc.rows-r.y); y++ {
 			for x := 0; x < b.w; x++ {
 				a.doc.set(r.x+x, r.y+y, b.cells[y*b.w+x])
 			}
@@ -1746,20 +1881,30 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	return nil, fmt.Errorf("unknown format %s", fmtID)
 }
 
+// writeAtomic writes a file whole or not at all: a new file next to it,
+// renamed over it. A symlink is followed (the file it points at is replaced,
+// the link stays); in a folder that cannot take a new file the file is
+// written over in place.
 func writeAtomic(p string, data []byte) error {
+	if real, err := filepath.EvalSymlinks(p); err == nil {
+		p = real
+	}
+	mode := os.FileMode(0o644)
+	if st, e := os.Stat(p); e == nil {
+		mode = st.Mode().Perm()
+	}
 	dir := filepath.Dir(p)
 	f, err := os.CreateTemp(dir, ".charcoal-")
 	if err != nil {
-		return err
+		if !os.IsPermission(err) {
+			return err
+		}
+		return writeInPlace(p, data, mode)
 	}
 	tmp := f.Name()
 	_, err = f.Write(data)
 	if cerr := f.Close(); err == nil {
 		err = cerr
-	}
-	mode := os.FileMode(0o644)
-	if st, e := os.Stat(p); e == nil {
-		mode = st.Mode().Perm()
 	}
 	if err == nil {
 		err = os.Chmod(tmp, mode)
@@ -1773,7 +1918,21 @@ func writeAtomic(p string, data []byte) error {
 	return err
 }
 
+// writeInPlace overwrites a file through itself (for a folder we may not write in).
+func writeInPlace(p string, data []byte, mode os.FileMode) error {
+	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
 func (a *App) writeOut(path, fmtID string) bool {
+	a.endPlay() // the page is saved, never the screen being played
 	if st, err := os.Stat(filepath.Dir(path)); err != nil || !st.IsDir() {
 		a.msg("Could not save: there is no drawer " + filepath.Dir(path))
 		return false
@@ -1791,7 +1950,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
 		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg", "pcb": "pcb", "avt": "avt"}[fmtID]
 		a.srcIndex = 0
-		a.dirty = false
+		a.markSaved()
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
@@ -1800,6 +1959,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 }
 
 func (a *App) save(as bool) {
+	a.endPlay()
 	if as || a.path == "" {
 		openSaveRequester()
 		return
@@ -1814,6 +1974,23 @@ type emulator interface {
 	cursor() (int, int)
 }
 
+// playBytes is what Play sends: the file as read, or the page written out
+// (a changed page, or a file whose format is not a stream of codes).
+func (a *App) playBytes() []byte {
+	if a.source != nil && !a.dirty && a.srcKind == "" {
+		return a.source
+	}
+	switch {
+	case a.c64():
+		return writeSeq(a.doc, a.lower(), false)
+	case a.atari():
+		return writeAta(a.doc, false)
+	case a.st():
+		return writeVT52(a.doc, a.res())
+	}
+	return writeAnsi(a.doc, a.amiga(), true, false)
+}
+
 func (a *App) play() {
 	if a.playing != nil {
 		a.stopPlay(true)
@@ -1823,18 +2000,7 @@ func (a *App) play() {
 		a.msg("This file has no codes to play: it is a picture of the screen")
 		return
 	}
-	b := a.source
-	if b == nil || a.dirty {
-		if a.c64() {
-			b = writeSeq(a.doc, a.lower(), false)
-		} else if a.atari() {
-			b = writeAta(a.doc, false)
-		} else if a.st() {
-			b = writeVT52(a.doc, a.res())
-		} else {
-			b = writeAnsi(a.doc, a.amiga(), true, false)
-		}
-	}
+	b := a.playBytes()
 	_, end := readSauce(b)
 	b = b[:end]
 	d := newDoc(a.doc.cols, 25)
@@ -1863,7 +2029,7 @@ func (a *App) playStep() {
 	p.term.write(p.bytes[p.pos:end])
 	p.pos = end
 	x, y := p.term.cursor()
-	a.cx, a.cy = min(x, a.doc.cols-1), y
+	a.cx, a.cy = min(x, a.doc.cols-1), max(0, min(y, maxRowsFor(a.doc.cols)-1))
 	a.doc.ensureRows(a.cy + 1)
 	a.ensureVisible(a.cx, a.cy)
 	if p.pos >= len(p.bytes) {
@@ -1880,4 +2046,15 @@ func (a *App) stopPlay(skip bool) {
 	// Playing does not change the page: put back the page as it was.
 	a.restore(p.saved)
 	a.msg(fmt.Sprintf("Played %d bytes", len(p.bytes)))
+}
+
+// endPlay stops a running Play at once and puts the page back, before anything
+// that reads or changes the page (saving, other modes, other tabs ...).
+func (a *App) endPlay() {
+	if a.Tab == nil || a.playing == nil {
+		return
+	}
+	p := a.playing
+	a.playing = nil
+	a.restore(p.saved)
 }

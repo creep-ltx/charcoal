@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 type Viewer struct {
@@ -30,9 +31,10 @@ type Viewer struct {
 	cache   struct { // the shrunk art, drawn once
 		doc    *Doc
 		shrink int
-		key    string
+		key    shrunkKey
 		px     []uint32
 		w, h   int
+		at     time.Time // when it was drawn (while playing it is drawn again now and then)
 	}
 }
 
@@ -49,7 +51,32 @@ func wantViewer() bool {
 	return strings.HasPrefix(strings.ToLower(filepath.Base(os.Args[0])), "charview")
 }
 
-var artExt = regexp.MustCompile(`(?i)\.(ans|ansi|asc|nfo|diz|txt|bin|seq|pet|ice|vt|cia|drk|xb|pcb|avt|idf|adf|tnd|ata|c|petmate|prg|scr|tti|ep1|m7)$`)
+var artExt = regexp.MustCompile(`(?i)\.(ans|ansi|asc|nfo|diz|txt|bin|seq|pet|ice|vt|cia|drk|xb|pcb|avt|idf|adf|tnd|ata|petmate|prg|scr|tti|ep1|m7)$`)
+
+// maybeArt: a folder's file that is art. A .c is art only when it is the C array
+// of the PETSCII editor or Petmate (not program source), a .url only when it is
+// an edit.tf link.
+func maybeArt(dir, name string) bool {
+	if artExt.MatchString(name) {
+		return true
+	}
+	ext := strings.ToLower(filepath.Ext(name))
+	if ext != ".c" && ext != ".url" {
+		return false
+	}
+	p := filepath.Join(dir, name)
+	if st, err := os.Stat(p); err != nil || st.Size() > 4<<20 {
+		return false
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return false
+	}
+	if ext == ".url" {
+		return isEditTF(b)
+	}
+	return isMarq(b)
+}
 
 // viewerFiles turns the arguments into files; a folder gives the art files in it.
 func viewerFiles(args []string) []string {
@@ -64,7 +91,7 @@ func viewerFiles(args []string) []string {
 		ents, _ := os.ReadDir(p)
 		var names []string
 		for _, e := range ents {
-			if !e.IsDir() && !strings.HasPrefix(e.Name(), ".") && artExt.MatchString(e.Name()) {
+			if !e.IsDir() && !strings.HasPrefix(e.Name(), ".") && maybeArt(p, e.Name()) {
 				names = append(names, e.Name())
 			}
 		}
@@ -274,9 +301,11 @@ func viewerKey(k string, ctrl, shift bool) {
 		a.play()
 	case "E":
 		if exe, err := os.Executable(); err == nil && a.path != "" {
-			if err := exec.Command(exe, a.path).Start(); err != nil {
+			cmd := exec.Command(exe, a.path)
+			if err := cmd.Start(); err != nil {
 				a.msg("Could not start CharEdit: " + err.Error())
 			} else {
+				go cmd.Wait() // reap it when it ends, so it leaves no zombie
 				a.msg("Opened in CharEdit")
 			}
 		}
@@ -315,13 +344,35 @@ func (v *Viewer) setShrink(n int) {
 	v.shrink = n
 }
 
+// shrunkKey is what the shrunk picture depends on besides the page.
+type shrunkKey struct {
+	font  *Font
+	pal   [16]uint32
+	ice   bool
+	cellH int
+	rows  int
+	pos   int // how far Play has got
+}
+
 // shrunk gives the art drawn at full size and then averaged down by v.shrink,
-// made once and kept until the art, the font or the colours change.
+// made once and kept until the art, the font or the colours change. While
+// Play runs the page changes all the time: it is drawn again ten times a second.
 func (v *Viewer) shrunk() ([]uint32, int, int) {
 	c := &v.cache
-	key := fmt.Sprintf("%s %v %v %d", a.font().id, a.pal, a.ice, a.cellH())
-	if c.doc == a.doc && c.shrink == v.shrink && c.key == key && a.playing == nil {
-		return c.px, c.w, c.h
+	key := shrunkKey{font: a.font(), pal: a.pal, ice: a.ice, cellH: a.cellH(), rows: a.doc.rows}
+	if a.playing != nil {
+		key.pos = a.playing.pos
+	}
+	if c.doc == a.doc && c.shrink == v.shrink && c.px != nil {
+		same := c.key == key
+		if !same && a.playing != nil && c.key.pos != key.pos && time.Since(c.at) < 100*time.Millisecond {
+			k := key // only Play moved on, and it was drawn a moment ago
+			k.pos = c.key.pos
+			same = c.key == k
+		}
+		if same {
+			return c.px, c.w, c.h
+		}
 	}
 	s, H := v.shrink, a.cellH()
 	rows := max(a.doc.rows, 1)
@@ -344,6 +395,6 @@ func (v *Viewer) shrunk() ([]uint32, int, int) {
 			px[y*w+x] = 0xFF000000 | (r/n)<<16 | (g/n)<<8 | b/n
 		}
 	}
-	c.doc, c.shrink, c.key, c.px, c.w, c.h = a.doc, s, key, px, w, h
+	c.doc, c.shrink, c.key, c.px, c.w, c.h, c.at = a.doc, s, key, px, w, h, time.Now()
 	return px, w, h
 }
