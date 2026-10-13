@@ -34,6 +34,13 @@ func shiftHeld() bool { return sdl.GetModState()&sdl.KMOD_SHIFT != 0 }
 
 func main() {
 	runtime.LockOSThread()
+	if wantViewer() {
+		viewer = &Viewer{info: true}
+	}
+	if viewer != nil && len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
+		fmt.Println("usage: charview FILE|FOLDER...\nShows Amiga ANSI, PC ANSI and C64 PETSCII art. n / Right / Space next, p / Left previous, q / Esc quit.")
+		return
+	}
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
 		fmt.Println("usage: charcool [FILE...]\nAn Amiga ANSI, PC ANSI and C64 PETSCII art viewer and editor. Press ? in the window for the keys.")
 		return
@@ -48,7 +55,18 @@ func main() {
 	}
 	a.ch8Default, a.smearDefault = prefs.Ch8, prefs.Smear
 	a.focusTab(a.newTab(mode))
+	if viewer != nil {
+		viewer.files = viewerFiles(os.Args[1:])
+		if len(viewer.files) == 0 {
+			fmt.Fprintln(os.Stderr, "usage: charview FILE|FOLDER...")
+			os.Exit(1)
+		}
+		viewer.show(0)
+	}
 	for _, arg := range os.Args[1:] {
+		if viewer != nil {
+			break
+		}
 		p, _ := filepath.Abs(arg)
 		if _, err := os.Stat(p); err == nil {
 			a.openPath(p, "auto")
@@ -66,7 +84,7 @@ func main() {
 	if len(a.tabs) > 0 {
 		a.focusTab(a.tabs[0])
 	}
-	if !a.hasC64 && !prefs.C64Asked && a.dialog == nil {
+	if !a.hasC64 && !prefs.C64Asked && a.dialog == nil && viewer == nil {
 		openC64Req(nil) // ask once, on the first run
 	}
 
@@ -158,7 +176,10 @@ func pass() {
 	ui.drawPopup()
 	ui.click, ui.wheel = nil, 0
 	title := a.name + " - CharCool"
-	if a.dirty {
+	if viewer != nil {
+		title = fmt.Sprintf("%s (%d/%d) - CharView", a.name, viewer.i+1, len(viewer.files))
+	}
+	if a.dirty && viewer == nil {
 		title = "* " + title
 	}
 	if window.GetTitle() != title {
@@ -264,6 +285,9 @@ func textInput(s string) {
 		ui.focus.insert(s)
 		return
 	}
+	if viewer != nil {
+		return
+	}
 	if a.dialog != nil || a.playing != nil || ui.popup != nil || sdl.GetModState()&(sdl.KMOD_CTRL|sdl.KMOD_LALT) != 0 {
 		return
 	}
@@ -292,10 +316,13 @@ func keyDown(e *sdl.KeyboardEvent) {
 		return
 	}
 	if a.playing != nil {
-		if k == "Escape" {
+		if k == "Escape" || k == "M" {
 			a.stopPlay(true)
+			return
 		}
-		return
+		if viewer == nil {
+			return
+		}
 	}
 	if ui.focus != nil {
 		if ctrl && k == "V" {
@@ -318,6 +345,10 @@ func keyDown(e *sdl.KeyboardEvent) {
 }
 
 func editorKey(k string, ctrl, shift, alt bool) {
+	if viewer != nil {
+		viewerKey(k, ctrl)
+		return
+	}
 	if ctrl {
 		switch k {
 		case "Z":

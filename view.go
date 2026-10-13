@@ -117,6 +117,10 @@ func (f *flow) place(w int) Rect {
 func (f *flow) gap() { f.x += 10 }
 
 func (a *App) drawWindow(u *UI) {
+	if viewer != nil {
+		a.drawViewer(u)
+		return
+	}
 	fb := u.fb
 	W, H := fb.w, fb.h
 	fb.fill(Rect{0, 0, W, H}, cGrey)
@@ -498,7 +502,7 @@ func (a *App) drawPage(u *UI, id string) {
 		fb.blend(cell(r.x, r.y, r.w, r.h), cOrange, 46)
 		fb.dashed(cell(r.x, r.y, r.w, r.h), cOrange)
 	}
-	if a.hover != nil && a.float == nil && a.tool != "type" && a.tool != "select" && a.playing == nil {
+	if a.hover != nil && a.float == nil && a.tool != "type" && a.tool != "select" && a.playing == nil && viewer == nil {
 		r := cell(a.hover.x, a.hover.y, 1, 1)
 		if a.tool == "half" {
 			r.h /= 2
@@ -506,7 +510,7 @@ func (a *App) drawPage(u *UI, id string) {
 		}
 		fb.frame(r, 0xFFCCCCCC)
 	}
-	if a.blink || a.playing != nil { // the cursor, Amiga style: an orange block
+	if (a.blink && viewer == nil) || a.playing != nil { // the cursor, Amiga style: an orange block
 		r := cell(a.cx, a.cy, 1, 1)
 		if a.insert {
 			h := max(2*z, r.h/4)
@@ -543,7 +547,7 @@ func (a *App) cellAt(mx, my int) (Hover, bool) {
 }
 
 func (a *App) pagePress(c *Click) {
-	if a.playing != nil {
+	if a.playing != nil || viewer != nil {
 		return
 	}
 	ui.focus = nil

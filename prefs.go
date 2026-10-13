@@ -80,6 +80,9 @@ func loadPrefs() {
 }
 
 func savePrefs() {
+	if viewer != nil { // the viewer leaves the editor's settings alone
+		return
+	}
 	p := prefs
 	// The page being worked on sets what new tabs start with.
 	for k, v := range a.fontFor {

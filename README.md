@@ -8,6 +8,14 @@ An art viewer and editor for Amiga ANSI, PC ANSI and C64 PETSCII, drawn with the
 
     charcool [FILE...]     # opens its own window, one tab per file
 
+    charview FILE|FOLDER...   # just looks: n / Right / Space next, p / Left previous, q / Esc quits
+
+**CharView** is the same program started as `charview` (a link to `charcool`, or `charcool --view`): the art
+fills the window, fitted to its width, with one line at the bottom (i hides it). Up/Down/PgUp/PgDn/Home/End
+and the wheel scroll, +/- zoom (0 fits again), g grid, m plays the file at modem speed, e opens it in CharCool.
+A folder gives every art file in it (.ans .asc .nfo .diz .txt .bin .seq .pet .ice ...). It never changes the
+editor's settings.
+
 A native program (Go + SDL2, one binary; needs only the SDL2 library that every Linux desktop has). The whole
 interface is drawn in Topaz, kept dark and small so the art comes first; **Ctrl+H** hides every gadget.
 Press the **?** gadget for every key.
@@ -17,7 +25,7 @@ Press the **?** gadget for every key.
     go build -o charcool .     # needs Go and the SDL2 development files
     go test ./...             # the core: parser, writer, SAUCE
 
-`~/.local/bin/charcool` links to the binary here.
+`~/.local/bin/charcool` and `~/.local/bin/charview` link to the binary here.
 
 ## What it does
 
@@ -55,6 +63,7 @@ Press the **?** gadget for every key.
 | `dialogs.go` | open/save, info, colour, help, yes/no requesters |
 | `ui.go`, `gfx.go` | the gadgets and the pixel drawing |
 | `fonts.go`, `fonts/` | the embedded fonts and their mirror tables; `cp437.go` the CP437 table |
+| `viewer.go` | CharView |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
 | `script.go` | `CHARCOOL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
 | `web/` | the first version, called amiansi, that ran in the browser (Python server + HTML/JS), kept for reference |
