@@ -6,7 +6,7 @@ func TestZX(t *testing.T) {
 	d := newZXDoc()
 	d.set(0, 0, zxCell('H', 2, 6, true, false))
 	d.set(31, 23, zxCell(133, 1, 7, false, true)) // a block graphic, flashing
-	d.set(5, 9, zxCell(0x60, 0, 7, false, false))   // £
+	d.set(5, 9, zxCell(0x60, 0, 7, false, false)) // £
 	scr := writeSCR(d)
 	if len(scr) != 6912 {
 		t.Fatal(len(scr))

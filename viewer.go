@@ -49,7 +49,7 @@ func wantViewer() bool {
 	return strings.HasPrefix(strings.ToLower(filepath.Base(os.Args[0])), "charview")
 }
 
-var artExt = regexp.MustCompile(`(?i)\.(ans|ansi|asc|nfo|diz|txt|bin|seq|pet|ice|vt|cia|drk)$`)
+var artExt = regexp.MustCompile(`(?i)\.(ans|ansi|asc|nfo|diz|txt|bin|seq|pet|ice|vt|cia|drk|xb|pcb|avt|idf|adf|tnd|ata|c|petmate|prg|scr|tti|ep1|m7)$`)
 
 // viewerFiles turns the arguments into files; a folder gives the art files in it.
 func viewerFiles(args []string) []string {
@@ -113,7 +113,7 @@ func (v *Viewer) tick(dt float64) bool {
 	unit := v.rowPx() // a text row
 	cur, end := a.scrollY, ch-a.page.h
 	if horiz {
-		unit, cur, end = max(1, 8*a.zoom/max(1, v.shrink)), a.scrollX, cw-a.page.w
+		unit, cur, end = max(1, a.cellW()*a.zoom/max(1, v.shrink)), a.scrollX, cw-a.page.w
 	}
 	if end <= 0 || cur >= end {
 		v.endWait += dt
@@ -178,9 +178,9 @@ func (a *App) drawViewer(u *UI) {
 	a.page = Rect{0, 0, W - 18, bottom - 18}
 	if viewer.fit {
 		viewer.fit = false
-		a.zoom = max(1, min(8, a.page.w/(a.doc.cols*8)))
+		a.zoom = max(1, min(8, a.page.w/(a.doc.cols*a.cellW())))
 		viewer.shrink = 1
-		if w := a.doc.cols * 8; w > a.page.w { // wider than the window: shown smaller
+		if w := a.doc.cols * a.cellW(); w > a.page.w { // wider than the window: shown smaller
 			viewer.shrink = min(8, (w+a.page.w-1)/a.page.w)
 		}
 		a.scrollX, a.scrollY = 0, 0
@@ -217,10 +217,10 @@ func viewerKey(k string, ctrl, shift bool) {
 	rowPx := v.rowPx()
 	switch {
 	case shift && k == "Right": // wide art: sideways by hand
-		a.scrollX += 8 * a.zoom * 4
+		a.scrollX += a.cellW() * a.zoom * 4
 		return
 	case shift && k == "Left":
-		a.scrollX = max(0, a.scrollX-8*a.zoom*4)
+		a.scrollX = max(0, a.scrollX-a.cellW()*a.zoom*4)
 		return
 	}
 	switch k {
@@ -326,7 +326,7 @@ func (v *Viewer) shrunk() ([]uint32, int, int) {
 	s, H := v.shrink, a.cellH()
 	rows := max(a.doc.rows, 1)
 	full := &FB{}
-	full.resize(a.doc.cols*8, rows*H)
+	full.resize(a.doc.cols*a.cellW(), rows*H)
 	a.paintCells(full, 0, 0, 1, func(x, y int) uint32 { return a.doc.get(x, y) }, a.doc.cols, rows)
 	w, h := full.w/s, full.h/s
 	px := make([]uint32, w*h)

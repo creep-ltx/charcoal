@@ -13,6 +13,15 @@ import (
 
 // drawCell draws a page cell at pixel (px, py), every font pixel z by z.
 func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
+	if a.tt() { // a teletext code on its own: a letter, or an attribute's name
+		c := cellCh(v) & 0x7F
+		cell := ttCell{code: c, fg: 7, control: -1}
+		if c < 0x20 {
+			cell.code, cell.control = 0x20, c
+		}
+		a.drawTTCell(fb, px, py, z, cell, true)
+		return
+	}
 	f, H := a.font(), a.cellH()
 	skip := 1
 	if H == 8 {
@@ -56,7 +65,7 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 		ch = 32
 	}
 	cl := fb.clip
-	inside := px >= cl.x && py >= cl.y && px+8*z <= cl.x+cl.w && py+H*z <= cl.y+cl.h
+	inside := px >= cl.x && py >= cl.y && px+a.cellW()*z <= cl.x+cl.w && py+H*z <= cl.y+cl.h
 	for r := 0; r < H; r++ {
 		bits := int(f.bits[ch*16+r*skip])
 		r8 := r
@@ -91,12 +100,52 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	}
 }
 
+// drawTTCell draws a decoded teletext cell; with labels, an attribute's cell shows its name.
+func (a *App) drawTTCell(fb *FB, px, py, z int, c ttCell, labels bool) {
+	bg, fg := a.pal[c.bg&7], a.pal[c.fg&7]
+	show := !(c.flash && !a.blink) && !(c.conceal && !labels)
+	for y := 0; y < ttH; y++ {
+		for x := 0; x < ttW; x++ {
+			col := bg
+			if show && ttInk(c, x, y) {
+				col = fg
+			}
+			fb.fill(Rect{px + x*z, py + y*z, z, z}, col)
+		}
+	}
+	if labels && c.control >= 0 {
+		name, colour := ttLabel(c.control)
+		ink := uint32(0xFF808080)
+		if colour >= 0 {
+			ink = a.pal[colour]
+		}
+		fb.text(px+(ttW*z-8)/2, py+(ttH*z-16)/2, name, ink)
+	}
+}
+
 // paintCells draws w x h cells from get at pixel (x0, y0).
 func (a *App) paintCells(fb *FB, x0, y0, z int, get func(x, y int) uint32, w, h int) {
+	if a.tt() { // teletext rows are decoded as a whole
+		d := newTTDoc()
+		d.cols, d.rows = w, h
+		d.cells = make([]uint32, w*h)
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				d.cells[y*w+x] = get(x, y)
+			}
+		}
+		for y := 0; y < h; y++ {
+			row := ttDecode(d, y, a.ttBlack)
+			for x := 0; x < w; x++ {
+				a.drawTTCell(fb, x0+x*ttW*z, y0+y*ttH*z, z, row[x], false)
+			}
+		}
+		return
+	}
 	H := a.cellH()
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			a.drawCell(fb, x0+x*8*z, y0+y*H*z, z, get(x, y))
+			a.drawCell(fb, x0+x*a.cellW()*z, y0+y*H*z, z, get(x, y))
 		}
 	}
 }
@@ -304,13 +353,16 @@ func (a *App) drawBar(u *UI) int {
 	}
 	fl.gap()
 	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata files. ST: Atari ST VT52. PETSCII: PET, VIC-20, C64, C128, .seq files."
-	for _, m := range []string{"amiga", "pc", "atari", "st", "c64", "zx"} {
+	for _, m := range []string{"amiga", "pc", "atari", "st", "c64", "zx", "tt"} {
 		label := modeNames[m]
 		if m == "st" {
 			label = "ST"
 		}
 		if m == "zx" {
 			label = "ZX"
+		}
+		if m == "tt" {
+			label = "TT"
 		}
 		if u.button(fl.place(buttonW(label)), label, a.mode == m, modeHint) != nil {
 			a.setMode(m)
@@ -362,10 +414,12 @@ func (a *App) drawBar(u *UI) int {
 		}
 		fontNames, fontIDs, cur = n2, id2, cur2
 	}
-	u.choice("font", fl.place(choiceW(fontNames)), fontNames, cur, "Font (on a PETSCII page: upper case + graphics, or lower + upper case)", func(i int) {
-		a.fontFor[a.mode] = fontIDs[i]
-		savePrefs()
-	})
+	if len(fontNames) > 0 {
+		u.choice("font", fl.place(choiceW(fontNames)), fontNames, cur, "Font (on a PETSCII page: upper case + graphics, or lower + upper case)", func(i int) {
+			a.fontFor[a.mode] = fontIDs[i]
+			savePrefs()
+		})
+	}
 	var palNames, palIDs []string
 	pcur := 0
 	for _, p := range palettes {
@@ -386,6 +440,10 @@ func (a *App) drawBar(u *UI) int {
 	})
 	fl.gap()
 	switch {
+	case a.tt():
+		r := fl.place(textW("40 x 25") + 8)
+		fb.text(r.x+4, r.y+3, "40 x 25", cText)
+		u.setHint(r, "A teletext page")
 	case a.zx():
 		r := fl.place(textW("32 x 24") + 8)
 		fb.text(r.x+4, r.y+3, "32 x 24", cText)
@@ -529,7 +587,7 @@ func (a *App) zoomAt(z, mx, my int) {
 // fitZoom picks the biggest zoom that shows the whole width.
 func (a *App) fitZoom() {
 	a.scrollX = 0
-	a.setZoom(max(1, min(8, a.page.w/(a.doc.cols*8))))
+	a.setZoom(max(1, min(8, a.page.w/(a.doc.cols*a.cellW()))))
 	a.scrollX = 0
 }
 
@@ -541,10 +599,10 @@ func (a *App) contentSize() (int, int) {
 	if viewer != nil {     // the viewer shows the art and no more
 		rows = max(a.doc.rows, 1)
 		if viewer.shrink > 1 {
-			return a.doc.cols * 8 / viewer.shrink, rows * H / viewer.shrink
+			return a.doc.cols * a.cellW() / viewer.shrink, rows * H / viewer.shrink
 		}
 	}
-	return a.doc.cols * 8 * z, rows * H * z
+	return a.doc.cols * a.cellW() * z, rows * H * z
 }
 
 func (a *App) drawPage(u *UI, id string) {
@@ -559,7 +617,7 @@ func (a *App) drawPage(u *UI, id string) {
 	fb.fill(Rect{p.x + p.w, p.y + p.h, 18, 18}, cGrey)
 	if w := u.takeWheel(p); w != 0 {
 		if shiftHeld() {
-			a.scrollX += w * 8 * z * 4
+			a.scrollX += w * a.cellW() * z * 4
 		} else {
 			a.scrollY += w * H * z * 3
 		}
@@ -584,12 +642,19 @@ func (a *App) drawPage(u *UI, id string) {
 	}
 	fb.fill(p, 0xFF141518) // outside the page
 	ox, oy := p.x-a.scrollX, p.y-a.scrollY
-	rowPx, colPx := H*z, 8*z
+	rowPx, colPx := H*z, a.cellW()*z
 	pageR := Rect{ox, oy, a.doc.cols * colPx, a.doc.rows * rowPx}
 	fb.fill(pageR.and(p), cPaper)
 	y0, y1 := a.scrollY/rowPx, min(a.doc.rows, (a.scrollY+p.h)/rowPx+1)
 	x0, x1 := a.scrollX/colPx, min(a.doc.cols, (a.scrollX+p.w)/colPx+1)
 	for y := y0; y < y1; y++ {
+		if a.tt() { // a teletext row is read left to right as the chip reads it
+			row := ttDecode(a.doc, y, a.ttBlack)
+			for x := x0; x < x1; x++ {
+				a.drawTTCell(fb, ox+x*colPx, oy+y*rowPx, z, row[x], a.showCodes)
+			}
+			continue
+		}
 		for x := x0; x < x1; x++ {
 			a.drawCell(fb, ox+x*colPx, oy+y*rowPx, z, a.doc.get(x, y))
 		}
@@ -625,7 +690,12 @@ func (a *App) drawPage(u *UI, id string) {
 	}
 	if a.hover != nil && a.float == nil && a.tool != "type" && a.tool != "select" && a.playing == nil && viewer == nil {
 		r := cell(a.hover.x, a.hover.y, 1, 1)
-		if a.tool == "half" {
+		if a.tool == "half" && a.tt() { // the sixel under the mouse
+			r.w /= 2
+			r.x += a.hover.sx * r.w
+			top := []int{0, 6, 14, 20}
+			r.y, r.h = r.y+top[a.hover.sy]*z, (top[a.hover.sy+1]-top[a.hover.sy])*z
+		} else if a.tool == "half" {
 			r.h /= 2
 			r.y += a.hover.half * r.h
 		}
@@ -650,7 +720,7 @@ func (a *App) drawPage(u *UI, id string) {
 // cellAt turns a window position into a cell of the page.
 func (a *App) cellAt(mx, my int) (Hover, bool) {
 	z := a.zoom
-	fx := float64(mx-a.page.x+a.scrollX) / float64(8*z)
+	fx := float64(mx-a.page.x+a.scrollX) / float64(a.cellW()*z)
 	fy := float64(my-a.page.y+a.scrollY) / float64(a.cellH()*z)
 	x, y := int(fx), int(fy)
 	if fx < 0 {
@@ -663,8 +733,18 @@ func (a *App) cellAt(mx, my int) (Hover, bool) {
 	if fy-float64(y) >= 0.5 {
 		half = 1
 	}
+	sx, sy := 0, 0 // teletext sixels: two columns, rows of 6, 8 and 6 of the cell's 20 lines
+	if fx-float64(x) >= 0.5 {
+		sx = 1
+	}
+	switch f := fy - float64(y); {
+	case f >= 0.7:
+		sy = 2
+	case f >= 0.3:
+		sy = 1
+	}
 	inside := fx >= 0 && x < a.doc.cols && fy >= 0 && y < a.doc.rows
-	return Hover{max(0, min(a.doc.cols-1, x)), max(0, y), half}, inside
+	return Hover{max(0, min(a.doc.cols-1, x)), max(0, y), half, sx, sy}, inside
 }
 
 func (a *App) pagePress(c *Click) {
@@ -704,6 +784,16 @@ func (a *App) pagePress(c *Click) {
 		}
 	case "half":
 		a.pushUndo()
+		if a.tt() { // teletext: sixels on (left) or off (right)
+			gx, gy := p.x*2+p.sx, p.y*3+p.sy
+			if c.shift && a.last != nil {
+				line(a.last.x, a.last.y, gx, gy, func(x, y int) { a.paintSixel(x, y, c.button != 3) })
+			} else {
+				a.paintSixel(gx, gy, c.button != 3)
+			}
+			a.last = &Hover{x: gx, y: gy}
+			break
+		}
 		hy := p.y*2 + p.half
 		col := a.fg
 		if c.button == 3 {
@@ -745,6 +835,13 @@ func (a *App) pageMotion(mx, my int) {
 	switch {
 	case a.selecting:
 		a.sel.x1, a.sel.y1 = p.x, p.y
+	case a.tool == "half" && a.tt():
+		gx, gy := p.x*2+p.sx, p.y*3+p.sy
+		on := a.button != 3
+		if a.last != nil {
+			line(a.last.x, a.last.y, gx, gy, func(x, y int) { a.paintSixel(x, y, on) })
+		}
+		a.last = &Hover{x: gx, y: gy}
 	case a.tool == "half":
 		hy := p.y*2 + p.half
 		col := a.fg
@@ -807,11 +904,15 @@ func (a *App) drawPane(u *UI, pane Rect) {
 	bw := buttonW("Colour")
 	i := 0
 	for _, t := range tools {
-		if t.id == "half" && !a.pc() {
+		if t.id == "half" && !a.pc() && !a.tt() {
 			continue
 		}
 		r := Rect{x + (i%2)*(bw+4), y + (i/2)*(smallH+4), bw, smallH}
-		if u.button(r, t.name, a.tool == t.id, t.hint) != nil {
+		name, hint := t.name, t.hint
+		if t.id == "half" && a.tt() {
+			name, hint = "Sixel", "Sixels: left sets, right clears one of a cell's 2x3 graphics pixels (the row needs a graphics colour to its left)"
+		}
+		if u.button(r, name, a.tool == t.id, hint) != nil {
 			a.setTool(t.id)
 		}
 		i++
@@ -833,31 +934,53 @@ func (a *App) drawPane(u *UI, pane Rect) {
 	if a.zx() {
 		a.flash = toggle("Flash", a.flash, "Flash: new cells swap ink and paper twice a second")
 	}
+	if a.tt() {
+		a.showCodes = toggle("Codes", a.showCodes, "Show the attribute codes' names in their cells (T text colour, G graphics colour, D double, F flash ...)")
+	}
 	if a.screen() {
 		a.rev = toggle("Rev", a.rev, "Reverse: typing gives reversed characters, like RVS ON (Ctrl+R)")
 	}
 	a.insert = toggle("Ins", a.insert, "Insert mode for typing (Insert key)")
 	x += 2*bw + 4 + 14
 
-	// The characters, at the page font's own size.
-	cm := Rect{x, y, 32 * 8, 8 * H}
+	// The characters, at the page font's own size. On a teletext page the
+	// first four rows are the codes (attributes, then letters), the last four
+	// the same codes as sixels.
+	CW := a.cellW()
+	cm := Rect{x, y, 32 * CW, 8 * H}
 	fb.fill(cm, cPaper)
 	for c := 0; c < 256; c++ {
-		px, py := cm.x+(c%32)*8, cm.y+(c/32)*H
-		if a.printable(c) {
+		px, py := cm.x+(c%32)*CW, cm.y+(c/32)*H
+		switch {
+		case a.tt() && c >= 128:
+			if k := c - 128; k >= 0x20 && (k < 0x40 || k >= 0x60) {
+				a.drawTTCell(fb, px, py, 1, ttCell{code: k, mosaic: true, fg: 7, control: -1}, false)
+			}
+		case a.printable(c):
 			a.drawCell(fb, px, py, 1, makeCell(c, a.previewFg(), 0, 0))
-		} else {
-			fb.fill(Rect{px + 1, py + 1, 6, H - 2}, 0xFF1A1B1E)
+		default:
+			fb.fill(Rect{px + 1, py + 1, CW - 2, H - 2}, 0xFF1A1B1E)
 		}
 	}
-	fb.frame(Rect{cm.x + (a.brush%32)*8, cm.y + (a.brush/32)*H, 8, H}, cOrange)
+	fb.frame(Rect{cm.x + (a.brush%32)*CW, cm.y + (a.brush/32)*H, CW, H}, cOrange)
 	a.charHover = -1
 	if u.hover(cm) {
-		a.charHover = (u.my-cm.y)/H*32 + (u.mx-cm.x)/8
+		a.charHover = (u.my-cm.y)/H*32 + (u.mx-cm.x)/CW
 		u.hint = fmt.Sprintf("Character %d (0x%02X). Click: brush (types it with Type). Right click: put it on the active F-key.", a.charHover, a.charHover)
+		if a.tt() {
+			k := a.charHover & 0x7F
+			what := fmt.Sprintf("code %d (0x%02X)", k, k)
+			if k < 0x20 {
+				what += ": " + ttCodeName(k)
+			}
+			u.hint = what + ". Click: brush. Right click: put it on the active F-key."
+		}
 	}
 	if c := u.take(cm); c != nil {
-		ch := (c.y-cm.y)/H*32 + (c.x-cm.x)/8
+		ch := (c.y-cm.y)/H*32 + (c.x-cm.x)/CW
+		if a.tt() {
+			ch &= 0x7F // the sixel rows are the same codes
+		}
 		if a.printable(ch) {
 			switch {
 			case c.button == 3:
@@ -998,7 +1121,7 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		}
 		x = fb.text(x+charW*2, y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 	}
-	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum"}[a.mode]
+	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum", "tt": "Teletext"}[a.mode]
 	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, a.doc.rows), cText) + 24
 	name := a.path
 	if name == "" {

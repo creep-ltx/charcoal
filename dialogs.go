@@ -104,8 +104,8 @@ type FileReq struct {
 	lastSel int
 }
 
-var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "c64"}
-var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "Atari ST VT52", "ZX Spectrum", "C64 PETSCII"}
+var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "tt", "c64"}
+var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "Atari ST VT52", "ZX Spectrum", "Teletext", "C64 PETSCII"}
 
 func openOpenRequester() {
 	d := &FileReq{sel: -1}
@@ -317,7 +317,7 @@ func (d *FileReq) draw(u *UI) {
 		fb.text(in.x, y+3, "Open as", cText)
 		names := openAsNames
 		if !a.hasC64 {
-			names = names[:6]
+			names = names[:7]
 		}
 		u.choice("as", Rect{in.x + 72, y, choiceW(names), gadH}, names, d.choice, "", func(i int) { d.choice = i })
 	}
@@ -562,6 +562,8 @@ Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and u
 Atari ST pages are the ST's VT52 terminal in one of its resolutions (the Resolution gadget): low 40 x 25 in 16 colours, medium 80 x 25 in 4, high 80 x 25 in black and white with taller characters. Each cell has its own colour and background (ESC b, ESC c); files are the VT52 stream (.vt). The font is EmuTOS's, downloaded on first use.
 
 ZX Spectrum pages are its 32 x 24 screen: a character per cell with ink (left click), paper (right click), bright (colours 8-15; ink and paper share it) and Flash; middle click sets the border. Codes 128-143 are the Spectrum's block graphics, 144-164 its user-defined graphics. Saved as .scr, the 6912-byte screen every Spectrum emulator loads; a .scr that is a drawing opens with each cell as the nearest character.
+
+Teletext pages are 40 x 25 cells of 7-bit codes as on a BBC Micro in Mode 7 or a TV teletext page. Codes 0-31 are attributes that act from their cell to the right, as the teletext chip reads a row: text or graphics colour (F-key sets 1 and 2), double height, flash, conceal, separated, hold, new background. Codes shows their names in their cells. The Sixel tool paints the 2x3 graphics pixels of a cell (the row needs a graphics colour to its left). Files: .tti, .ep1, edit.tf links (.url; a text holding an edit.tf link opens too) and BBC Mode 7 dumps (1000-byte .bin). The characters are Bedstead's (public domain).
 
 SAVE AS
 ANSI, plain text, UTF-8 text, PC .bin, ATASCII .ata, XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border) and a web page (.html). Typing a file ending picks the format.

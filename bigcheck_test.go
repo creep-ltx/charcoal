@@ -38,7 +38,7 @@ func cellsMatch(fmtID string, x, y *Doc) (bool, string) {
 		for c := 0; c < x.cols; c++ {
 			a, b := x.get(c, r), y.get(c, r)
 			switch fmtID {
-			case "text", "ata":
+			case "text", "ata", "tti", "ep1", "tturl":
 				a, b = a&255, b&255
 			case "seq", "marq", "petmate", "prg":
 				a, b = a&0xFFF, b&0xFFF
@@ -76,6 +76,8 @@ func expectedMode(path string, b []byte) string {
 		return "" // C source, not art
 	case ".xb", ".pcb", ".avt", ".idf", ".adf", ".tnd":
 		return "pc"
+	case ".tti", ".ep1":
+		return "tt"
 	}
 	if strings.Contains(path, "/ata/") {
 		return "atari"
@@ -148,7 +150,7 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 	lower, ice := a.lower(), a.ice
 	a.tabs, a.Tab = nil, nil
 	a.focusTab(a.newTab(mode))
-	name := "again" + map[string]string{"pcb": ".pcb", "avt": ".avt", "ansi": ".ans", "text": ".asc", "bin": ".bin", "xbin": ".xb", "seq": ".seq",
+	name := "again" + map[string]string{"tti": ".tti", "ep1": ".ep1", "tturl": ".url", "scr": ".scr", "vt52": ".vt", "pcb": ".pcb", "avt": ".avt", "ansi": ".ans", "text": ".asc", "bin": ".bin", "xbin": ".xb", "seq": ".seq",
 		"ata": ".ata", "marq": ".c", "petmate": ".petmate", "prg": ".prg"}[fmtID]
 	as := mode
 	if fmtID == "xbin" || fmtID == "marq" || fmtID == "petmate" || fmtID == "prg" {

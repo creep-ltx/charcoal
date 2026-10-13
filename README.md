@@ -3,7 +3,8 @@
 Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer.
 
 An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw),
-Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128) and ZX Spectrum screens, drawn with the real bitmap fonts: Topaz
+Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens and teletext
+(BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA on a PC page
 (CP437), the C64's two character sets on a C64 page.
 
@@ -58,6 +59,12 @@ Press the **?** gadget for every key.
 - **Atari ST page**: the ST's VT52 terminal in low (40x25, 16 colours), medium (80x25, 4) or high resolution
   (80x25, mono); each cell its own colours; `.vt` streams read and written, the resolution guessed from the pens
   and columns used. Font: EmuTOS's, downloaded on first use (GPL, so not built in), SHA-1 checked.
+- **Teletext page**: 40x25 cells of 7-bit codes in 12x20 cells like the SAA5050's; attributes (text/graphics
+  colour, double height, flash, conceal, separated, hold, new/black background) act from their cell on, read
+  left to right as the chip reads a row (set-at / set-after as in ETS 300 706 and edit.tf). **Codes** shows the
+  attributes' names; the **Sixel** tool paints a cell's 2x3 graphics pixels. Opens and saves `.tti`, `.ep1`,
+  edit.tf links (`.url`; any text with an edit.tf link opens), opens BBC Mode 7 dumps (1000-byte `.bin`). Font:
+  Bedstead (public domain), 5x9 dots doubled with the chip's character rounding (`tools/teletext-font.py`).
 - **ZX Spectrum page**: the 32x24 screen, ink/paper/bright/flash per cell, the 48K ROM's font (built in: Amstrad
   allows passing the ROM on, `fonts/zx-spectrum-NOTICE.txt`) with the block graphics and UDGs. Saved as `.scr`
   (6912 bytes); a `.scr` opens with each 8x8 cell matched to a character (drawings get the nearest one).

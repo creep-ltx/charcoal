@@ -1,0 +1,2 @@
+teletext_font.go is generated from Bedstead (https://bjh21.me.uk/bedstead/), by Ben Harris and others,
+dedicated to the public domain (CC0 1.0 Universal).
