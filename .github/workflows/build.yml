@@ -47,11 +47,11 @@ jobs:
           v=${GITHUB_REF_NAME//\//-}
           tools/release/package.sh linux out stage/charcoal-linux-x64 "$v"
           (cd stage && zip -qry ../charcoal-linux-x64.zip charcoal-linux-x64)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: charcoal-linux-x64
           path: charcoal-linux-x64.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: screenshots-linux
           path: shot-*.png
@@ -98,11 +98,11 @@ jobs:
           v=${GITHUB_REF_NAME//\//-}
           tools/release/package.sh windows out stage/charcoal-windows-x64 "$v"
           (cd stage && 7z a -tzip -bd ../charcoal-windows-x64.zip charcoal-windows-x64 > /dev/null)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: charcoal-windows-x64
           path: charcoal-windows-x64.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: screenshots-windows
@@ -117,7 +117,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: sdlcache
         with:
           path: ~/sdl2
@@ -175,11 +175,11 @@ jobs:
           ls -la shot-*.png
       - name: package
         run: (cd stage && zip -qry ../charcoal-macos.zip charcoal-macos)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: charcoal-macos
           path: charcoal-macos.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: screenshots-macos
@@ -192,7 +192,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: charcoal-*
           merge-multiple: true
