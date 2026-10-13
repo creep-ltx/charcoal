@@ -200,9 +200,8 @@ func (a *App) pc() bool    { return a.mode == "pc" }
 func (a *App) c64() bool   { return a.mode == "c64" }
 func (a *App) atari() bool { return a.mode == "atari" }
 func (a *App) st() bool    { return a.mode == "st" }
-
-func (a *App) zx() bool { return a.mode == "zx" }
-func (a *App) tt() bool { return a.mode == "tt" }
+func (a *App) zx() bool    { return a.mode == "zx" }
+func (a *App) tt() bool    { return a.mode == "tt" }
 
 // ttBlack: does the page draw codes 0 and 16 black (edit.tf's own choice)?
 func (a *App) ttBlack() bool { return a.ttMeta&8 != 0 }
