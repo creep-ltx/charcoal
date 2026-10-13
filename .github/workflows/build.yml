@@ -161,7 +161,8 @@ jobs:
           codesign --verify --verbose stage/charcoal-macos/Charcoal.app
       - name: screenshots (no screen)
         run: |
-          export XDG_CONFIG_HOME=$RUNNER_TEMP/cfg2 XDG_DATA_HOME=$RUNNER_TEMP/data2 SDL_VIDEODRIVER=offscreen
+          # SDL's offscreen driver wants OpenGL/EGL on a Mac ("Could not initialize OpenGL"); dummy needs none.
+          export XDG_CONFIG_HOME=$RUNNER_TEMP/cfg2 XDG_DATA_HOME=$RUNNER_TEMP/data2 SDL_VIDEODRIVER=dummy
           CHARCOAL_SCRIPT="key Escape; shot shot-macos.png; key ctrl+O; shot shot-macos-open.png; quit" \
             stage/charcoal-macos/Charcoal.app/Contents/MacOS/charedit testdata/alove/bs-alove.xb
           CHARCOAL_SCRIPT="shot shot-macos-charview.png; quit" \
