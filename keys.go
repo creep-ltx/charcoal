@@ -1,0 +1,414 @@
+package main
+
+// The editor's shortcuts: one table of actions (keys.go) drives them, the help
+// lists them, and ~/.config/charcoal/keys changes them ("action = key, key").
+// Typing, the F-keys of the F-key set, the arrows and the other cursor keys,
+// Return, Tab, Backspace, Delete, Insert and Esc are fixed.
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/veandco/go-sdl2/sdl"
+)
+
+// Modifier bits of a key combination. Alt is the left Alt only: the right
+// one is AltGr, which types characters on many keyboards.
+const (
+	modCtrl = 1 << iota
+	modAlt
+	modShift
+)
+
+// combo is a key with its modifiers; key is SDL's name for it ("A", "Up", "F1", "Keypad +").
+type combo struct {
+	mods uint8
+	key  string
+}
+
+func (c combo) String() string {
+	s := ""
+	if c.mods&modCtrl != 0 {
+		s += "Ctrl+"
+	}
+	if c.mods&modAlt != 0 {
+		s += "Alt+"
+	}
+	if c.mods&modShift != 0 {
+		s += "Shift+"
+	}
+	return s + c.key
+}
+
+func modsOf(ctrl, alt, shift bool) uint8 {
+	var m uint8
+	if ctrl {
+		m |= modCtrl
+	}
+	if alt {
+		m |= modAlt
+	}
+	if shift {
+		m |= modShift
+	}
+	return m
+}
+
+// keyAliases are names people write that SDL does not know.
+var keyAliases = map[string]string{"pgup": "PageUp", "pgdn": "PageDown", "pgdown": "PageDown", "esc": "Escape",
+	"del": "Delete", "ins": "Insert", "enter": "Return", "comma": ",", "plus": "+", "minus": "-"}
+
+// parseCombo reads "Ctrl+Shift+Up", "alt+f", "Ctrl++", "Ctrl+Keypad +" (any case).
+func parseCombo(s string) (combo, error) {
+	s = strings.TrimSpace(s)
+	var c combo
+	for {
+		l := strings.ToLower(s)
+		switch {
+		case strings.HasPrefix(l, "ctrl+") && len(s) > 5:
+			c.mods |= modCtrl
+			s = s[5:]
+		case strings.HasPrefix(l, "control+") && len(s) > 8:
+			c.mods |= modCtrl
+			s = s[8:]
+		case strings.HasPrefix(l, "alt+") && len(s) > 4:
+			c.mods |= modAlt
+			s = s[4:]
+		case strings.HasPrefix(l, "shift+") && len(s) > 6:
+			c.mods |= modShift
+			s = s[6:]
+		default:
+			name := strings.TrimSpace(s)
+			if al, ok := keyAliases[strings.ToLower(name)]; ok {
+				name = al
+			}
+			if name == "" {
+				return c, fmt.Errorf("no key in %q", s)
+			}
+			code := sdl.GetKeyFromName(name)
+			if code == sdl.K_UNKNOWN {
+				return c, fmt.Errorf("unknown key %q", name)
+			}
+			c.key = sdl.GetKeyName(code)
+			if c.key == "" {
+				return c, fmt.Errorf("unknown key %q", name)
+			}
+			if typing := len(c.key) == 1 || c.key == "Space"; c.mods&(modCtrl|modAlt) == 0 && (typing || (c.mods == 0 && fixedKeys[c.key])) {
+				// A plain key types or moves the cursor: it stays as it is.
+				return c, fmt.Errorf("%s needs Ctrl or Alt", c)
+			}
+			if c.mods&modAlt != 0 && c.key == "F4" {
+				return c, fmt.Errorf("Alt+F4 is left to the window manager")
+			}
+			return c, nil
+		}
+	}
+}
+
+// fixedKeys keep their own work without modifiers.
+var fixedKeys = map[string]bool{"Up": true, "Down": true, "Left": true, "Right": true, "Home": true, "End": true,
+	"PageUp": true, "PageDown": true, "Return": true, "Keypad Enter": true, "Tab": true, "Backspace": true,
+	"Delete": true, "Insert": true, "Escape": true}
+
+func fkeyName(k string) bool {
+	if len(k) < 2 || k[0] != 'F' {
+		return false
+	}
+	n, err := strconv.Atoi(k[1:])
+	return err == nil && n >= 1 && n <= 24
+}
+
+// Action is one thing a key can do.
+type Action struct {
+	id   string
+	keys string // the default keys, as the keys file writes them
+	help string // one line for the help; "" joins the action before it
+	run  func()
+}
+
+var (
+	actions    []*Action
+	actionByID = map[string]*Action{}
+	keysNow    map[string][]combo // each action's keys now
+	keymap     map[combo]string   // key -> action id
+)
+
+func init() {
+	actions = []*Action{
+		{"help", "", "Open this help", openHelp},
+		{"open", "Ctrl+O", "Open a file", openOpenRequester},
+		{"save", "Ctrl+S", "Save", func() { a.save(false) }},
+		{"save_as", "Ctrl+Shift+S", "Save as (another name or format)", func() { a.save(true) }},
+		{"new_page", "Ctrl+T, Ctrl+N", "New page (tab)", func() { a.addTab() }},
+		{"close_page", "Ctrl+W", "Close the page", func() { a.closeTab(a.Tab) }},
+		{"next_page", "Ctrl+Tab, Ctrl+PageDown", "Next page", func() { a.cycleTab(1) }},
+		{"previous_page", "Ctrl+Shift+Tab, Ctrl+PageUp", "Previous page", func() { a.cycleTab(-1) }},
+		{"layout", "Ctrl+L", "One page / side by side / top and bottom", func() {
+			a.setLayout(map[string]string{"one": "cols", "cols": "rows", "rows": "one"}[a.layout])
+		}},
+		{"quit", "Ctrl+Q", "Quit", requestQuit},
+
+		{"undo", "Ctrl+Z", "Undo", func() { a.doUndo() }},
+		{"redo", "Ctrl+Y, Ctrl+Shift+Z", "Redo", func() { a.doRedo() }},
+		{"select_all", "Ctrl+A", "Select all", func() { a.sel = &Sel{0, 0, a.doc.cols - 1, max(0, a.doc.usedRows()-1)} }},
+		{"copy", "Ctrl+C", "Copy the block", func() { a.copySel(false) }},
+		{"cut", "Ctrl+X", "Cut the block", func() { a.copySel(true) }},
+		{"paste", "Ctrl+V", "Paste (text from other programs too)", func() { a.paste() }},
+		{"mirror", "Alt+H", "Mirror the block left-right", func() { a.blockOp(flipH) }},
+		{"upside_down", "Alt+V", "Turn the block upside down", func() { a.blockOp(flipV) }},
+		{"turn", "Alt+R", "Turn the block a quarter clockwise", func() { a.blockOp(turnCW) }},
+		{"invert", "Alt+I", "Invert the block (reversed characters, or the two colours swapped)", func() { a.blockOp(invertBlock) }},
+
+		{"fg_previous", "Ctrl+Left", "Foreground colour -1", func() { a.stepFg(-1) }},
+		{"fg_next", "Ctrl+Right", "Foreground colour +1", func() { a.stepFg(1) }},
+		{"bg_previous", "Ctrl+Shift+Left", "Background colour -1", func() { a.stepBg(-1) }},
+		{"bg_next", "Ctrl+Shift+Right", "Background colour +1", func() { a.stepBg(1) }},
+		{"fkeys_next", "Ctrl+Up", "Next F-key set", func() { a.setFset(a.fset + 1) }},
+		{"fkeys_previous", "Ctrl+Down", "Previous F-key set", func() { a.setFset(a.fset - 1) }},
+
+		{"zoom_in", "Ctrl+=, Ctrl+Shift+=, Ctrl++, Ctrl+Keypad +", "Zoom in", func() { a.setZoom(a.zoom + 1) }},
+		{"zoom_out", "Ctrl+-, Ctrl+Keypad -", "Zoom out", func() { a.setZoom(a.zoom - 1) }},
+		{"fit_width", "Ctrl+0", "Zoom to fit the page's width", func() { a.fitZoom() }},
+		{"grid", "Ctrl+G", "Grid on / off", func() { a.grid = !a.grid; savePrefs() }},
+		{"reverse", "Ctrl+R", "Reverse characters on / off (PETSCII, Atari)", func() { a.rev = !a.rev }},
+		{"hide_gadgets", "Ctrl+H", "Hide all gadgets (only the art and the status line), again brings them back", func() {
+			a.bare = !a.bare
+			if a.bare {
+				a.msg("Gadgets hidden: " + keyName("hide_gadgets") + " brings them back")
+			}
+		}},
+	}
+	for _, ac := range actions {
+		actionByID[ac.id] = ac
+	}
+	setKeys(defaultKeys())
+}
+
+// defaultKeys gives every action its default keys.
+func defaultKeys() map[string][]combo {
+	m := map[string][]combo{}
+	for _, ac := range actions {
+		m[ac.id] = nil
+		for _, s := range strings.Split(ac.keys, ",") {
+			if strings.TrimSpace(s) == "" {
+				continue
+			}
+			c, err := parseCombo(s)
+			if err != nil {
+				panic("keys.go: " + ac.id + ": " + err.Error())
+			}
+			m[ac.id] = append(m[ac.id], c)
+		}
+	}
+	return m
+}
+
+// setKeys makes k the keys in use.
+func setKeys(k map[string][]combo) {
+	keysNow = k
+	keymap = map[combo]string{}
+	for _, ac := range actions { // in table order, so a key given twice goes to the first
+		for _, c := range k[ac.id] {
+			if _, taken := keymap[c]; !taken {
+				keymap[c] = ac.id
+			}
+		}
+	}
+}
+
+// keyName is how the help and messages name an action's first key.
+func keyName(id string) string {
+	if ks := keysNow[id]; len(ks) > 0 {
+		return ks[0].String()
+	}
+	return "(no key)"
+}
+
+// runKey does what the key is bound to; false when it is bound to nothing.
+func runKey(c combo) bool {
+	id, ok := keymap[c]
+	if !ok {
+		return false
+	}
+	actionByID[id].run()
+	return true
+}
+
+// applyKeyFile reads the keys file's lines over the defaults. A line gives an
+// action all its keys; a key it takes is taken away from any other action.
+// Lines that are not understood are skipped and named in problems.
+func applyKeyFile(text string) (map[string][]combo, []string) {
+	k := defaultKeys()
+	var problems []string
+	given := map[combo]string{}
+	for n, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		id, list, ok := strings.Cut(line, "=")
+		id = strings.ToLower(strings.TrimSpace(id))
+		if !ok {
+			problems = append(problems, fmt.Sprintf("line %d has no =", n+1))
+			continue
+		}
+		if actionByID[id] == nil {
+			problems = append(problems, fmt.Sprintf("line %d: no action called %q", n+1, id))
+			continue
+		}
+		var keys []combo
+		bad := false
+		for _, s := range strings.Split(list, ",") {
+			if strings.TrimSpace(s) == "" {
+				continue
+			}
+			c, err := parseCombo(s)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("line %d: %v", n+1, err))
+				bad = true
+				continue
+			}
+			keys = append(keys, c)
+		}
+		if bad && len(keys) == 0 {
+			continue // keep the defaults rather than leave the action without a key by mistake
+		}
+		for _, c := range keys {
+			if other, ok := given[c]; ok && other != id {
+				problems = append(problems, fmt.Sprintf("line %d: %s is also given to %s", n+1, c, other))
+			}
+			given[c] = id
+		}
+		k[id] = keys
+	}
+	// A key the file gives to an action is taken from the defaults of the others.
+	for id, keys := range k {
+		out := keys[:0:0]
+		for _, c := range keys {
+			if owner, ok := given[c]; !ok || owner == id {
+				out = append(out, c)
+			}
+		}
+		k[id] = out
+	}
+	return k, problems
+}
+
+func keysPath() string {
+	d, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(d, "charcoal", "keys")
+}
+
+// keyFileText is the keys file with every action at its default keys.
+func keyFileText() string {
+	var b strings.Builder
+	b.WriteString(`# CharEdit's keys. One action a line: action = key, key
+# Write keys like Ctrl+Z, Ctrl+Shift+Up, Alt+F, Ctrl+F1, Ctrl+Keypad +. Alt means the left Alt only (the
+# right one is AltGr, for typing characters). Nothing after = leaves the action without a key.
+# A line that is not understood is skipped and named in the status line. Delete this file to get the
+# defaults back (it is written again at the next start).
+# Fixed, not set here: typing, F1-F10 (the F-key set), the arrows, Home, End, PgUp, PgDn, Return, Tab,
+# Backspace, Delete, Insert and Esc. Alt+F4 is the window manager's.
+`)
+	last := ""
+	for _, ac := range actions {
+		if ac.help != "" {
+			last = ac.help
+			b.WriteString("\n# " + last + "\n")
+		}
+		fmt.Fprintf(&b, "%s = %s\n", ac.id, ac.keys)
+	}
+	return b.String()
+}
+
+// loadKeys reads the keys file, writing it with the defaults first if it is not there.
+func loadKeys() {
+	p := keysPath()
+	if p == "" {
+		return
+	}
+	b, err := os.ReadFile(p)
+	if os.IsNotExist(err) {
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		writeAtomic(p, []byte(keyFileText()))
+		return
+	}
+	if err != nil {
+		a.msg("The keys file could not be read: " + err.Error())
+		return
+	}
+	k, problems := applyKeyFile(string(b))
+	setKeys(k)
+	if len(problems) > 0 {
+		more := ""
+		if len(problems) > 1 {
+			more = fmt.Sprintf(" (and %d more)", len(problems)-1)
+		}
+		a.msg("Keys file " + p + ": " + problems[0] + more + "; skipped")
+	}
+}
+
+// keysHelp is the KEYS part of the help, made from the table so it is always right.
+func keysHelp() string {
+	var lines []string
+	for i := 0; i < len(actions); {
+		j := i + 1
+		for j < len(actions) && actions[j].help == "" {
+			j++
+		}
+		lines = append(lines, groupKeys(actions[i:j])+": "+actions[i].help)
+		i = j
+	}
+	return strings.Join(lines, "\n")
+}
+
+// groupKeys names the keys of a run of actions: "Ctrl+0-7" when they are one
+// key each in a row of digits or F-keys, else all of them.
+func groupKeys(g []*Action) string {
+	if len(g) > 1 {
+		var first combo
+		prefix, start, ok := "", 0, true
+		for i, ac := range g {
+			ks := keysNow[ac.id]
+			if len(ks) != 1 {
+				ok = false
+				break
+			}
+			c := ks[0]
+			p, num := c.key, -1
+			if n, err := strconv.Atoi(c.key); err == nil && len(c.key) == 1 {
+				p, num = "", n
+			} else if fkeyName(c.key) {
+				n, _ := strconv.Atoi(c.key[1:])
+				p, num = "F", n
+			}
+			if i == 0 {
+				first, prefix, start = c, p, num
+			}
+			if num < 0 || c.mods != first.mods || p != prefix || num != start+i {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			last := keysNow[g[len(g)-1].id][0]
+			return first.String() + "-" + last.key
+		}
+	}
+	var names []string
+	for _, ac := range g {
+		for _, c := range keysNow[ac.id] {
+			names = append(names, c.String())
+		}
+	}
+	if len(names) == 0 {
+		return "(no key)"
+	}
+	return strings.Join(names, ", ")
+}

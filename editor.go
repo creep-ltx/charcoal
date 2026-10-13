@@ -795,6 +795,18 @@ func (a *App) setBg(i int) {
 	}
 }
 
+// bgNow is the background the brush gives: its own, or a screen's colour.
+func (a *App) bgNow() int {
+	if a.screen() {
+		return a.doc.bg
+	}
+	return a.bg
+}
+
+// stepFg and stepBg step the foreground or background colour.
+func (a *App) stepFg(d int) { a.setFg((a.fgNow() + d + 16) % 16) }
+func (a *App) stepBg(d int) { a.setBg((a.bgNow() + d + 16) % 16) }
+
 func (a *App) setFset(n int) {
 	sets := a.fkeys[a.mode]
 	a.fset = (n%len(sets) + len(sets)) % len(sets)

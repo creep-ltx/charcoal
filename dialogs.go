@@ -590,7 +590,9 @@ type HelpReq struct{ top int }
 
 func openHelp() { a.dialog = &HelpReq{} }
 
-const helpText = `MOUSE
+// helpText is the help; its list of keys is made from the key table.
+func helpText() string {
+	return `MOUSE
 Draw: left paints the brush (character + colours), right erases, Shift+click draws a line from the last point.
 Colour: left sets the foreground, right the background (on a C64 page: the foreground only).
 Fill: left fills equal cells with the brush.
@@ -604,19 +606,11 @@ Wheel scrolls the page, Shift+wheel sideways, Ctrl+wheel zooms around the mouse.
 Tabs: click to show, x or middle click closes, + opens a new page. With two pages on show, click a page to work on it.
 
 KEYS
-The page has a height (H) as well as a width: it ends where the dark area starts, and every row is saved, empty rows at the bottom too. Enter or Down past the last row adds a row; H sets the height (fewer rows cuts, Ctrl+Z brings them back).
-Typing writes at the cursor in the brush colours (any tool). Arrows, Home, End, PgUp, PgDn, Enter, Tab, Backspace, Delete, Insert.
-F1-F10 type the F-key set, Ctrl+Up/Down change set.
-Ctrl+Left/Right foreground -/+, Ctrl+Shift+Left/Right background -/+.
-Ctrl+Z undo, Ctrl+Y redo, Ctrl+S save, Ctrl+Shift+S save as, Ctrl+O open, Ctrl+Q quit.
-Ctrl+T (or Ctrl+N) new page, Ctrl+W close page, Ctrl+Tab / Ctrl+PgDn next page, Ctrl+Shift+Tab / Ctrl+PgUp previous.
-Ctrl+L one page / side by side / top and bottom. "Sync" scrolls both together.
-Ctrl+A select all, Ctrl+C / X / V copy, cut, paste (text from other programs too), Del clears the block, Esc lets go.
-A selected block, or one being pasted, can be turned over with the buttons under the colours or the keys: Alt+H mirror (left-right), Alt+V upside down, Alt+R turn a quarter clockwise, Alt+I invert (reversed characters on PETSCII and Atari pages, the two colours swapped elsewhere). Characters become their mirrored or turned twins: / and \\, the box lines and corners, half blocks, arrows; on PETSCII pages Marq's PETSCII editor's tables. A selection that turns into another shape is lifted off the page to be put down. Copy a block, paste it, turn it, stamp it as often as you like.
-Ctrl+G grid. Ctrl+Plus / Ctrl+Minus zoom, Ctrl+0 fits the page's width. Ctrl+R reverse (PETSCII, Atari).
-Ctrl+H hides all gadgets (only the art and the status line), Ctrl+H again brings them back.
-Dropping files on the window opens them. Keys in the W and H fields stay in the field until Enter, Esc or Tab.
-
+The page has a height (H) as well as a width: it ends where the dark area starts, and every row is saved, empty rows at the bottom too. Enter or Down past the last row adds a row; H sets the height (fewer rows cuts, Undo brings them back).
+Typing writes at the cursor in the brush colours (any tool). Arrows, Home, End, PgUp, PgDn, Enter, Tab, Backspace, Delete (clears a selected block), Insert (insert / overwrite), Esc (lets go of a block). F1-F10 type the F-key set.
+Every key below can be changed in ~/.config/charcoal/keys (the file says how; delete it to get these back).
+` + keysHelp() + "\n" + `A selected block, or one being pasted, can be turned over with the buttons under the colours or the keys above: mirror (left-right), upside down, turn a quarter clockwise, invert (reversed characters on PETSCII and Atari pages, the two colours swapped elsewhere). Characters become their mirrored or turned twins: / and \, the box lines and corners, half blocks, arrows; on PETSCII pages Marq's PETSCII editor's tables. A selection that turns into another shape is lifted off the page to be put down. Copy a block, paste it, turn it, stamp it as often as you like.
+"Sync" scrolls two pages together. Dropping files on the window opens them. Keys in the W and H fields stay in the field until Enter, Esc or Tab.
 PAGE TYPES: AMIGA, PC, ATARI, ATARI ST, PETSCII, ZX SPECTRUM, TELETEXT
 Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. Atari pages are ATASCII, the Atari 8-bit computers' text screen: inverse characters (Rev), one background, one text colour for the whole screen (left click a colour) and a border (middle click); .ata files, with EOL line ends and ESC before control characters. Width 38 (the screen editor's margins) or 40 (terminals) is guessed from the file and can be switched; the page is never wider. The font is AltirraOS's, free to pass on. PETSCII pages are exactly as wide as the machine's screen (the Machine gadget sets it): PET 40 or 80 columns (one colour: green, amber or white screen), VIC-20 (22 x 23, 8 text colours), C64 (40 x 25), C128 (40 columns, or 80 on the VDC with its RGBI colours). Each has its two character sets (the Font gadget: upper case + graphics, or lower + upper case), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
 Atari ST pages are the ST's VT52 terminal in one of its resolutions (the Resolution gadget): low 40 x 25 in 16 colours, medium 80 x 25 in 4, high 80 x 25 in black and white with taller characters. Each cell has its own colour and background (ESC b, ESC c); files are the VT52 stream (.vt). The font is EmuTOS's, downloaded on first use.
@@ -633,11 +627,12 @@ The Commodore character sets are the machines' ROMs and do not come with the pro
 
 SETTINGS
 Kept in ~/.config/charcoal/prefs.json (a broken one is put aside as prefs.json.bad). Settings: the window size (1x to 4x for big screens) and the downloads, which run while you work on.`
+}
 
 func (d *HelpReq) draw(u *UI) {
 	fb := u.fb
 	in := u.window(centre(900, ui.fb.h*5/6), "CharEdit - keys and mouse")
-	lines := wrap(helpText, in.w/charW-3)
+	lines := wrap(helpText(), in.w/charW-3)
 	textR := Rect{in.x, in.y, in.w - 20, in.h - gadH - 10}
 	rows := textR.h / lineH
 	if w := u.takeWheel(textR); w != 0 {

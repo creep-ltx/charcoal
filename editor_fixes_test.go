@@ -7,10 +7,14 @@ import (
 )
 
 // testApp is an editor with one empty page of the given type, no window. Its
-// settings go to a folder of the test's own, never the user's prefs.json.
+// settings and autosaves go to folders of the test's own, never the user's
+// prefs.json or data folder; the keys are the defaults.
 func testApp(t *testing.T, mode string) *App {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
+	setKeys(defaultKeys())
+	prefs = Prefs{}
 	a = &App{tool: "draw", fg: 7, brush: 0x2F, charHover: -1, layout: "one", defZoom: 2,
 		defFont: map[string]string{}, defPalette: map[string]string{}, fkeys: defaultFkeys(), baud: 14400}
 	a.focusTab(a.newTab(mode))

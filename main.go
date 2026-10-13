@@ -54,6 +54,7 @@ func main() {
 	a.hasC64 = loadC64Fonts()
 	loadSTFonts()
 	loadPrefs()
+	loadKeys()
 	uiFont = fontByID("topaz2")
 	mode := prefs.Mode // the last page type, if it can be had without a download
 	switch {
@@ -398,93 +399,11 @@ func editorKey(k string, ctrl, shift, alt bool) {
 		viewerKey(k, ctrl, shift)
 		return
 	}
-	if ctrl {
-		switch k {
-		case "Z":
-			if shift {
-				a.doRedo()
-			} else {
-				a.doUndo()
-			}
-		case "Y":
-			a.doRedo()
-		case "H":
-			a.bare = !a.bare
-			if a.bare {
-				a.msg("Gadgets hidden: Ctrl+H brings them back")
-			}
-		case "S":
-			a.save(shift)
-		case "O":
-			openOpenRequester()
-		case "N", "T":
-			a.addTab()
-		case "W":
-			a.closeTab(a.Tab)
-		case "Tab":
-			if shift {
-				a.cycleTab(-1)
-			} else {
-				a.cycleTab(1)
-			}
-		case "PageDown":
-			a.cycleTab(1)
-		case "PageUp":
-			a.cycleTab(-1)
-		case "R":
-			a.rev = !a.rev
-		case "G":
-			a.grid = !a.grid
-			savePrefs()
-		case "L":
-			a.setLayout(map[string]string{"one": "cols", "cols": "rows", "rows": "one"}[a.layout])
-		case "0":
-			a.fitZoom()
-		case "Q":
-			requestQuit()
-		case "A":
-			a.sel = &Sel{0, 0, a.doc.cols - 1, max(0, a.doc.usedRows()-1)}
-		case "C":
-			a.copySel(false)
-		case "X":
-			a.copySel(true)
-		case "V":
-			a.paste()
-		case "Up":
-			a.setFset(a.fset + 1)
-		case "Down":
-			a.setFset(a.fset - 1)
-		case "Left":
-			if shift {
-				a.setBg((a.bg + 15) % 16)
-			} else {
-				a.setFg((a.fgNow() + 15) % 16)
-			}
-		case "Right":
-			if shift {
-				a.setBg((a.bg + 1) % 16)
-			} else {
-				a.setFg((a.fgNow() + 1) % 16)
-			}
-		case "=", "+", "Keypad +":
-			a.setZoom(a.zoom + 1)
-		case "-", "Keypad -":
-			a.setZoom(a.zoom - 1)
-		}
+	if runKey(combo{modsOf(ctrl, alt, shift), k}) {
 		return
 	}
-	if alt {
-		switch k {
-		case "H":
-			a.blockOp(flipH)
-		case "V":
-			a.blockOp(flipV)
-		case "R":
-			a.blockOp(turnCW)
-		case "I":
-			a.blockOp(invertBlock)
-		}
-		return
+	if ctrl || alt {
+		return // a shortcut bound to nothing
 	}
 	var fk int
 	if n, _ := fmt.Sscanf(k, "F%d", &fk); n == 1 && fk >= 1 && fk <= 10 {
