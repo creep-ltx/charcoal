@@ -141,7 +141,7 @@ func init() {
 	bg := func(i int) func() { return func() { a.colourKey(i, true) } }
 	set := func(i int) func() { return func() { a.pickFset(i) } }
 	actions = []*Action{
-		{"help", "", "Open this help", openHelp},
+		{"help", "F12", "Open this help", openHelp},
 		{"open", "Ctrl+O", "Open a file", openOpenRequester},
 		{"open_recent", "Ctrl+Shift+O", "Open the most recent file again (the Open requester lists the last 10)", func() { a.reopenRecent() }},
 		{"save", "Ctrl+S", "Save", func() { a.save(false) }},
