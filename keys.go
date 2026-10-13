@@ -174,10 +174,13 @@ func init() {
 		{"copy", "Ctrl+C", "Copy the block", func() { a.copySel(false) }},
 		{"cut", "Ctrl+X", "Cut the block", func() { a.copySel(true) }},
 		{"paste", "Ctrl+V", "Paste (text from other programs too)", func() { a.paste() }},
-		{"mirror", "Alt+H", "Mirror the block left-right", func() { a.blockOp(flipH) }},
-		{"upside_down", "Alt+V", "Turn the block upside down", func() { a.blockOp(flipV) }},
-		{"turn", "Alt+R", "Turn the block a quarter clockwise", func() { a.blockOp(turnCW) }},
+		{"mirror", "Alt+H", "Mirror the block left-right (nothing selected: the brush character)", func() { a.blockOp(flipH) }},
+		{"upside_down", "Alt+V", "Turn the block upside down (nothing selected: the brush character)", func() { a.blockOp(flipV) }},
+		{"turn", "Alt+R", "Turn the block a quarter clockwise (nothing selected: the brush character)", func() { a.blockOp(turnCW) }},
 		{"invert", "Alt+I", "Invert the block (reversed characters, or the two colours swapped)", func() { a.blockOp(invertBlock) }},
+
+		{"fill_block", "Alt+F", "Fill the selection with the brush (nothing selected: the Fill tool)", func() { a.fillSel() }},
+		{"crop", "Ctrl+K", "Crop the page to the selection (Amiga and PC pages)", func() { a.cropToSel() }},
 
 		{"fg_previous", "Ctrl+Up", "Foreground colour -1", func() { a.stepFg(-1) }},
 		{"fg_next", "Ctrl+Down", "Foreground colour +1", func() { a.stepFg(1) }},

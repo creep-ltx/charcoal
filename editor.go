@@ -136,6 +136,8 @@ type Tab struct {
 	sel                 *Sel
 	selecting           bool
 	float               *Block
+	floatDX, floatDY    int  // where in the floating block the mouse holds it
+	moving              bool // the floating block was lifted off the page by a drag (Select tool)
 	undo, redo          []Snap
 	gen, savedGen       int  // the page's generation now and when it was last read or saved
 	inRun               bool // typing goes on in one undo step
@@ -984,6 +986,7 @@ func (a *App) paste() {
 
 func (a *App) startPaste(b *Block) {
 	a.float = b
+	a.floatDX, a.floatDY, a.moving = 0, 0, false
 	a.sel = nil
 	if a.hover == nil {
 		a.hover = &Hover{x: a.cx, y: a.cy}
@@ -1855,6 +1858,16 @@ func (a *App) blockOp(op int) {
 		if a.tt() {
 			b.mosaic = a.ttMosaic(r)
 		}
+	case op != invertBlock && (!a.tt() || a.brush >= 0x20):
+		// Nothing selected: the brush character itself turns into its twin.
+		was := a.brush
+		a.brush = a.font().mapped(a.brush, op)
+		if a.brush == was {
+			a.msg(fmt.Sprintf("The brush (character %d) has no twin for that: select a block to flip or turn it", was))
+		} else {
+			a.msg(fmt.Sprintf("%s: the brush is character %d now", blockOpNames[op], a.brush))
+		}
+		return
 	default:
 		a.msg("Select a block (Select tool) or copy and paste one first, then flip, turn or invert it")
 		return

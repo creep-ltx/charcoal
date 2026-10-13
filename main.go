@@ -466,7 +466,9 @@ func editorKey(k string, ctrl, shift, alt bool) {
 	}
 	switch k {
 	case "Escape":
-		if a.float != nil {
+		if a.moving {
+			a.cancelMove()
+		} else if a.float != nil {
 			a.float = nil
 		} else {
 			a.sel = nil

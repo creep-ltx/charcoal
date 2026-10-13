@@ -713,7 +713,7 @@ func (a *App) drawPage(u *UI, id string) {
 	cell := func(x, y, w, h int) Rect { return Rect{ox + x*colPx, oy + y*rowPx, w * colPx, h * rowPx} }
 	if a.float != nil && a.hover != nil {
 		f := a.float
-		hx, hy := a.hover.x, a.hover.y
+		hx, hy := a.floatAt(a.hover.x, a.hover.y)
 		a.paintCells(fb, ox+hx*colPx, oy+hy*rowPx, z, func(x, y int) uint32 { return f.cells[y*f.w+x] }, f.w, f.h)
 		fb.dashed(cell(hx, hy, f.w, f.h), cOrange)
 	}
@@ -793,7 +793,8 @@ func (a *App) pagePress(c *Click) {
 	a.hover = &p
 	if a.float != nil {
 		if c.button == 1 {
-			a.stamp(p.x, p.y, c.shift)
+			x0, y0 := a.floatAt(p.x, p.y)
+			a.stamp(x0, y0, c.shift)
 		} else if c.button == 3 {
 			a.float = nil
 		}
@@ -809,6 +810,11 @@ func (a *App) pagePress(c *Click) {
 		a.cx, a.cy, a.sel = p.x, p.y, nil
 		a.moved()
 	case "select":
+		if a.sel != nil && c.button == 1 && !c.shift && a.selRect().has(p.x, p.y) {
+			a.liftSel(p.x, p.y) // a drag inside the selection moves it
+			a.msg("Moving the block: let go to put it down, Esc puts it back")
+			break
+		}
 		a.sel = &Sel{p.x, p.y, p.x, p.y}
 		a.selecting = true
 	case "fill":
@@ -899,6 +905,9 @@ func (a *App) pageMotion(mx, my int) {
 }
 
 func (a *App) pageRelease() {
+	if a.moving && a.float != nil {
+		a.dropMoved()
+	}
 	if a.selecting {
 		a.selecting = false
 		r := a.selRect()
