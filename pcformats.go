@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
-	"strings"
 )
 
 // ---------------------------------------------------------------- PCBoard
@@ -95,11 +94,18 @@ func writePCBoard(d *Doc, clear bool) []byte {
 				out = append(out, fmt.Sprintf("@X%02X", a)...)
 			}
 			c := byte(cellCh(v))
-			switch c { // PCBoard acts on these only
-			case 0, 0x0A, 0x0D, 0x1A:
+			switch c { // the bytes parsePCBoard acts on
+			case 0, 0x09, 0x0A, 0x0D, 0x1A:
 				c = ' '
 			}
 			out = append(out, c)
+			if c == '@' && x < last {
+				// "@X1F", "@CLS@" or "@POS:" in the art would be read as a code: a colour
+				// code (the same colour again) after the @ keeps them apart.
+				if n := byte(cellCh(d.get(x+1, y))); n == 'X' || n == 'x' || n == 'C' || n == 'P' {
+					attr = -1
+				}
+			}
 		}
 		if last < d.cols-1 {
 			out = append(out, "\r\n"...)
@@ -205,8 +211,12 @@ func writeAvatar(d *Doc, clear bool) []byte {
 		for x := 0; x <= last; {
 			v := d.get(x, y)
 			if a := int(cellAttr(v)); a != attr {
+				// ^V^A takes 7 bits (and turns blink off); blink / a bright background is ^V^B.
 				attr = a
-				out = append(out, 0x16, 0x01, byte(a))
+				out = append(out, 0x16, 0x01, byte(a&0x7F))
+				if a&0x80 != 0 {
+					out = append(out, 0x16, 0x02)
+				}
 			}
 			n := 1
 			for x+n <= last && d.get(x+n, y) == v && n < 255 {
@@ -239,14 +249,19 @@ func parseIDF(b []byte) (*Doc, XBinInfo, error) {
 	if !isIDF(b) {
 		return nil, info, fmt.Errorf("not an iCEDraw file")
 	}
+	b = b[:dataEnd(b)] // the font and palette end before a SAUCE record
+	if len(b) < 12+4096+48 {
+		return nil, info, fmt.Errorf("the iCEDraw file is cut short")
+	}
 	u16 := func(i int) int { return int(b[i]) | int(b[i+1])<<8 }
-	w := u16(8) + 1
+	w := u16(8) - u16(4) + 1 // x2 - x1 + 1
 	if w < 1 || w > 1000 {
 		return nil, info, fmt.Errorf("an iCEDraw file %d columns wide", w)
 	}
 	end := len(b) - 4096 - 48
+	limit := 2 * w * maxRowsFor(w) // bytes of cells on the largest page
 	var cells []byte
-	for i := 12; i+1 < end; {
+	for i := 12; i+1 < end && len(cells) < limit; {
 		if b[i] == 1 && b[i+1] == 0 && i+5 < end { // a run: count, then the cell
 			n := u16(i+2) & 255
 			for k := 0; k < n; k++ {
@@ -258,9 +273,10 @@ func parseIDF(b []byte) (*Doc, XBinInfo, error) {
 		cells = append(cells, b[i], b[i+1])
 		i += 2
 	}
-	d := newDoc(w, max(1, (len(cells)/2+w-1)/w))
-	for k := 0; k+1 < len(cells); k += 2 {
-		d.cells[k/2] = attrCell(cells[k], cells[k+1])
+	n := min(len(cells)/2, limit/2)
+	d := newDoc(w, max(1, (n+w-1)/w))
+	for k := 0; k < n; k++ {
+		d.cells[k] = attrCell(cells[2*k], cells[2*k+1])
 	}
 	info.font = &Font{id: "xbin", name: "The file's own font", kind: "pc", syncterm: -1, bits: append([]byte{}, b[end:end+4096]...)}
 	info.pal = sixBitPalette(b[end+4096 : end+4096+48])
@@ -287,6 +303,7 @@ var adfColours = [16]int{0, 1, 2, 3, 4, 5, 20, 7, 56, 57, 58, 59, 60, 61, 62, 63
 // parseADF reads an ArtWorx file: version, a 64-colour palette, a font, then 80-column cells.
 func parseADF(b []byte) (*Doc, XBinInfo, error) {
 	var info XBinInfo
+	b = b[:dataEnd(b)] // the cells end before a SAUCE record
 	if len(b) < 1+192+4096 {
 		return nil, info, fmt.Errorf("not an ArtWorx file")
 	}
@@ -298,9 +315,10 @@ func parseADF(b []byte) (*Doc, XBinInfo, error) {
 	info.font = &Font{id: "xbin", name: "The file's own font", kind: "pc", syncterm: -1, bits: append([]byte{}, b[193:193+4096]...)}
 	info.ice, info.cellH = true, 16
 	art := b[193+4096:]
-	d := newDoc(80, max(1, (len(art)/2+79)/80))
-	for k := 0; k+1 < len(art); k += 2 {
-		d.cells[k/2] = attrCell(art[k], art[k+1])
+	n := min(len(art)/2, 80*maxRowsFor(80))
+	d := newDoc(80, max(1, (n+79)/80))
+	for k := 0; k < n; k++ {
+		d.cells[k] = attrCell(art[2*k], art[2*k+1])
 	}
 	return d, info, nil
 }
@@ -316,6 +334,7 @@ func parseTundra(b []byte) (*Doc, XBinInfo, error) {
 	if !isTundra(b) {
 		return nil, info, fmt.Errorf("not a TundraDraw file")
 	}
+	b = b[:max(9, dataEnd(b))] // the drawing ends before a SAUCE record
 	type cell struct {
 		ch     byte
 		fg, bg uint32
@@ -324,7 +343,11 @@ func parseTundra(b []byte) (*Doc, XBinInfo, error) {
 	cols := 80
 	x, y, fg, bg := 0, 0, uint32(0xAAAAAA), uint32(0)
 	be32 := func(i int) uint32 { return uint32(b[i])<<24 | uint32(b[i+1])<<16 | uint32(b[i+2])<<8 | uint32(b[i+3]) }
+	maxRows := maxRowsFor(cols)
 	put := func(c byte) {
+		if y >= maxRows {
+			return // past the largest page
+		}
 		for len(cells) <= y*cols+x {
 			cells = append(cells, cell{' ', 0xAAAAAA, 0})
 		}
@@ -338,7 +361,7 @@ func parseTundra(b []byte) (*Doc, XBinInfo, error) {
 		case 1:
 			if i+8 < len(b) {
 				y, x = int(be32(i+1)), int(be32(i+5))
-				if y < 0 || y > 100000 || x < 0 || x >= cols {
+				if y < 0 || y >= maxRows || x < 0 || x >= cols {
 					y, x = 0, 0
 				}
 				i += 8
@@ -421,5 +444,3 @@ func parseOwn(kind string, b []byte) (*Doc, XBinInfo, error) {
 	}
 	return parseXBin(b)
 }
-
-var _ = strings.TrimSpace

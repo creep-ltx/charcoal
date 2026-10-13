@@ -73,8 +73,8 @@ func (d *Doc) get(x, y int) uint32 {
 }
 
 func (d *Doc) set(x, y int, v uint32) {
-	if x < 0 || y < 0 || x >= d.cols {
-		return
+	if x < 0 || y < 0 || x >= d.cols || y >= maxRowsFor(d.cols) {
+		return // past the largest page: ignored
 	}
 	if y >= d.rows {
 		d.ensureRows(y + 1)
@@ -82,22 +82,26 @@ func (d *Doc) set(x, y int, v uint32) {
 	d.cells[y*d.cols+x] = v
 }
 
+// ensureRows makes the page at least n rows tall (never more than maxRowsFor its
+// width), the new rows blank.
 func (d *Doc) ensureRows(n int) {
+	n = min(n, maxRowsFor(d.cols))
 	if n <= d.rows {
 		return
 	}
 	need := n * d.cols
 	if need > len(d.cells) {
-		grown := make([]uint32, max(need, len(d.cells)*2))
+		grown := make([]uint32, min(max(need, len(d.cells)*2), maxRowsFor(d.cols)*d.cols))
 		copy(grown, d.cells[:d.rows*d.cols])
-		fillCells(grown[d.rows*d.cols:], blank)
 		d.cells = grown
 	}
+	// Rows once cut off (fit, setRows) may still hold old cells: blank them.
+	fillCells(d.cells[d.rows*d.cols:need], blank)
 	d.rows = n
 }
 
 func (d *Doc) clone() *Doc {
-	c := &Doc{cols: d.cols, rows: d.rows, cells: make([]uint32, d.rows*d.cols), bg: d.bg, border: d.border, ink: d.ink, glyph0: d.glyph0}
+	c := &Doc{cols: d.cols, rows: d.rows, cells: make([]uint32, d.rows*d.cols), bg: d.bg, border: d.border, ink: d.ink, glyph0: d.glyph0, fullest: d.fullest}
 	copy(c.cells, d.cells[:d.rows*d.cols])
 	if d.rows == 0 {
 		c.cells = make([]uint32, d.cols)
@@ -236,15 +240,47 @@ type Sauce struct {
 	notes                      []string
 }
 
-func latin1(b []byte) string {
+// sauceText reads a SAUCE text field: CP437, padded with spaces or zeros.
+func sauceText(b []byte) string {
+	b = bytes.TrimRight(b, "\x00 ")
 	r := make([]rune, len(b))
 	for i, c := range b {
-		r[i] = rune(c)
+		if c < 0x80 {
+			r[i] = rune(c)
+		} else {
+			r[i] = cp437[c]
+		}
 	}
-	return strings.TrimRight(string(r), "\x00 ")
+	return string(r)
 }
 
-// readSauce returns the SAUCE record (or nil) and where the art ends.
+// sauceStart is where the SAUCE record (with its COMNT block, if any) begins, len(b) if there is none.
+func sauceStart(b []byte) int {
+	n := len(b)
+	if n < 128 || string(b[n-128:n-121]) != "SAUCE00" {
+		return n
+	}
+	o := n - 128
+	if k := int(b[o+104]); k > 0 {
+		if c := o - 5 - k*64; c >= 0 && string(b[c:c+5]) == "COMNT" {
+			return c
+		}
+	}
+	return o
+}
+
+// dataEnd is where the data of a binary file (a .bin, iCEDraw, ArtWorx, TundraDraw)
+// ends: before the SAUCE record and the one EOF byte in front of it. Zero bytes
+// before that are data (a font, a palette, black cells), so they stay.
+func dataEnd(b []byte) int {
+	end := sauceStart(b)
+	if end < len(b) && end > 0 && b[end-1] == 0x1A {
+		end--
+	}
+	return end
+}
+
+// readSauce returns the SAUCE record (or nil) and where the text art ends.
 func readSauce(b []byte) (*Sauce, int) {
 	end, n := len(b), len(b)
 	var s *Sauce
@@ -252,26 +288,22 @@ func readSauce(b []byte) (*Sauce, int) {
 		o := n - 128
 		u16 := func(i int) int { return int(b[o+i]) | int(b[o+i+1])<<8 }
 		s = &Sauce{
-			title: latin1(b[o+7 : o+42]), author: latin1(b[o+42 : o+62]), group: latin1(b[o+62 : o+82]),
-			date: latin1(b[o+82 : o+90]), fileSize: uint32(u16(90)) | uint32(u16(92))<<16,
+			title: sauceText(b[o+7 : o+42]), author: sauceText(b[o+42 : o+62]), group: sauceText(b[o+62 : o+82]),
+			date: sauceText(b[o+82 : o+90]), fileSize: uint32(u16(90)) | uint32(u16(92))<<16,
 			dataType: int(b[o+94]), fileType: int(b[o+95]), tinfo1: u16(96), tinfo2: u16(98),
-			comments: int(b[o+104]), flags: int(b[o+105]), font: latin1(b[o+106 : o+128]),
+			comments: int(b[o+104]), flags: int(b[o+105]), font: sauceText(b[o+106 : o+128]),
 		}
-		end = o
-		if s.comments > 0 {
-			c := o - 5 - s.comments*64
-			if c >= 0 && string(b[c:c+5]) == "COMNT" {
-				for i := 0; i < s.comments; i++ {
-					s.notes = append(s.notes, latin1(b[c+5+i*64:c+69+i*64]))
-				}
-				end = c
+		end = sauceStart(b)
+		if end < o {
+			for i := 0; i < s.comments; i++ {
+				s.notes = append(s.notes, sauceText(b[end+5+i*64:end+69+i*64]))
 			}
 		}
 	}
 	if s != nil {
-		// The record says where the art ends; the EOF byte before it is not art.
-		// (Some art draws with 0x1A, a right arrow in CP437.)
-		// Padding and EOF bytes (some programs write two) before the record.
+		// Text art ends before the record, the EOF byte in front of it and any zero
+		// padding; some programs write two EOF bytes, so all are dropped. (Binary
+		// files, where these bytes can be cells, use dataEnd instead.)
 		for end > 0 && (b[end-1] == 0 || b[end-1] == 0x1A) {
 			end--
 		}
@@ -292,24 +324,44 @@ type SauceInfo struct {
 	cols, rows           int
 	font                 string
 	fileType, flags      int
-	binaryText           bool // DataType 5 (a .bin): the width goes in FileType, in pairs of columns
+	binaryText           bool     // DataType 5 (a .bin): the width goes in FileType, in pairs of columns
+	notes                []string // comment lines, kept from the file (a COMNT block of 64 characters each)
 }
 
-// makeSauce gives the EOF byte and a 128-byte SAUCE record, to append after the art.
-func makeSauce(info SauceInfo, artSize int) []byte {
-	out := make([]byte, 129)
-	out[0] = 0x1A
-	b := out[1:]
-	put := func(i int, s string, n int, pad byte) {
-		rs := []rune(s)
-		for k := 0; k < n; k++ {
-			if k < len(rs) {
-				b[i+k] = byte(rs[k])
+// sauceBytes writes s into b as CP437, padded with pad.
+func sauceBytes(b []byte, s string, pad byte) {
+	rs := []rune(s)
+	for k := range b {
+		switch {
+		case k >= len(rs):
+			b[k] = pad
+		case rs[k] < 0x80:
+			b[k] = byte(rs[k])
+		default:
+			if c, ok := cp437Rev[rs[k]]; ok && c >= 0x80 {
+				b[k] = c
 			} else {
-				b[i+k] = pad
+				b[k] = '?'
 			}
 		}
 	}
+}
+
+// makeSauce gives the EOF byte, the comment lines (if any) and a 128-byte SAUCE
+// record, to append after the art.
+func makeSauce(info SauceInfo, artSize int) []byte {
+	notes := info.notes[:min(len(info.notes), 255)]
+	out := []byte{0x1A}
+	if len(notes) > 0 {
+		out = append(out, "COMNT"...)
+		for _, n := range notes {
+			line := make([]byte, 64)
+			sauceBytes(line, n, 32)
+			out = append(out, line...)
+		}
+	}
+	b := make([]byte, 128)
+	put := func(i int, s string, n int, pad byte) { sauceBytes(b[i:i+n], s, pad) }
 	put(0, "SAUCE00", 7, 32)
 	put(7, info.title, 35, 32)
 	put(42, info.author, 20, 32)
@@ -319,16 +371,22 @@ func makeSauce(info SauceInfo, artSize int) []byte {
 	u16(90, artSize&0xFFFF)
 	u16(92, artSize>>16)
 	if info.binaryText {
-		b[94], b[95] = 5, byte(info.cols/2) // DataType: BinaryText
+		// The width in pairs of columns: writeBin pads an odd width with one blank column.
+		// 0 (no width) if it does not fit in a byte; binSaveError refuses that first.
+		if w := (info.cols + 1) / 2; w <= 255 {
+			b[95] = byte(w)
+		}
+		b[94] = 5 // DataType: BinaryText
 	} else {
 		b[94] = 1 // DataType: Character
 		b[95] = byte(info.fileType)
 		u16(96, info.cols)
 		u16(98, info.rows)
 	}
+	b[104] = byte(len(notes))
 	b[105] = byte(info.flags)
 	put(106, info.font, 22, 0)
-	return out
+	return append(out, b...)
 }
 
 // ---------------------------------------------------------------- the parser
@@ -342,6 +400,7 @@ type Term struct {
 	state                                      int // 0 text, 1 ESC, 2 CSI, 3 ESC + one byte to skip
 	params, inter                              []byte
 	fontRequest                                int // a SyncTERM font number asked for by CSI 0;n SP D, -1 if none
+	screenH                                    int // the rows insert / delete line move; 0 means 25
 	beforeClear                                func()
 	fg, bg                                     int
 	bold, blink, ital, under, reverse, conceal bool
@@ -510,7 +569,9 @@ func (t *Term) csiByte(c byte) {
 		return
 	}
 	if c >= 0x20 && c <= 0x2F {
-		t.inter = append(t.inter, c)
+		if len(t.inter) < 8 {
+			t.inter = append(t.inter, c)
+		}
 		return
 	}
 	t.state = 0
@@ -521,7 +582,25 @@ func (t *Term) csiByte(c byte) {
 	}
 }
 
-const noParam = -1
+const (
+	noParam  = -1
+	maxParam = 9999 // CSI numbers are cut to this: no screen is larger, and huge ones cannot overflow
+)
+
+// csiParam reads one CSI number: digits only (cut to maxParam), noParam otherwise.
+func csiParam(s string) int {
+	if s == "" {
+		return noParam
+	}
+	v := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return noParam
+		}
+		v = min(maxParam, v*10+int(s[i]-'0'))
+	}
+	return v
+}
 
 func (t *Term) csi(f byte) {
 	raw := string(t.params)
@@ -531,11 +610,7 @@ func (t *Term) csi(f byte) {
 	}
 	var p []int
 	for _, s := range strings.Split(raw, ";") {
-		v, err := strconv.Atoi(s)
-		if err != nil {
-			v = noParam
-		}
-		p = append(p, v)
+		p = append(p, csiParam(s))
 	}
 	n := func(i, def int) int {
 		if i >= len(p) || p[i] == noParam || (p[i] == 0 && def == 1) {
@@ -595,8 +670,8 @@ func (t *Term) csi(f byte) {
 			d.set(x, t.y, t.blankCell())
 		}
 	case 'X':
-		for k := 0; k < n(0, 1); k++ {
-			d.set(t.x+k, t.y, t.blankCell())
+		for x := t.x; x < min(d.cols, t.x+n(0, 1)); x++ {
+			d.set(x, t.y, t.blankCell())
 		}
 	case '@':
 		t.shiftRow(n(0, 1))
@@ -685,8 +760,19 @@ func (t *Term) clearAll(b uint32) {
 	if t.beforeClear != nil {
 		t.beforeClear()
 	}
-	fillCells(t.doc.cells[:t.doc.rows*t.doc.cols], b)
+	t.doc.clearPage(b, t.screenH)
 	t.x, t.y = 0, 0
+}
+
+// clearPage blanks the page with v and makes it one screen (h rows, 25 if 0) tall
+// at most: the rows below are empty now, and a file that clears a long page again
+// and again would otherwise blank all of it every time.
+func (d *Doc) clearPage(v uint32, h int) {
+	if h <= 0 {
+		h = 25
+	}
+	fillCells(d.cells[:d.rows*d.cols], v)
+	d.rows = min(d.rows, h)
 }
 
 func (t *Term) shiftRow(n int) {
@@ -705,18 +791,35 @@ func (t *Term) shiftRow(n int) {
 	}
 }
 
+// shiftRows inserts (n > 0) or deletes (n < 0) lines at the cursor's row, the way a
+// terminal does on its screen: only the screenH rows from the cursor down move, and
+// what is pushed past them is lost. (The page itself is endless, so moving all of it
+// would make every insert as slow as the page is long.)
 func (t *Term) shiftRows(n int) {
 	d, c, top := t.doc, t.doc.cols, t.y
+	h := t.screenH
+	if h <= 0 {
+		h = 25
+	}
+	n = max(-h, min(h, n))
+	if n == 0 {
+		return
+	}
 	d.ensureRows(top + 1)
-	rows := d.rows
+	if top >= d.rows {
+		return // past the largest page
+	}
+	end := min(d.rows, top+h) // the rows that move: [top, end)
 	if n > 0 {
-		d.ensureRows(rows + n)
-		copy(d.cells[(top+n)*c:], d.cells[top*c:rows*c])
-		fillCells(d.cells[top*c:(top+n)*c], blank)
+		d.ensureRows(min(top+h, d.rows+n)) // a short page grows rather than lose its last rows
+		end = min(top+h, d.rows)
+		k := min(n, end-top)
+		copy(d.cells[(top+k)*c:end*c], d.cells[top*c:(end-k)*c])
+		fillCells(d.cells[top*c:(top+k)*c], blank)
 	} else {
-		k := min(-n, rows-top)
-		copy(d.cells[top*c:], d.cells[(top+k)*c:rows*c])
-		fillCells(d.cells[(rows-k)*c:rows*c], blank)
+		k := min(-n, end-top)
+		copy(d.cells[top*c:(end-k)*c], d.cells[(top+k)*c:end*c])
+		fillCells(d.cells[(end-k)*c:end*c], blank)
 	}
 }
 
@@ -867,48 +970,49 @@ type ParseOpts struct {
 func parseArt(b []byte, o ParseOpts) (*Doc, *Sauce, int) {
 	sauce, end := readSauce(b)
 	cols, binary := 80, o.binary
+	if sauce != nil && sauce.dataType == 5 && sauce.fileType > 0 {
+		binary = true
+	}
+	art := b[:end]
+	if binary {
+		// A .bin's 0x00 and 0x1A bytes are cells: only the record and its EOF byte are cut,
+		// and FileSize is used only where it points inside the data.
+		n := dataEnd(b)
+		if sauce != nil && sauce.fileSize > 0 && int64(sauce.fileSize) < int64(n) {
+			n = int(sauce.fileSize)
+		}
+		art = b[:n]
+	}
 	if sauce != nil && sauce.dataType == 1 && sauce.tinfo1 >= 8 && sauce.tinfo1 <= 1000 {
 		cols = sauce.tinfo1
 	}
 	if sauce != nil && sauce.dataType == 5 && sauce.fileType > 0 {
-		binary, cols = true, sauce.fileType*2
+		cols = sauce.fileType * 2
 	} else if binary && (sauce == nil || sauce.dataType != 1) {
-		cols = binWidth(b[:end]) // a .bin without its width
+		cols = binWidth(art) // a .bin without its width
 	}
 	if o.forceCols > 0 {
-		cols = o.forceCols
+		cols = min(o.forceCols, 1000)
 	}
-	art := b[:end]
-	if binary {
-		n := len(b)
-		if sauce != nil {
-			n = end
-			if sauce.fileSize > 0 && int(sauce.fileSize) <= len(b) {
-				n = int(sauce.fileSize)
-			}
+	fontRequest := -1
+	if binary { // PC .BIN: a byte and an attribute byte per cell, as many rows as the cells fill
+		cells := min(len(art)/2, cols*maxRowsFor(cols))
+		d := newDoc(cols, max(1, (cells+cols-1)/cols))
+		for i := 0; i < cells; i++ {
+			d.cells[i] = attrCell(art[i*2], art[i*2+1])
 		}
-		art = b[:n]
+		return d, sauce, fontRequest
 	}
 	d := newDoc(cols, 25)
-	fontRequest := -1
-	if binary { // PC .BIN: a byte and an attribute byte per cell
-		cells := len(art) / 2
-		d.ensureRows((cells + cols - 1) / cols)
-		for i := 0; i < cells; i++ {
-			a := int(art[i*2+1])
-			d.cells[i] = attrCell(art[i*2], byte(a))
-		}
+	t := newTerm(d, o.amiga)
+	var f fullest
+	t.beforeClear = func() { f.look(t.doc) }
+	writeWatching(t, art, &f)
+	fontRequest = t.fontRequest
+	if d = f.pick(t.doc); d == t.doc {
+		d.fit(cursorRows(t.x, t.y))
 	} else {
-		t := newTerm(d, o.amiga)
-		var f fullest
-		t.beforeClear = func() { f.look(t.doc) }
-		writeWatching(t, art, &f)
-		fontRequest = t.fontRequest
-		if d = f.pick(t.doc); d == t.doc {
-			d.fit(cursorRows(t.x, t.y))
-		} else {
-			d.fit(0)
-		}
+		d.fit(0)
 	}
 	return d, sauce, fontRequest
 }
@@ -1005,16 +1109,26 @@ func writeAnsi(d *Doc, amiga, colours, clear bool, keep1A ...bool) []byte {
 	return out
 }
 
-// writeBin gives a PC .BIN: two bytes per cell, every row in full.
+// writeBin gives a PC .BIN: two bytes per cell, every row in full. A .bin's width
+// is stored in pairs of columns, so an odd width gets one blank column more.
 func writeBin(d *Doc) []byte {
-	rows := max(d.rows, 1)
-	out := make([]byte, rows*d.cols*2)
-	for i := 0; i < rows*d.cols; i++ {
-		v := d.get(i%d.cols, i/d.cols)
+	rows, w := max(d.rows, 1), d.cols+d.cols%2
+	out := make([]byte, rows*w*2)
+	for i := 0; i < rows*w; i++ {
+		v := d.get(i%w, i/w)
 		out[i*2] = byte(cellCh(v))
 		out[i*2+1] = cellAttr(v)
 	}
 	return out
+}
+
+// binSaveError says why a page cannot be saved as a .bin (nil if it can): SAUCE
+// stores a .bin's width in one byte of column pairs, so 510 columns at most.
+func binSaveError(d *Doc) error {
+	if d.cols > 510 {
+		return fmt.Errorf("a .bin can be at most 510 columns wide (this page is %d): save as XBin instead", d.cols)
+	}
+	return nil
 }
 
 // byteRune is the character a byte shows on the page.

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // run6502 runs the few instructions writePrg uses until the program jumps to
 // itself (the screen is up), and returns the memory.
@@ -127,5 +130,40 @@ func TestXBin(t *testing.T) {
 	c, _, err := parseXBin(b)
 	if err != nil || c.get(1, 0) != makeCell('A', 7, 0, 0) || c.get(3, 0) != makeCell('B', 2, 0, 0) {
 		t.Fatalf("compressed: %v %x %x", err, c.get(1, 0), c.get(3, 0))
+	}
+}
+
+// Hostile sizes in XBin (audit #24) and Petmate (audit #6) headers.
+func TestHostileSizes(t *testing.T) {
+	// 1000 columns and 65535 rows claimed, no data: a one-row page, not 250 MB.
+	d, _, err := parseXBin([]byte("XBIN\x1a\xe8\x03\xff\xff\x10\x04"))
+	if err != nil || d.rows != 1 {
+		t.Fatalf("xbin: %v", err)
+	}
+	for _, js := range []string{
+		`{"framebufs":[{"width":4294967296,"height":4294967296}]}`,
+		`{"framebufs":[{"width":-5,"height":100000000}]}`,
+		`{"framebufs":[` + strings.Repeat(`{"width":1000,"height":10000},`, 50) + `{"width":1,"height":1}]}`,
+	} {
+		s, err := parsePetmate([]byte(js))
+		if err != nil {
+			t.Fatal(err)
+		}
+		total := 0
+		for _, p := range s {
+			total += p.doc.cols * p.doc.rows
+		}
+		if total > maxPageCells {
+			t.Fatalf("petmate: %d cells", total)
+		}
+	}
+	// A page taller than XBin can store is cut at its 16-bit height; a bad cell height is 16.
+	big := newDoc(1, maxXBinRows+10)
+	if xbinSaveError(big) == nil || xbinSaveError(newDoc(80, 25)) != nil {
+		t.Fatal("xbinSaveError")
+	}
+	out := writeXBin(big, [16]uint32{}, fonts[0], 0, false)
+	if back, _, err := parseXBin(out); err != nil || back.rows != maxXBinRows {
+		t.Fatalf("xbin height: %v", err)
 	}
 }

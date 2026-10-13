@@ -92,7 +92,12 @@ func writeMarq(d *Doc, lower bool) []byte {
 	return []byte(b.String())
 }
 
-var marqNumbers = regexp.MustCompile(`\d+`)
+var (
+	marqNumbers  = regexp.MustCompile(`\d+`)
+	marqMeta     = regexp.MustCompile(`// META:\s*(\d+) (\d+) .* (upper|lower)`)
+	marqArrays   = regexp.MustCompile(`(?s)\{(.*?)\}`)
+	marqComments = regexp.MustCompile(`//[^\n]*`)
+)
 
 func isMarq(b []byte) bool {
 	return bytes.Contains(b[:min(len(b), 400)], []byte("unsigned char")) && bytes.Contains(b, []byte("{"))
@@ -102,15 +107,15 @@ func isMarq(b []byte) bool {
 func parseMarq(b []byte) ([]PetScreen, error) {
 	s := string(b)
 	lower, w, h := -1, 40, 25
-	if m := regexp.MustCompile(`// META:\s*(\d+) (\d+) .* (upper|lower)`).FindStringSubmatch(s); m != nil {
+	if m := marqMeta.FindStringSubmatch(s); m != nil {
 		w, _ = strconv.Atoi(m[1])
 		h, _ = strconv.Atoi(m[2])
 		lower = map[string]int{"upper": 0, "lower": 1}[m[3]]
 		w, h = max(1, min(w, 1000)), max(1, min(h, 10000))
 	}
 	var out []PetScreen
-	for _, m := range regexp.MustCompile(`(?s)\{(.*?)\}`).FindAllStringSubmatch(s, -1) {
-		body := regexp.MustCompile(`//[^\n]*`).ReplaceAllString(m[1], "")
+	for _, m := range marqArrays.FindAllStringSubmatch(s, -1) {
+		body := marqComments.ReplaceAllString(m[1], "")
 		var nums []int
 		for _, n := range marqNumbers.FindAllString(body, -1) {
 			v, _ := strconv.Atoi(n)
@@ -134,9 +139,24 @@ func parseMarq(b []byte) ([]PetScreen, error) {
 
 // ---------------------------------------------------------------- XBin
 
+// maxXBinRows: an XBin stores its height in 16 bits.
+const maxXBinRows = 65535
+
+// xbinSaveError says why a page cannot be saved as an XBin (nil if it can).
+func xbinSaveError(d *Doc) error {
+	if d.rows > maxXBinRows || d.cols > 65535 {
+		return fmt.Errorf("an XBin can be at most %d rows tall (this page is %d)", maxXBinRows, d.rows)
+	}
+	return nil
+}
+
 // writeXBin gives an XBin with the palette and the font in it, so it looks the same anywhere.
+// A page taller than an XBin can be (see xbinSaveError) is cut at maxXBinRows.
 func writeXBin(d *Doc, pal [16]uint32, f *Font, cellH int, ice bool) []byte {
-	rows := max(d.rows, 1)
+	rows := max(1, min(d.rows, maxXBinRows))
+	if cellH != 8 {
+		cellH = 16 // the fonts are kept as 8x16: 8 rows (every other one) or 16
+	}
 	out := []byte{'X', 'B', 'I', 'N', 0x1A, byte(d.cols), byte(d.cols >> 8), byte(rows), byte(rows >> 8), byte(cellH)}
 	flags := byte(1 | 2) // palette, font
 	if ice {
@@ -149,7 +169,11 @@ func writeXBin(d *Doc, pal [16]uint32, f *Font, cellH int, ice bool) []byte {
 	skip := 16 / cellH
 	for c := 0; c < 256; c++ {
 		for r := 0; r < cellH; r++ {
-			out = append(out, f.bits[c*16+r*skip])
+			if i := c*16 + r*skip; f != nil && i < len(f.bits) {
+				out = append(out, f.bits[i])
+			} else {
+				out = append(out, 0)
+			}
 		}
 	}
 	for y := 0; y < rows; y++ {
@@ -222,11 +246,16 @@ func parseXBin(b []byte) (*Doc, XBinInfo, error) {
 		p += n * fh
 	}
 	info.ice = flags&8 != 0
-	cells := make([]byte, 0, w*h*2)
+	// The header's height is not trusted for memory: the cells are what the data holds,
+	// up to that height and the largest page.
+	h = min(h, maxRowsFor(w))
+	want := w * h * 2
+	var cells []byte
 	if flags&4 == 0 {
-		cells = append(cells, b[p:min(len(b), p+w*h*2)]...)
+		cells = b[min(p, len(b)):min(len(b), p+want)]
 	} else {
-		for p < len(b) && len(cells) < w*h*2 {
+		cells = make([]byte, 0, min(want, 64*2*(len(b)-p)+2))
+		for p < len(b) && len(cells) < want {
 			k, n := b[p]>>6, int(b[p]&63)+1
 			p++
 			switch k {
@@ -261,9 +290,10 @@ func parseXBin(b []byte) (*Doc, XBinInfo, error) {
 			}
 		}
 	}
-	d := newDoc(w, max(h, 1))
-	for i := 0; i+1 < len(cells) && i/2 < w*h; i += 2 {
-		d.cells[i/2] = attrCell(cells[i], cells[i+1])
+	n := min(len(cells), want) / 2
+	d := newDoc(w, max(1, (n+w-1)/w))
+	for i := 0; i < n; i++ {
+		d.cells[i] = attrCell(cells[2*i], cells[2*i+1])
 	}
 	return d, info, nil
 }
@@ -379,8 +409,13 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 		return nil, fmt.Errorf("not a Petmate file: %v", err)
 	}
 	var out []PetScreen
+	total := 0 // cells in all screens, kept under one largest page
 	for _, s := range f.Framebufs {
-		w, h := max(1, s.Width), max(1, s.Height)
+		w := max(1, min(s.Width, 1000))
+		h := max(1, min(s.Height, 10000)) // like parseMarq
+		if total += w * h; total > maxPageCells {
+			break
+		}
 		d := newDoc(w, h)
 		d.bg, d.border = s.BackgroundColor&15, s.BorderColor&15
 		for y, row := range s.Framebuf {
