@@ -394,26 +394,10 @@ func keyDown(e *sdl.KeyboardEvent) {
 	editorKey(k, ctrl, shift, mod&sdl.KMOD_LALT != 0)
 }
 
-func editorKey(k string, ctrl, shift, alt bool) {
-	if viewer != nil {
-		viewerKey(k, ctrl, shift)
-		return
-	}
-	if runKey(combo{modsOf(ctrl, alt, shift), k}) {
-		return
-	}
-	if ctrl || alt {
-		return // a shortcut bound to nothing
-	}
-	var fk int
-	if n, _ := fmt.Sscanf(k, "F%d", &fk); n == 1 && fk >= 1 && fk <= 10 {
-		if sets := a.fkeys[a.mode]; a.fset < len(sets) && fk <= len(sets[a.fset]) {
-			a.typeByte(sets[a.fset][fk-1])
-		}
-		return
-	}
+// cursorKey moves the cursor for an arrow, Home, End, PgUp, PgDn, Return or
+// Tab; false for any other key. The caller calls moved.
+func (a *App) cursorKey(k string) bool {
 	visRows := max(1, a.page.h/(a.cellH()*a.zoom))
-	nav := true
 	switch k {
 	case "Left":
 		a.cx--
@@ -436,9 +420,47 @@ func editorKey(k string, ctrl, shift, alt bool) {
 	case "Tab":
 		a.cx = min(a.doc.cols-1, (a.cx&^7)+8)
 	default:
-		nav = false
+		return false
 	}
-	if nav {
+	return true
+}
+
+// selectKey moves the cursor and grows the selection with it, starting one at
+// the cursor when there is none (any tool).
+func (a *App) selectKey(k string) {
+	if a.float != nil {
+		a.msg("Put the block down first (click), or Esc")
+		return
+	}
+	if a.sel == nil || a.sel.x1 != a.cx || a.sel.y1 != a.cy {
+		a.sel = &Sel{a.cx, a.cy, a.cx, a.cy}
+	}
+	a.cursorKey(k)
+	a.moved()
+	a.sel.x1, a.sel.y1 = a.cx, a.cy
+	r := a.selRect()
+	a.msg(fmt.Sprintf("%dx%d selected", r.w, r.h))
+}
+
+func editorKey(k string, ctrl, shift, alt bool) {
+	if viewer != nil {
+		viewerKey(k, ctrl, shift)
+		return
+	}
+	if runKey(combo{modsOf(ctrl, alt, shift), k}) {
+		return
+	}
+	if ctrl || alt {
+		return // a shortcut bound to nothing
+	}
+	var fk int
+	if n, _ := fmt.Sscanf(k, "F%d", &fk); n == 1 && fk >= 1 && fk <= 10 {
+		if sets := a.fkeys[a.mode]; a.fset < len(sets) && fk <= len(sets[a.fset]) {
+			a.typeByte(sets[a.fset][fk-1])
+		}
+		return
+	}
+	if a.cursorKey(k) {
 		a.moved()
 		return
 	}
