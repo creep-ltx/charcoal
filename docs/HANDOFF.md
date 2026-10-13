@@ -79,6 +79,10 @@ Plan agreed in chat (2026-10-13), nothing built yet:
 - Unsigned programs warn (Gatekeeper / SmartScreen): tell the user.
 - Needs a GitHub (or NAS) remote first: ask the user where the repository should live.
 
+## Roadmap
+
+The goal and the plan: docs/roadmap.md (the go-to editor for text artists on every platform).
+
 ## Where the knowledge is
 
 - ~/Projects/Knowledge/amiga/ansi-art-real-world-traps.md: sources, robots rules, all the format traps
