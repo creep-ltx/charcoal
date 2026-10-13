@@ -31,6 +31,10 @@ func TestSeq(t *testing.T) {
 			}
 		}
 	}
+	// A menu in mixed case with no set code: the lower case set.
+	if _, lower := parseSeq([]byte("\xcdAIN MENU\x0d\xc6ILES \xc7AMES \xcdESSAGES"), 40); lower != 1 {
+		t.Fatal("mixed case menu")
+	}
 	// Typing.
 	if petFromRune('a', false) != 1 || petFromRune('A', true) != 0x41 || petFromRune('£', false) != 0x1C {
 		t.Fatal("typing")

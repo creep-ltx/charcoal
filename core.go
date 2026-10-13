@@ -34,9 +34,11 @@ var blank = makeCell(32, 7, 0, 0)
 type Doc struct {
 	cols, rows int
 	cells      []uint32
-	bg         int // the screen colour of a C64 page
-	border     int // its border colour, -1 for the same as bg
-	ink        int // the one text colour of an Atari page
+	bg         int  // the screen colour of a C64 page
+	border     int  // its border colour, -1 for the same as bg
+	ink        int  // the one text colour of an Atari page
+	glyph0     bool // character 0 is a glyph (C64 "@", Atari heart), not an empty cell
+	fullest    bool // an animation whose fullest picture is shown, not its last
 }
 
 func newDoc(cols, rows int) *Doc {
@@ -83,7 +85,7 @@ func (d *Doc) ensureRows(n int) {
 }
 
 func (d *Doc) clone() *Doc {
-	c := &Doc{cols: d.cols, rows: d.rows, cells: make([]uint32, d.rows*d.cols), bg: d.bg, border: d.border, ink: d.ink}
+	c := &Doc{cols: d.cols, rows: d.rows, cells: make([]uint32, d.rows*d.cols), bg: d.bg, border: d.border, ink: d.ink, glyph0: d.glyph0}
 	copy(c.cells, d.cells[:d.rows*d.cols])
 	if d.rows == 0 {
 		c.cells = make([]uint32, d.cols)
@@ -97,10 +99,50 @@ func isBlank(v uint32) bool {
 	return (ch == 32 || ch == 0) && cellBg(v) == 0 && v&underline == 0
 }
 
+// blankAt: is v an empty cell on this page? (On C64 and Atari pages character 0 is drawn.)
+func (d *Doc) blankAt(v uint32) bool {
+	if d.glyph0 && v&255 == 0 {
+		return false
+	}
+	return isBlank(v)
+}
+
+// inkCells counts the cells that are not empty.
+func (d *Doc) inkCells() int {
+	n := 0
+	for _, v := range d.cells[:d.rows*d.cols] {
+		if !d.blankAt(v) {
+			n++
+		}
+	}
+	return n
+}
+
+// fullest keeps the fullest picture an animation shows, for when it ends nearly empty.
+type fullest struct {
+	best *Doc
+	n    int
+}
+
+func (f *fullest) look(d *Doc) {
+	if n := d.inkCells(); n > f.n {
+		f.best, f.n = d.clone(), n
+	}
+}
+
+// pick gives the fullest picture if the last one has less than half its ink.
+func (f *fullest) pick(d *Doc) *Doc {
+	if f.best != nil && d.inkCells()*2 < f.n {
+		f.best.fullest = true
+		return f.best
+	}
+	return d
+}
+
 // lastCol is the last non-blank column of a row, -1 if the row is empty.
 func (d *Doc) lastCol(y int) int {
 	for x := d.cols - 1; x >= 0; x-- {
-		if !isBlank(d.get(x, y)) {
+		if !d.blankAt(d.get(x, y)) {
 			return x
 		}
 	}
@@ -128,7 +170,7 @@ func (d *Doc) trim(minRows int) {
 
 func (d *Doc) withCols(cols int) *Doc {
 	n := newDoc(cols, d.rows)
-	n.bg, n.border, n.ink = d.bg, d.border, d.ink
+	n.bg, n.border, n.ink, n.glyph0 = d.bg, d.border, d.ink, d.glyph0
 	w := min(cols, d.cols)
 	for y := 0; y < d.rows; y++ {
 		copy(n.cells[y*cols:y*cols+w], d.cells[y*d.cols:y*d.cols+w])
@@ -195,11 +237,20 @@ func readSauce(b []byte) (*Sauce, int) {
 			}
 		}
 	}
-	// The art ends at the first EOF (Ctrl+Z) byte.
-	for i := 0; i < end; i++ {
-		if b[i] == 0x1A {
-			end = i
-			break
+	if s != nil {
+		// The record says where the art ends; the EOF byte before it is not art.
+		// (Some art draws with 0x1A, a right arrow in CP437.)
+		// Padding and EOF bytes (some programs write two) before the record.
+		for end > 0 && (b[end-1] == 0 || b[end-1] == 0x1A) {
+			end--
+		}
+	} else {
+		// Without a record the art ends at the first EOF (Ctrl+Z) byte.
+		for i := 0; i < end; i++ {
+			if b[i] == 0x1A {
+				end = i
+				break
+			}
 		}
 	}
 	return s, end
@@ -210,6 +261,7 @@ type SauceInfo struct {
 	cols, rows           int
 	font                 string
 	fileType, flags      int
+	binaryText           bool // DataType 5 (a .bin): the width goes in FileType, in pairs of columns
 }
 
 // makeSauce gives the EOF byte and a 128-byte SAUCE record, to append after the art.
@@ -235,10 +287,14 @@ func makeSauce(info SauceInfo, artSize int) []byte {
 	u16 := func(i, v int) { b[i] = byte(v); b[i+1] = byte(v >> 8) }
 	u16(90, artSize&0xFFFF)
 	u16(92, artSize>>16)
-	b[94] = 1 // DataType: Character
-	b[95] = byte(info.fileType)
-	u16(96, info.cols)
-	u16(98, info.rows)
+	if info.binaryText {
+		b[94], b[95] = 5, byte(info.cols/2) // DataType: BinaryText
+	} else {
+		b[94] = 1 // DataType: Character
+		b[95] = byte(info.fileType)
+		u16(96, info.cols)
+		u16(98, info.rows)
+	}
 	b[105] = byte(info.flags)
 	put(106, info.font, 22, 0)
 	return out
@@ -255,6 +311,7 @@ type Term struct {
 	state                                      int // 0 text, 1 ESC, 2 CSI, 3 ESC + one byte to skip
 	params, inter                              []byte
 	fontRequest                                int // a SyncTERM font number asked for by CSI 0;n SP D, -1 if none
+	beforeClear                                func()
 	fg, bg                                     int
 	bold, blink, ital, under, reverse, conceal bool
 }
@@ -594,6 +651,9 @@ func (t *Term) fill(start, to int) {
 }
 
 func (t *Term) clearAll(b uint32) {
+	if t.beforeClear != nil {
+		t.beforeClear()
+	}
 	fillCells(t.doc.cells[:t.doc.rows*t.doc.cols], b)
 	t.x, t.y = 0, 0
 }
@@ -643,6 +703,11 @@ func guessAmiga(b []byte) bool {
 			am++
 		case c == 0x9B && i+1 < len(b) && strings.IndexByte("0123456789;mHJK", b[i+1]) >= 0:
 			am += 20
+		case c >= 0x80 && c < 0xA0 && c != 0x9B:
+			// CP437 letters (ä 0x84, å 0x86, ö 0x94 ...): control codes on an Amiga, never drawn there
+			pc += 3
+		case c == 0xFD: // ², common in PC ASCII art
+			pc++
 		case c == 0x0A:
 			lf++
 			if i > 0 && b[i-1] == 0x0D {
@@ -742,6 +807,8 @@ func parseArt(b []byte, o ParseOpts) (*Doc, *Sauce, int) {
 	}
 	if sauce != nil && sauce.dataType == 5 && sauce.fileType > 0 {
 		binary, cols = true, sauce.fileType*2
+	} else if binary && (sauce == nil || sauce.dataType != 1) {
+		cols = 160 // a .bin without its width: 160, as the scene's viewers take it
 	}
 	if o.forceCols > 0 {
 		cols = o.forceCols
@@ -768,8 +835,11 @@ func parseArt(b []byte, o ParseOpts) (*Doc, *Sauce, int) {
 		}
 	} else {
 		t := newTerm(d, o.amiga)
-		t.write(art)
+		var f fullest
+		t.beforeClear = func() { f.look(t.doc) }
+		writeWatching(t, art, &f)
 		fontRequest = t.fontRequest
+		d = f.pick(t.doc)
 	}
 	d.trim(1)
 	return d, sauce, fontRequest
@@ -785,7 +855,11 @@ type attrs struct {
 // writeAnsi gives the art as ANSI bytes: SGR codes only where the colours
 // change, blank cells at the end of a row dropped. A row that fills the width
 // gets no line end (the terminal wraps there by itself).
-func writeAnsi(d *Doc, amiga, colours, clear bool) []byte {
+//
+// With keep1A, a 0x1A character is written as itself: a SAUCE record will mark
+// where the art ends, so it cannot be taken for the end of the file.
+func writeAnsi(d *Doc, amiga, colours, clear bool, keep1A ...bool) []byte {
+	raw1A := len(keep1A) > 0 && keep1A[0]
 	var out []byte
 	nl := "\r\n"
 	if amiga {
@@ -841,8 +915,12 @@ func writeAnsi(d *Doc, amiga, colours, clear bool) []byte {
 			ch := byte(cellCh(v))
 			// Bytes a terminal would take as controls cannot be stored as glyphs.
 			switch ch {
-			case 0, 0x1B, 0x1A, 0x0A, 0x0D, 0x08, 0x09, 0x07:
+			case 0, 0x1B, 0x0A, 0x0D, 0x08, 0x09, 0x07:
 				ch = 32
+			case 0x1A:
+				if !raw1A {
+					ch = 32
+				}
 			}
 			if amiga && (ch < 0x20 || (ch >= 0x7F && ch < 0xA0)) {
 				ch = 32
@@ -922,4 +1000,28 @@ func describeSauce(s *Sauce) string {
 		t += " Notes: " + strings.Join(s.notes, " / ")
 	}
 	return t
+}
+
+// writeWatching feeds an emulator the bytes, looking at the picture now and
+// then so that an animation's fullest picture is kept.
+func writeWatching(e interface{ write([]byte) }, b []byte, f *fullest) {
+	step := max(256, len(b)/64) // about 64 looks, however long the file
+	for i := 0; i < len(b); i += step {
+		e.write(b[i:min(len(b), i+step)])
+		if d := docOf(e); d != nil && len(b) > 2*step {
+			f.look(d)
+		}
+	}
+}
+
+func docOf(e interface{ write([]byte) }) *Doc {
+	switch t := e.(type) {
+	case *Term:
+		return t.doc
+	case *PetTerm:
+		return t.doc
+	case *AtariTerm:
+		return t.doc
+	}
+	return nil
 }

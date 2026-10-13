@@ -78,16 +78,25 @@ func writePrg(d *Doc, lower bool) []byte {
 	return append(out, cols...)
 }
 
-// writeMarq gives the C array Marq's PETSCII editor and Petmate read.
+// writeMarq gives the C array Marq's PETSCII editor and Petmate read, at the page's own size
+// (a 40-column page at least 25 rows, a whole C64 screen).
 func writeMarq(d *Doc, lower bool) []byte {
-	chars, cols := c64Screen(d)
+	w, h := d.cols, max(d.usedRows(), 1)
+	if w == 40 {
+		h = max(h, 25)
+	}
 	var b strings.Builder
 	b.WriteString("unsigned char frame0000[]={// border,bg,chars,colors\n")
 	fmt.Fprintf(&b, "%d,%d,\n", d.borderColour(), d.bg)
-	for _, part := range [][]byte{chars, cols} {
-		for y := 0; y < 25; y++ {
-			for x := 0; x < 40; x++ {
-				fmt.Fprintf(&b, "%d,", part[y*40+x])
+	for part := 0; part < 2; part++ {
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				v := d.get(x, y)
+				if part == 0 {
+					fmt.Fprintf(&b, "%d,", cellCh(v))
+				} else {
+					fmt.Fprintf(&b, "%d,", cellFg(v))
+				}
 			}
 			b.WriteString("\n")
 		}
@@ -97,7 +106,7 @@ func writeMarq(d *Doc, lower bool) []byte {
 	if lower {
 		set = "lower"
 	}
-	fmt.Fprintf(&b, "// META: 40 25 C64 %s\n", set)
+	fmt.Fprintf(&b, "// META: %d %d C64 %s\n", w, h, set)
 	return []byte(b.String())
 }
 
@@ -188,6 +197,9 @@ func parseXBin(b []byte) (*Doc, XBinInfo, error) {
 	}
 	w, h := int(b[5])|int(b[6])<<8, int(b[7])|int(b[8])<<8
 	fh, flags := int(b[9]), b[10]
+	if flags&2 == 0 && (fh < 1 || fh > 32) {
+		fh = 16 // no font in the file: the height byte means nothing
+	}
 	if w < 1 || w > 1000 || fh < 1 || fh > 32 {
 		return nil, info, fmt.Errorf("an XBin of %d columns and %d-pixel font is not one I can show", w, fh)
 	}

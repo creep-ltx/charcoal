@@ -155,10 +155,11 @@ func screenToPet(sc int) byte {
 // PetTerm prints PETSCII into a Doc, like the C64's screen editor. As with
 // ANSI, the page is endless downwards instead of scrolling.
 type PetTerm struct {
-	doc      *Doc
-	x, y, fg int
-	rev      bool
-	lower    int // the character set asked for: -1 none, 0 upper, 1 lower
+	beforeClear func()
+	doc         *Doc
+	x, y, fg    int
+	rev         bool
+	lower       int // the character set asked for: -1 none, 0 upper, 1 lower
 }
 
 func newPetTerm(d *Doc) *PetTerm { return &PetTerm{doc: d, fg: 14, lower: -1} }
@@ -180,6 +181,9 @@ func (t *PetTerm) write(b []byte) {
 		case 0x0D, 0x8D:
 			t.x, t.y, t.rev = 0, t.y+1, false
 		case 0x93:
+			if t.beforeClear != nil {
+				t.beforeClear()
+			}
 			fillCells(d.cells[:d.rows*d.cols], blank)
 			t.x, t.y = 0, 0
 		case 0x13:
@@ -239,9 +243,18 @@ func parseSeq(b []byte, cols int) (*Doc, int) {
 		cols = 40
 	}
 	d := newDoc(cols, 25)
+	d.glyph0 = true
 	t := newPetTerm(d)
-	t.write(b)
+	var f fullest
+	t.beforeClear = func() { f.look(t.doc) }
+	writeWatching(t, b, &f)
+	d = f.pick(t.doc)
 	d.trim(1)
+	if t.lower < 0 && capitalisedWords(b) >= 3 {
+		// BBSes switch to lower case before sending such files: "Main menu" is
+		// a shifted letter and plain ones, which only reads in the lower case set.
+		return d, 1
+	}
 	return d, t.lower
 }
 
@@ -356,4 +369,22 @@ var c64Fkeys = [][]int{
 	{0x55, 0x49, 0x4A, 0x4B, 0x5B, 0x4D, 0x4E, 0x5F, 0x69, 0x56},
 	{0x51, 0x57, 0x53, 0x5A, 0x58, 0x41, 0x5E, 0x4F, 0x50, 0x7A},
 	{0x63, 0x64, 0x65, 0x67, 0x68, 0x6A, 0x74, 0x75, 0x76, 0x77},
+}
+
+// capitalisedWords counts a shifted letter followed by two or more plain ones.
+func capitalisedWords(b []byte) int {
+	n, run, capital := 0, 0, false
+	for _, c := range b {
+		switch {
+		case c >= 0xC1 && c <= 0xDA:
+			capital, run = true, 0
+		case c >= 0x41 && c <= 0x5A && capital:
+			if run++; run == 2 {
+				n++
+			}
+		default:
+			capital, run = false, 0
+		}
+	}
+	return n
 }

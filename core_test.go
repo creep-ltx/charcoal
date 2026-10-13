@@ -81,6 +81,10 @@ func TestCore(t *testing.T) {
 	if !guessAmiga([]byte("x\n\xaf\xaf\xb8\ny\nz\nw\nv\n")) || guessAmiga([]byte("\xdb\xdb\xb0\xb1\r\n\xdc\xdf\r\n")) {
 		t.Fatal("guess")
 	}
+	// Swedish text in CP437 is PC, though plain otherwise.
+	if guessAmiga([]byte("vi kanske inte \x84r b\x84st\nmen 2'a\n")) {
+		t.Fatal("CP437 letters")
+	}
 	// UTF-8 art.
 	if b := fromUtf8([]byte("█▀ x"), false); string(b) != "\xdb\xdf x" {
 		t.Fatalf("utf8 %q", b)

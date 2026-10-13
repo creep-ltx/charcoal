@@ -66,6 +66,13 @@ Press the **?** gadget for every key.
   screen in its own tab. (Pictures and web pages do not open.)
 - Settings in `~/.config/charcoal/prefs.json` (`"uiscale": 2` doubles the window for big screens).
 
+## Tested
+
+`bigcheck_test.go` (see `tools/bigcheck/`) runs thousands of real files: on 2026-10-13, 4119 files from 16colo.rs
+(PC, Amiga, XBin, PETSCII-style and animation packs), C64 BBS `.seq` files, Petmate `.petmate`/`.c` files from
+GitHub and the Break Into Chat ATASCII collection. All open, all with a known type get the right page type, all
+come back cell for cell after saving in their own format.
+
 ## Files
 
 | Path | What |

@@ -746,6 +746,10 @@ var seqExt = regexp.MustCompile(`(?i)\.(seq|pet)$`)
 // loadBytes reads a file into the current tab; as is "auto", "amiga", "pc" or "c64".
 func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.srcKind, a.ownFont, a.ownPal = "", nil, nil
+	if what := notArt(b); what != "" && as == "auto" {
+		a.msg("Could not open " + name + ": it is " + what + ", not art")
+		return
+	}
 	if isXBin(b) && as == "auto" {
 		_, info, err := parseXBin(b)
 		if err != nil {
@@ -884,10 +888,56 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.applyMode()
 	a.dirty = false
 	a.scrollX, a.scrollY = 0, 0
+	if a.doc.fullest {
+		a.msg("An animation that ends nearly empty: showing its fullest picture (Play shows it all)")
+	}
+}
+
+// notArt names files that are surely not art (archives, programs, pictures), or "".
+func notArt(b []byte) string {
+	for _, k := range []struct{ magic, what string }{
+		{"PK\x03\x04", "a ZIP archive"}, {"Rar!", "a RAR archive"}, {"\x1f\x8b", "a gzip archive"}, {"7z\xbc\xaf", "a 7-Zip archive"},
+		{"MZ", "a DOS or Windows program"}, {"\x7fELF", "a Linux program"}, {"\x89PNG", "a PNG picture"}, {"GIF8", "a GIF picture"},
+		{"\xff\xd8\xff", "a JPEG picture"}, {"%PDF", "a PDF"},
+	} {
+		if bytes.HasPrefix(b, []byte(k.magic)) {
+			return k.what
+		}
+	}
+	return ""
+}
+
+// screensCache keeps the last file of screens read, so that the tabs of a file
+// with many screens do not each read all of it again.
+var screensCache struct {
+	data *byte
+	n    int
+	kind string
+	scr  []PetScreen
 }
 
 // screens reads a file that holds whole C64 screens.
 func (a *App) screens(b []byte, kind string) ([]PetScreen, error) {
+	if len(b) > 0 && screensCache.data == &b[0] && screensCache.n == len(b) && screensCache.kind == kind {
+		out := make([]PetScreen, len(screensCache.scr))
+		for i, s := range screensCache.scr { // each tab gets a page of its own
+			out[i] = PetScreen{doc: s.doc.clone(), lower: s.lower, name: s.name}
+		}
+		return out, nil
+	}
+	scr, err := a.readScreens(b, kind)
+	if err == nil && len(b) > 0 {
+		screensCache.data, screensCache.n, screensCache.kind, screensCache.scr = &b[0], len(b), kind, scr
+		out := make([]PetScreen, len(scr))
+		for i, s := range scr {
+			out[i] = PetScreen{doc: s.doc.clone(), lower: s.lower, name: s.name}
+		}
+		return out, nil
+	}
+	return scr, err
+}
+
+func (a *App) readScreens(b []byte, kind string) ([]PetScreen, error) {
 	switch kind {
 	case "petmate":
 		return parsePetmate(b)
@@ -914,6 +964,7 @@ func (a *App) finishLoad(b []byte, name, path string, sauce *Sauce, fmtID string
 }
 
 func (a *App) applyMode() {
+	a.doc.glyph0 = a.screen()
 	if a.tool == "half" && !a.pc() {
 		a.setTool("draw")
 	}
@@ -1228,9 +1279,9 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	}
 	switch fmtID {
 	case "ansi":
-		return withSauce(writeAnsi(d, am, true, info.clear), 1), nil
+		return withSauce(writeAnsi(d, am, true, info.clear, info.writeSauce), 1), nil
 	case "text":
-		return withSauce(writeAnsi(d, am, false, false), 0), nil
+		return withSauce(writeAnsi(d, am, false, false, info.writeSauce), 0), nil
 	case "seq":
 		return writeSeq(d, a.lower(), info.clear), nil
 	case "ata":
@@ -1238,7 +1289,12 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	case "utf8":
 		return []byte(strings.Join(docText(d, a.runeOf, 0, 0, 0, 0), nl) + nl), nil
 	case "bin":
-		return writeBin(d), nil
+		art := writeBin(d)
+		if !info.writeSauce && d.cols == 160 {
+			return art, nil // 160 is what a .bin without a record is taken to be
+		}
+		return append(art, makeSauce(SauceInfo{title: info.title, author: info.author, group: info.group,
+			cols: d.cols, font: a.font().sauce, binaryText: true, flags: map[bool]int{true: 1}[a.ice]}, len(art))...), nil
 	case "xbin":
 		return writeXBin(d, a.pal, a.font(), a.cellH(), a.ice), nil
 	case "prg", "marq":

@@ -10,6 +10,7 @@ package main
 // Atari OS), see fonts/AltirraOS-LICENSE.txt.
 
 import (
+	"bytes"
 	_ "embed"
 )
 
@@ -76,9 +77,10 @@ func atariControl(c byte) bool {
 // AtariTerm prints ATASCII into a Doc like the screen editor (40 columns, no margins),
 // with the page endless downwards.
 type AtariTerm struct {
-	doc  *Doc
-	x, y int
-	esc  bool
+	beforeClear func()
+	doc         *Doc
+	x, y        int
+	esc         bool
 }
 
 func newAtariTerm(d *Doc) *AtariTerm { return &AtariTerm{doc: d} }
@@ -107,6 +109,9 @@ func (t *AtariTerm) write(b []byte) {
 		case 0x9B: // EOL
 			t.x, t.y = 0, t.y+1
 		case 0x7D: // clear the screen
+			if t.beforeClear != nil {
+				t.beforeClear()
+			}
 			fillCells(d.cells[:d.rows*d.cols], blank)
 			t.x, t.y = 0, 0
 		case 0x1C:
@@ -156,8 +161,12 @@ func parseAta(b []byte, cols int) *Doc {
 		cols = atariWidth(b)
 	}
 	d := newDoc(cols, 24)
-	d.bg, d.ink, d.border = atariBg, atariInk, 0
-	newAtariTerm(d).write(b)
+	d.bg, d.ink, d.border, d.glyph0 = atariBg, atariInk, 0, true
+	t := newAtariTerm(d)
+	var f fullest
+	t.beforeClear = func() { f.look(t.doc) }
+	writeWatching(t, b, &f)
+	d = f.pick(t.doc)
 	d.trim(1)
 	return d
 }
@@ -187,7 +196,7 @@ func atariWidth(b []byte) int {
 		n := 0
 		for y := 0; y+1 < d.rows; y++ {
 			for x := 0; x < w; x++ {
-				if v := d.get(x, y); !isBlank(v) && cellCh(v) == cellCh(d.get(x, y+1)) {
+				if v := d.get(x, y); !d.blankAt(v) && cellCh(v) == cellCh(d.get(x, y+1)) {
 					n++ // the same character stacked: a drawn shape
 				}
 			}
@@ -267,6 +276,10 @@ func atariRune(c int) rune {
 // by digits and a letter, and there are fewer LFs than EOLs (in ATASCII LF is a
 // graphic); or, for animations, many of the Atari's cursor moves and no ANSI.
 func looksAtascii(b []byte) bool {
+	b = bytes.TrimRight(b, "\x00") // zeros after the end: the rest of a disk sector
+	if bytes.HasPrefix(b, []byte("PK\x03\x04")) || bytes.HasPrefix(b, []byte("MZ")) || bytes.Count(b, []byte{0})*20 > len(b) {
+		return false // an archive, a program, or other binary data
+	}
 	eol, csi, lf, moves, ansi := 0, 0, 0, 0, 0
 	for i, c := range b {
 		switch c {
