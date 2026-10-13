@@ -137,6 +137,9 @@ var (
 )
 
 func init() {
+	fg := func(i int) func() { return func() { a.colourKey(i, false) } }
+	bg := func(i int) func() { return func() { a.colourKey(i, true) } }
+	set := func(i int) func() { return func() { a.pickFset(i) } }
 	actions = []*Action{
 		{"help", "", "Open this help", openHelp},
 		{"open", "Ctrl+O", "Open a file", openOpenRequester},
@@ -162,16 +165,46 @@ func init() {
 		{"turn", "Alt+R", "Turn the block a quarter clockwise", func() { a.blockOp(turnCW) }},
 		{"invert", "Alt+I", "Invert the block (reversed characters, or the two colours swapped)", func() { a.blockOp(invertBlock) }},
 
-		{"fg_previous", "Ctrl+Left", "Foreground colour -1", func() { a.stepFg(-1) }},
-		{"fg_next", "Ctrl+Right", "Foreground colour +1", func() { a.stepFg(1) }},
-		{"bg_previous", "Ctrl+Shift+Left", "Background colour -1", func() { a.stepBg(-1) }},
-		{"bg_next", "Ctrl+Shift+Right", "Background colour +1", func() { a.stepBg(1) }},
-		{"fkeys_next", "Ctrl+Up", "Next F-key set", func() { a.setFset(a.fset + 1) }},
-		{"fkeys_previous", "Ctrl+Down", "Previous F-key set", func() { a.setFset(a.fset - 1) }},
+		{"fg_previous", "Ctrl+Up", "Foreground colour -1", func() { a.stepFg(-1) }},
+		{"fg_next", "Ctrl+Down", "Foreground colour +1", func() { a.stepFg(1) }},
+		{"bg_previous", "Ctrl+Left", "Background colour -1", func() { a.stepBg(-1) }},
+		{"bg_next", "Ctrl+Right", "Background colour +1", func() { a.stepBg(1) }},
+		{"fg_0", "Ctrl+0", "Foreground colour 0-7 (the same again: its bright twin, 8-15)", fg(0)},
+		{"fg_1", "Ctrl+1", "", fg(1)},
+		{"fg_2", "Ctrl+2", "", fg(2)},
+		{"fg_3", "Ctrl+3", "", fg(3)},
+		{"fg_4", "Ctrl+4", "", fg(4)},
+		{"fg_5", "Ctrl+5", "", fg(5)},
+		{"fg_6", "Ctrl+6", "", fg(6)},
+		{"fg_7", "Ctrl+7", "", fg(7)},
+		{"bg_0", "Alt+0", "Background colour 0-7 (the same again: 8-15; PETSCII and Atari: the screen colour)", bg(0)},
+		{"bg_1", "Alt+1", "", bg(1)},
+		{"bg_2", "Alt+2", "", bg(2)},
+		{"bg_3", "Alt+3", "", bg(3)},
+		{"bg_4", "Alt+4", "", bg(4)},
+		{"bg_5", "Alt+5", "", bg(5)},
+		{"bg_6", "Alt+6", "", bg(6)},
+		{"bg_7", "Alt+7", "", bg(7)},
+		{"take_colours", "Alt+U", "Take the character and colours under the cursor", func() { a.pick(a.cx, a.cy) }},
+		{"default_colours", "Ctrl+D", "Default colours (7 on 0; the machine's own on other pages)", func() { a.defaultColours() }},
+		{"swap_colours", "Ctrl+Shift+X", "Swap foreground and background", func() { a.swapColours() }},
+		{"ice", "Ctrl+E", "iCE colours on / off (PC and Amiga: backgrounds 8-15 instead of blink)", func() { a.toggleIce() }},
+		{"fkeys_1", "Ctrl+F1", "F-key set 1-10", set(0)},
+		{"fkeys_2", "Ctrl+F2", "", set(1)},
+		{"fkeys_3", "Ctrl+F3", "", set(2)},
+		{"fkeys_4", "Ctrl+F4", "", set(3)},
+		{"fkeys_5", "Ctrl+F5", "", set(4)},
+		{"fkeys_6", "Ctrl+F6", "", set(5)},
+		{"fkeys_7", "Ctrl+F7", "", set(6)},
+		{"fkeys_8", "Ctrl+F8", "", set(7)},
+		{"fkeys_9", "Ctrl+F9", "", set(8)},
+		{"fkeys_10", "Ctrl+F10", "", set(9)},
+		{"fkeys_next", "Ctrl+Shift+Up", "Next F-key set", func() { a.setFset(a.fset + 1) }},
+		{"fkeys_previous", "Ctrl+Shift+Down", "Previous F-key set", func() { a.setFset(a.fset - 1) }},
 
 		{"zoom_in", "Ctrl+=, Ctrl+Shift+=, Ctrl++, Ctrl+Keypad +", "Zoom in", func() { a.setZoom(a.zoom + 1) }},
 		{"zoom_out", "Ctrl+-, Ctrl+Keypad -", "Zoom out", func() { a.setZoom(a.zoom - 1) }},
-		{"fit_width", "Ctrl+0", "Zoom to fit the page's width", func() { a.fitZoom() }},
+		{"fit_width", "Ctrl+9", "Zoom to fit the page's width", func() { a.fitZoom() }},
 		{"grid", "Ctrl+G", "Grid on / off", func() { a.grid = !a.grid; savePrefs() }},
 		{"reverse", "Ctrl+R", "Reverse characters on / off (PETSCII, Atari)", func() { a.rev = !a.rev }},
 		{"hide_gadgets", "Ctrl+H", "Hide all gadgets (only the art and the status line), again brings them back", func() {

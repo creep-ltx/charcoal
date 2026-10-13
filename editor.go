@@ -803,9 +803,131 @@ func (a *App) bgNow() int {
 	return a.bg
 }
 
-// stepFg and stepBg step the foreground or background colour.
-func (a *App) stepFg(d int) { a.setFg((a.fgNow() + d + 16) % 16) }
-func (a *App) stepBg(d int) { a.setBg((a.bgNow() + d + 16) % 16) }
+// nColours is how many colours the brush's foreground (or background) can
+// have on this page; 0 on teletext, where colours are codes on the page.
+func (a *App) nColours(bg bool) int {
+	switch {
+	case a.tt():
+		return 0
+	case a.st():
+		return a.res().colours
+	case a.c64() && !bg && a.mach().mono:
+		return 1
+	case a.c64() && !bg:
+		return a.mach().colours
+	}
+	return 16
+}
+
+// colourKeyRefused says why the colour keys do nothing here, or "".
+func (a *App) colourKeyRefused(bg bool) string {
+	switch n := a.nColours(bg); {
+	case n == 0:
+		return "Teletext colours are codes on the page: type them from F-key sets 1 and 2"
+	case n == 1:
+		return "A PET screen has one colour"
+	}
+	return ""
+}
+
+// stepFg and stepBg step the foreground or background colour through the page's colours.
+func (a *App) stepFg(d int) {
+	if why := a.colourKeyRefused(false); why != "" {
+		a.msg(why)
+		return
+	}
+	n := a.nColours(false)
+	a.setFg((a.fgNow()%n + d + n) % n)
+}
+
+func (a *App) stepBg(d int) {
+	if why := a.colourKeyRefused(true); why != "" {
+		a.msg(why)
+		return
+	}
+	n := a.nColours(true)
+	a.setBg((a.bgNow()%n + d + n) % n)
+}
+
+// colourKey sets colour i as the foreground (or background); asking for the
+// colour it already is gives its bright twin (i+8), and again back, as Moebius does.
+func (a *App) colourKey(i int, bg bool) {
+	if why := a.colourKeyRefused(bg); why != "" {
+		a.msg(why)
+		return
+	}
+	n := a.nColours(bg)
+	if i >= n {
+		a.msg(fmt.Sprintf("This page has %d colours (0-%d)", n, n-1))
+		return
+	}
+	cur := a.fgNow()
+	if bg {
+		cur = a.bgNow()
+	}
+	if cur == i && i+8 < n {
+		i += 8
+	}
+	if bg {
+		a.setBg(i)
+	} else {
+		a.setFg(i)
+	}
+}
+
+// defaultColours gives the brush the page's start-up colours: 7 on 0 on Amiga
+// and PC pages, the machine's own elsewhere. A screen's colours (Atari text,
+// C64 screen) are left as they are.
+func (a *App) defaultColours() {
+	switch {
+	case a.tt():
+		a.msg(a.colourKeyRefused(false))
+		return
+	case a.atari():
+		a.msg("An Atari screen has one text colour and one background: click the colours to set them")
+		return
+	case a.st():
+		a.fg, a.bg = a.res().fg, a.res().bg
+	case a.zx():
+		a.fg, a.bg = 0, 7 // black ink on white paper, as at start-up
+	case a.c64():
+		a.fg = map[string]int{"vic20": 6, "pet": 1, "pet80": 1}[a.machine]
+		if a.fg == 0 {
+			a.fg = 14 // light blue
+		}
+	default:
+		a.fg, a.bg = 7, 0
+	}
+	a.msg(fmt.Sprintf("Colours: %d on %d", a.fgNow(), a.bgNow()))
+}
+
+// swapColours swaps the brush's foreground and background.
+func (a *App) swapColours() {
+	if why := a.colourKeyRefused(false); why != "" {
+		a.msg(why)
+		return
+	}
+	a.fg, a.bg = a.bg, a.fg
+}
+
+// toggleIce switches iCE colours (backgrounds 8-15 instead of blink) on Amiga and PC pages.
+func (a *App) toggleIce() {
+	if !a.pc() && !a.amiga() {
+		a.msg("iCE colours are for PC and Amiga pages")
+		return
+	}
+	a.ice = !a.ice
+	a.msg(map[bool]string{true: "iCE colours on: backgrounds 8-15", false: "iCE colours off: backgrounds 8-15 blink"}[a.ice])
+}
+
+// pickFset makes F-key set n (0-based) the active one, if the page has it.
+func (a *App) pickFset(n int) {
+	if sets := a.fkeys[a.mode]; n >= len(sets) {
+		a.msg(fmt.Sprintf("This page has %d F-key sets", len(sets)))
+		return
+	}
+	a.fset = n
+}
 
 func (a *App) setFset(n int) {
 	sets := a.fkeys[a.mode]
@@ -1418,7 +1540,7 @@ func (a *App) setMachine(id string) {
 		a.doc = a.doc.withCols(m.cols)
 		a.cx = min(a.cx, m.cols-1)
 		if cut {
-			a.msg(fmt.Sprintf("The %s has %d columns: what was further right is cut (Ctrl+Z undoes it)", m.name, m.cols))
+			a.msg(fmt.Sprintf("The %s has %d columns: what was further right is cut (%s undoes it)", m.name, m.cols, keyName("undo")))
 		}
 	}
 	savePrefs()
@@ -1466,7 +1588,7 @@ func (a *App) setRows(n int) {
 		a.doc.ensureRows(n)
 	} else {
 		if a.doc.usedRows() > n {
-			a.msg(fmt.Sprintf("Rows below %d are cut (Ctrl+Z undoes it)", n))
+			a.msg(fmt.Sprintf("Rows below %d are cut (%s undoes it)", n, keyName("undo")))
 		}
 		a.doc.rows = n
 		fillCells(a.doc.cells[n*a.doc.cols:], blank)

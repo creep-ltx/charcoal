@@ -308,7 +308,7 @@ func (a *App) drawTabs(u *UI, top int) int {
 	}
 	x := 4
 	if first > 0 {
-		if u.button(Rect{x, top + 1, 18, h - 1}, "<", false, "More pages to the left (Ctrl+PgUp)") != nil {
+		if u.button(Rect{x, top + 1, 18, h - 1}, "<", false, "More pages to the left ("+keyName("previous_page")+")") != nil {
 			a.cycleTab(-1)
 		}
 		x += 20
@@ -340,7 +340,7 @@ func (a *App) drawTabs(u *UI, top int) int {
 		fb.text(r.x+6, r.y+1, label, col)
 		xr := Rect{r.x + w - 18, r.y, 16, r.h}
 		fb.text(xr.x+4, r.y+1, "x", cText)
-		u.setHint(r, t.path+"  (Ctrl+Tab next page, Ctrl+W closes, middle click closes)")
+		u.setHint(r, t.path+"  ("+keyName("next_page")+" next page, "+keyName("close_page")+" closes, middle click closes)")
 		if c := u.take(xr); c != nil {
 			a.closeTab(t)
 			break
@@ -355,12 +355,12 @@ func (a *App) drawTabs(u *UI, top int) int {
 		x += w + 2
 	}
 	if last < len(a.tabs)-1 {
-		if u.button(Rect{x, top + 1, 18, h - 1}, ">", false, "More pages to the right (Ctrl+PgDn)") != nil {
+		if u.button(Rect{x, top + 1, 18, h - 1}, ">", false, "More pages to the right ("+keyName("next_page")+")") != nil {
 			a.cycleTab(1)
 		}
 		x += 20
 	}
-	if u.button(Rect{x + 2, top + 1, 22, h - 1}, "+", false, "New page (Ctrl+T)") != nil {
+	if u.button(Rect{x + 2, top + 1, 22, h - 1}, "+", false, "New page ("+keyName("new_page")+")") != nil {
 		a.addTab()
 	}
 	top += h
@@ -373,16 +373,16 @@ func (a *App) drawBar(u *UI) int {
 	fb := u.fb
 	W := fb.w
 	fl := &flow{x0: 6, x: 6, y: 4, right: W - 6}
-	if u.button(fl.place(buttonW("New")), "New", false, "New page in a new tab (Ctrl+T)") != nil {
+	if u.button(fl.place(buttonW("New")), "New", false, "New page in a new tab ("+keyName("new_page")+")") != nil {
 		a.addTab()
 	}
-	if u.button(fl.place(buttonW("Open")), "Open", false, "Open a file in a new tab (Ctrl+O)") != nil {
+	if u.button(fl.place(buttonW("Open")), "Open", false, "Open a file in a new tab ("+keyName("open")+")") != nil {
 		openOpenRequester()
 	}
-	if u.button(fl.place(buttonW("Save")), "Save", false, "Save (Ctrl+S)") != nil {
+	if u.button(fl.place(buttonW("Save")), "Save", false, "Save ("+keyName("save")+")") != nil {
 		a.save(false)
 	}
-	if u.button(fl.place(buttonW("Save as")), "Save as", false, "Save as / export (Ctrl+Shift+S)") != nil {
+	if u.button(fl.place(buttonW("Save as")), "Save as", false, "Save as / export ("+keyName("save_as")+")") != nil {
 		a.save(true)
 	}
 	fl.gap()
@@ -519,7 +519,7 @@ func (a *App) drawBar(u *UI) int {
 	}
 	u.field(Rect{rh.x + 16, rh.y, rh.w - 16, rh.h}, fieldRows, "Page height in rows (Enter sets it). Enter or Down past the last row adds one")
 	zooms := []string{"1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "Fit"}
-	u.choice("zoom", fl.place(choiceW(zooms)), zooms, a.zoom-1, "Zoom (Ctrl+wheel, Ctrl+Plus/Minus; Ctrl+0 fits the width)", func(i int) {
+	u.choice("zoom", fl.place(choiceW(zooms)), zooms, a.zoom-1, "Zoom (Ctrl+wheel, "+keyName("zoom_in")+" / "+keyName("zoom_out")+"; "+keyName("fit_width")+" fits the width)", func(i int) {
 		if i == 8 {
 			a.fitZoom()
 		} else {
@@ -527,7 +527,7 @@ func (a *App) drawBar(u *UI) int {
 		}
 	})
 	r := fl.place(checkW("Grid"))
-	if v, _ := u.check(r.x, r.y, "Grid", a.grid, "Lines between the cells; brighter every 10 columns and every 25 rows (Ctrl+G)"); v != a.grid {
+	if v, _ := u.check(r.x, r.y, "Grid", a.grid, "Lines between the cells; brighter every 10 columns and every 25 rows ("+keyName("grid")+")"); v != a.grid {
 		a.grid = v
 		savePrefs()
 	}
@@ -539,7 +539,7 @@ func (a *App) drawBar(u *UI) int {
 			lcur = i
 		}
 	}
-	u.choice("layout", fl.place(choiceW(layouts)), layouts, lcur, "Show one page, or two pages side by side or one over the other (Ctrl+L)", func(i int) {
+	u.choice("layout", fl.place(choiceW(layouts)), layouts, lcur, "Show one page, or two pages side by side or one over the other ("+keyName("layout")+")", func(i int) {
 		a.setLayout(ids[i])
 	})
 	if a.layout != "one" {
@@ -902,7 +902,7 @@ func (a *App) pageRelease() {
 	if a.selecting {
 		a.selecting = false
 		r := a.selRect()
-		a.msg(fmt.Sprintf("%dx%d selected: Ctrl+C copy, Ctrl+X cut, Del clear; Mirror, Upside down, Turn, Invert under the colours", r.w, r.h))
+		a.msg(fmt.Sprintf("%dx%d selected: %s copy, %s cut, Del clear; Mirror, Upside down, Turn, Invert under the colours", r.w, r.h, keyName("copy"), keyName("cut")))
 	}
 	a.button = 0
 }
@@ -921,7 +921,7 @@ var tools = []struct{ id, name, hint string }{
 	{"colour", "Colour", "Colour: left paints the foreground, right the background, the characters stay"},
 	{"fill", "Fill", "Fill: fills the area of equal cells with the brush"},
 	{"pick", "Pick", "Pick: takes the character and colours of a cell (middle click does this with any tool)"},
-	{"select", "Select", "Select: drag a block; Ctrl+C / Ctrl+X / Ctrl+V / Del"},
+	{"select", "Select", "Select: drag a block; copy, cut, paste, Del"},
 	{"half", "Half", "Half blocks: paint pixels of half a cell (PC page; Sixel on a teletext page)"},
 }
 
@@ -979,7 +979,7 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		a.showCodes = toggle("Codes", a.showCodes, "Show the attribute codes' names in their cells (T text colour, G graphics colour, D double, F flash ...)")
 	}
 	if a.screen() {
-		a.rev = toggle("Rev", a.rev, "Reverse: typing gives reversed characters, like RVS ON (Ctrl+R)")
+		a.rev = toggle("Rev", a.rev, "Reverse: typing gives reversed characters, like RVS ON ("+keyName("reverse")+")")
 	}
 	a.insert = toggle("Ins", a.insert, "Insert mode for typing (Insert key)")
 	x += 2*bw + 4 + 14
@@ -1040,12 +1040,12 @@ func (a *App) drawPane(u *UI, pane Rect) {
 	x += cm.w + 14
 
 	// The F-keys in one row, the set switch before them.
-	if u.button(Rect{x, y, 18, smallH}, "<", false, "Previous F-key set (Ctrl+Down)") != nil {
+	if u.button(Rect{x, y, 18, smallH}, "<", false, "Previous F-key set ("+keyName("fkeys_previous")+")") != nil {
 		a.setFset(a.fset - 1)
 	}
 	label := fmt.Sprintf("%d", a.fset+1)
 	fb.text(x+22, y+2, label, cText)
-	if u.button(Rect{x + 30, y, 18, smallH}, ">", false, "Next F-key set (Ctrl+Up)") != nil {
+	if u.button(Rect{x + 30, y, 18, smallH}, ">", false, "Next F-key set ("+keyName("fkeys_next")+")") != nil {
 		a.setFset(a.fset + 1)
 	}
 	fx := x + 54
@@ -1117,7 +1117,7 @@ func (a *App) drawPane(u *UI, pane Rect) {
 	fb.frame(br, cEdgeDk)
 	a.drawCell(fb, br.x+3, br.y+3, 2, a.brushCell())
 	u.setHint(br, "The brush")
-	if u.button(Rect{br.x + br.w + 8, by, buttonW("Swap"), smallH}, "Swap", false, "Swap foreground and background") != nil {
+	if u.button(Rect{br.x + br.w + 8, by, buttonW("Swap"), smallH}, "Swap", false, "Swap foreground and background ("+keyName("swap_colours")+")") != nil {
 		a.fg, a.bg = a.bg, a.fg
 	}
 	fgShown, bgShown := a.fg, a.bg
@@ -1140,10 +1140,10 @@ func (a *App) drawPane(u *UI, pane Rect) {
 			label, hint string
 			op          int
 		}{
-			{"Mirror", "Flip " + what + " left-right (Alt+H)", flipH},
-			{"Upside down", "Flip " + what + " upside down (Alt+V)", flipV},
-			{"Turn", "Turn " + what + " a quarter clockwise (Alt+R)", turnCW},
-			{"Invert", "Invert " + what + ": reversed characters, or the colours swapped (Alt+I)", invertBlock},
+			{"Mirror", "Flip " + what + " left-right (" + keyName("mirror") + ")", flipH},
+			{"Upside down", "Flip " + what + " upside down (" + keyName("upside_down") + ")", flipV},
+			{"Turn", "Turn " + what + " a quarter clockwise (" + keyName("turn") + ")", turnCW},
+			{"Invert", "Invert " + what + ": reversed characters, or the colours swapped (" + keyName("invert") + ")", invertBlock},
 		} {
 			r := Rect{bx, bly, buttonW(b.label), smallH}
 			if u.button(r, b.label, false, b.hint) != nil {
