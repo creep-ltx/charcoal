@@ -1,8 +1,24 @@
 # Charcoal
 
-Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer.
+Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer, for text art on every
+platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum and teletext, each with its real font, colours
+and file formats.
 
-**Start here: [docs/HANDOFF.md](docs/HANDOFF.md)** (state, the user's wishes, testing, next steps).
+![CharEdit with a PC ANSI by Platinum](docs/screenshots/hero.png)
+
+<sub>*MiSTiGRiS 20th Anniversary* by Platinum / MiSTiGRiS (2014), from the mist1014 pack on 16colo.rs.</sub>
+
+| | |
+|---|---|
+| ![Amiga ASCII in Topaz](docs/screenshots/amiga.png) | ![C64 PETSCII](docs/screenshots/c64.png) |
+| <sub>Amiga page in Topaz 2+: *aBSiNTHE 40K* by aNACHRONiST / iMPURE!ASCII1940 (2022), impure81 on 16colo.rs.</sub> | <sub>C64 PETSCII with a block selected (Mirror, Upside down, Turn, Invert): *Uncle Nash*, an example picture from Marq's PETSCII editor.</sub> |
+| ![Teletext](docs/screenshots/teletext.png) | ![Atari ATASCII](docs/screenshots/atari.png) |
+| <sub>Teletext (BBC Micro Mode 7 / Ceefax): *Rio*, an example page from QTeletextMaker.</sub> | <sub>Atari 8-bit ATASCII: *Turbo* (TEXTPIC1_CAR), from the ATASCII collection at breakintochat.com.</sub> |
+| ![Two pages side by side](docs/screenshots/split.png) | ![CharView](docs/screenshots/viewer.png) |
+| <sub>Tabs, and two pages side by side (Ctrl+L).</sub> | <sub>CharView, the viewer: *Jeroen Tel* by The Knight / Fuel (2019), fuel30 on 16colo.rs.</sub> |
+
+The art belongs to its artists and is shown here with their names; if you are one of them and want your
+piece taken down, open an issue.
 
 An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw),
 Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens and teletext
@@ -28,6 +44,9 @@ interface is drawn in Topaz, kept dark and small so the art comes first; **Ctrl+
 Press the **?** gadget for every key.
 
 ## Build
+
+Working on Charcoal: start with [docs/HANDOFF.md](docs/HANDOFF.md) (state, wishes, testing) and
+[docs/roadmap.md](docs/roadmap.md).
 
     go build -o charedit .     # needs Go and the SDL2 development files
     go test ./...             # the core: parser, writer, SAUCE
