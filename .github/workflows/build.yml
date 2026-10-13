@@ -38,7 +38,8 @@ jobs:
           go build -ldflags '-s -w' -o out/charedit .
       - name: screenshot (no screen)
         run: |
-          export XDG_CONFIG_HOME=$RUNNER_TEMP/cfg2 XDG_DATA_HOME=$RUNNER_TEMP/data2 SDL_VIDEODRIVER=offscreen
+          # Ubuntu's SDL2 has no offscreen driver; dummy draws into memory just the same.
+          export XDG_CONFIG_HOME=$RUNNER_TEMP/cfg2 XDG_DATA_HOME=$RUNNER_TEMP/data2 SDL_VIDEODRIVER=dummy
           CHARCOAL_SCRIPT="key Escape; shot shot-linux.png; quit" ./out/charedit testdata/alove/bs-alove.xb
           test -s shot-linux.png
       - name: package
@@ -136,6 +137,7 @@ jobs:
           echo "PKG_CONFIG_PATH=$HOME/sdl2/lib/pkgconfig" >> "$GITHUB_ENV"
           echo "CGO_ENABLED=1" >> "$GITHUB_ENV"
           echo "CGO_LDFLAGS=$("$HOME/sdl2/bin/sdl2-config" --static-libs)" >> "$GITHUB_ENV"
+          echo "CGO_LDFLAGS_ALLOW=-Wl,-weak_framework,.*" >> "$GITHUB_ENV" # SDL's .pc names weak frameworks, cgo refuses them by default
           "$HOME/sdl2/bin/sdl2-config" --static-libs
           lipo -info "$HOME/sdl2/lib/libSDL2.a"
       - name: vet, test
