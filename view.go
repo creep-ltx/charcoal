@@ -241,7 +241,7 @@ func (a *App) drawPages(u *UI, area Rect) {
 	pressed := (*Tab)(nil)
 	for i, t := range a.shown {
 		a.Tab = t
-		a.applyMode()
+		a.applyLook() // only the look: the tool and F-keys stay the active page's
 		r := rs[i]
 		// The pane's title: its tab, bright in the pane being worked on.
 		col := uint32(cText)
@@ -273,10 +273,12 @@ func (a *App) drawPages(u *UI, area Rect) {
 		other.scrollX, other.scrollY = active.scrollX, active.scrollY
 	}
 	a.Tab = active
+	a.applyLook()
 	if pressed != nil {
+		a.endPlay()
 		a.Tab = pressed
+		a.applyMode()
 	}
-	a.applyMode()
 }
 
 // drawTabs draws the strip of open pages under the gadget bar.
@@ -284,13 +286,42 @@ func (a *App) drawTabs(u *UI, top int) int {
 	fb := u.fb
 	h := lineH + 4
 	fb.fill(Rect{0, top, fb.w, h}, cDark)
-	x := 4
-	for _, t := range a.tabs {
-		label := t.name
+	label := func(t *Tab) string {
 		if t.dirty {
-			label = "* " + label
+			return "* " + t.name
 		}
+		return t.name
+	}
+	// More tabs than fit: the strip starts late enough that the active tab is
+	// on show, and small arrows at the ends say there are more.
+	room := fb.w - 4 - 28 - 2*20
+	first, cur := 0, max(0, a.tabIndex(a.Tab))
+	for {
+		used := 0
+		for i := first; i <= cur && i < len(a.tabs); i++ {
+			used += textW(label(a.tabs[i])) + 32
+		}
+		if used <= room || first >= cur {
+			break
+		}
+		first++
+	}
+	x := 4
+	if first > 0 {
+		if u.button(Rect{x, top + 1, 18, h - 1}, "<", false, "More pages to the left (Ctrl+PgUp)") != nil {
+			a.cycleTab(-1)
+		}
+		x += 20
+	}
+	last := len(a.tabs) - 1
+	for i := first; i < len(a.tabs); i++ {
+		t := a.tabs[i]
+		label := label(t)
 		w := textW(label) + 30
+		if i > first && x+w > 4+room+20*min(1, first) {
+			last = i - 1
+			break
+		}
 		r := Rect{x, top + 1, w, h - 1}
 		on := t == a.Tab
 		shown := t == a.shown[0] || (a.layout != "one" && t == a.shown[1])
@@ -322,9 +353,12 @@ func (a *App) drawTabs(u *UI, top int) int {
 			a.focusTab(t)
 		}
 		x += w + 2
-		if x > fb.w-40 {
-			break
+	}
+	if last < len(a.tabs)-1 {
+		if u.button(Rect{x, top + 1, 18, h - 1}, ">", false, "More pages to the right (Ctrl+PgDn)") != nil {
+			a.cycleTab(1)
 		}
+		x += 20
 	}
 	if u.button(Rect{x + 2, top + 1, 22, h - 1}, "+", false, "New page (Ctrl+T)") != nil {
 		a.addTab()
@@ -352,7 +386,7 @@ func (a *App) drawBar(u *UI) int {
 		a.save(true)
 	}
 	fl.gap()
-	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata files. ST: Atari ST VT52. PETSCII: PET, VIC-20, C64, C128, .seq files."
+	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti."
 	for _, m := range []string{"amiga", "pc", "atari", "st", "c64", "zx", "tt"} {
 		label := modeNames[m]
 		if m == "st" {
@@ -778,7 +812,7 @@ func (a *App) pagePress(c *Click) {
 		a.sel = &Sel{p.x, p.y, p.x, p.y}
 		a.selecting = true
 	case "fill":
-		if c.button == 1 {
+		if c.button == 1 && a.doc.get(p.x, p.y) != a.brushCell() { // a fill that changes nothing is no step
 			a.pushUndo()
 			a.floodFill(p.x, p.y)
 		}
@@ -822,6 +856,9 @@ func (a *App) pageMotion(mx, my int) {
 		return
 	}
 	p, _ := a.cellAt(mx, my)
+	if a.button != 0 && p.y >= a.doc.rows { // dragging below the page stays on its last row: only Enter and Down add rows
+		p.y, p.half, p.sy = max(0, a.doc.rows-1), 1, 2
+	}
 	over := a.page.has(mx, my) && a.dialog == nil
 	switch {
 	case over || a.button != 0:
@@ -885,7 +922,7 @@ var tools = []struct{ id, name, hint string }{
 	{"fill", "Fill", "Fill: fills the area of equal cells with the brush"},
 	{"pick", "Pick", "Pick: takes the character and colours of a cell (middle click does this with any tool)"},
 	{"select", "Select", "Select: drag a block; Ctrl+C / Ctrl+X / Ctrl+V / Del"},
-	{"half", "Half", "Half blocks: paint pixels of half a cell (PC page)"},
+	{"half", "Half", "Half blocks: paint pixels of half a cell (PC page; Sixel on a teletext page)"},
 }
 
 // drawPane draws the strip under the page: tools, characters, F-keys and colours, kept small.
@@ -895,6 +932,10 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		return
 	}
 	fb.fill(Rect{pane.x, pane.y, pane.w, 1}, cEdgeDk)
+	if a.playing != nil && !u.inert { // the page on show is the one being played: hands off
+		u.inert = true
+		defer func() { u.inert = false }()
+	}
 	old := fb.clip
 	fb.clip = pane.and(old)
 	x, y := pane.x+8, pane.y+7
@@ -1095,10 +1136,6 @@ func (a *App) pageGlyph(fb *FB, x, y, c int) {
 	fb.glyph(a.font(), x, y, byte(c), cText, 0, 1, 1, false)
 }
 
-func luma(c uint32) int {
-	return (int(c>>16&255)*3 + int(c>>8&255)*6 + int(c&255)) / 10
-}
-
 // ---------------------------------------------------------------- the status line
 
 func (a *App) drawStatus(u *UI, r Rect) {
@@ -1132,6 +1169,9 @@ func (a *App) drawStatus(u *UI, r Rect) {
 	}
 	x = fb.text(x, y, name, cText) + 24
 	text, col := u.hint, uint32(cText)
+	if text == "" && download.what != "" {
+		text = "Downloading " + download.what + " ..."
+	}
 	if a.message != "" && time.Since(a.messageAt) < 4*time.Second {
 		text, col = a.message, cOrange
 	}

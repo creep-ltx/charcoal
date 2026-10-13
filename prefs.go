@@ -44,9 +44,21 @@ func prefsPath() string {
 	return filepath.Join(d, "charcoal", "prefs.json")
 }
 
+// pageModes are the page types, as prefs.json names them.
+var pageModes = []string{"amiga", "pc", "c64", "atari", "st", "zx", "tt"}
+
 func loadPrefs() {
 	if b, err := os.ReadFile(prefsPath()); err == nil {
-		json.Unmarshal(b, &prefs)
+		if err := json.Unmarshal(b, &prefs); err != nil {
+			// Kept for the person to look at, not silently written over.
+			prefs = Prefs{}
+			bad := prefsPath() + ".bad"
+			if os.Rename(prefsPath(), bad) == nil {
+				a.msg("The settings file could not be read (" + err.Error() + "): it is kept as " + bad + ", the settings start afresh")
+			} else {
+				a.msg("The settings file could not be read: " + err.Error())
+			}
+		}
 	}
 	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper", "atari": "atari", "st": "st8x8", "zx": "zx", "tt": "zx"}
 	for k, v := range prefs.Font {
@@ -64,8 +76,8 @@ func loadPrefs() {
 	a.defMachine = machineByID(prefs.Machine).id
 	a.defSTRes = stResByID(prefs.STRes).id
 	a.fkeys = defaultFkeys()
-	for _, m := range []string{"amiga", "pc", "c64", "atari", "st", "zx", "tt"} {
-		if f := prefs.Fkeys[m]; len(f) > 0 {
+	for _, m := range pageModes {
+		if f := prefs.Fkeys[m]; validFkeys(f) {
 			a.fkeys[m] = f
 		}
 	}
@@ -78,6 +90,13 @@ func loadPrefs() {
 		}
 	}
 	a.lastDir = prefs.Dir
+	prefs.UIScale = max(1, min(maxUIScale, prefs.UIScale))
+	if prefs.ViewSpeed < scrollSpeeds[0] || prefs.ViewSpeed > scrollSpeeds[len(scrollSpeeds)-1] {
+		prefs.ViewSpeed = 4
+	}
+	if prefs.Width > 16384 || prefs.Height > 16384 {
+		prefs.Width, prefs.Height = 0, 0
+	}
 	a.baud = 14400
 	for _, b := range bauds {
 		if b == prefs.Baud {
@@ -86,11 +105,45 @@ func loadPrefs() {
 	}
 }
 
+// validFkeys: F-key sets as prefs.json may hold them: at least one set, each
+// of exactly ten bytes.
+func validFkeys(sets [][]int) bool {
+	if len(sets) == 0 {
+		return false
+	}
+	for _, set := range sets {
+		if len(set) != 10 {
+			return false
+		}
+		for _, c := range set {
+			if c < 0 || c > 255 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// readPrefsFile reads what prefs.json holds now (another CharEdit or CharView
+// may have written it since this one started).
+func readPrefsFile() (Prefs, bool) {
+	var p Prefs
+	b, err := os.ReadFile(prefsPath())
+	if err != nil || json.Unmarshal(b, &p) != nil {
+		return p, false
+	}
+	return p, true
+}
+
 func savePrefs() {
 	if viewer != nil { // the viewer leaves the editor's settings alone
 		return
 	}
 	p := prefs
+	if now, ok := readPrefsFile(); ok { // the viewer's own settings are the viewer's
+		p.ViewAuto, p.ViewStep, p.ViewSpeed = now.ViewAuto, now.ViewStep, now.ViewSpeed
+		p.C64Asked = p.C64Asked || now.C64Asked
+	}
 	// The page being worked on sets what new tabs start with.
 	for k, v := range a.fontFor {
 		if v != "xbin" { // a file's own font stays with the file

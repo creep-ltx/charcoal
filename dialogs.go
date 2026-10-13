@@ -3,7 +3,11 @@ package main
 // The requesters: open / save (a file list), info (SAUCE), colour, help, and yes / no.
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -45,14 +49,17 @@ func buttonRow(u *UI, r Rect, labels ...string) int {
 
 // ---------------------------------------------------------------- yes / no
 
+// Confirm asks before something that cannot be undone. Return never does it:
+// Return saves when there is a Save choice and cancels otherwise; Esc cancels.
 type Confirm struct {
 	text   string
 	button string // the yes button, "Throw away" if empty
 	yes    func()
+	save   func() // when set, a Save button as well (and the default)
 }
 
 func (d *Confirm) draw(u *UI) {
-	in := u.window(centre(460, 140), "Charcoal")
+	in := u.window(centre(500, 150), "Charcoal")
 	lines := wrap(d.text, in.w/charW)
 	for i, l := range lines {
 		u.fb.text(in.x, in.y+i*lineH, l, cText)
@@ -61,20 +68,29 @@ func (d *Confirm) draw(u *UI) {
 	if yes == "" {
 		yes = "Throw away"
 	}
-	switch buttonRow(u, in, yes, "Cancel") {
+	labels := []string{yes, "Cancel"}
+	if d.save != nil {
+		labels = []string{yes, "Cancel", "Save"}
+	}
+	switch buttonRow(u, in, labels...) {
 	case 0:
 		closeDialog()
 		d.yes()
 	case 1:
 		closeDialog()
+	case 2:
+		closeDialog()
+		d.save()
 	}
 }
 
 func (d *Confirm) key(k string, ctrl, shift bool) bool {
 	switch k {
-	case "Return", "Keypad Enter", "Y":
+	case "Return", "Keypad Enter", "S":
 		closeDialog()
-		d.yes()
+		if d.save != nil {
+			d.save()
+		}
 	case "Escape", "N":
 		closeDialog()
 	default:
@@ -102,6 +118,8 @@ type FileReq struct {
 	err     string
 	lastClk time.Time
 	lastSel int
+	selPath string // the path field as the selection set it: Return then acts on the selection
+	after   func() // save: what to do once the page is saved
 }
 
 var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "tt", "c64"}
@@ -113,8 +131,8 @@ func openOpenRequester() {
 	if dir == "" {
 		dir, _ = os.Getwd()
 	}
-	d.list(dir)
-	d.path.enter = d.ok
+	d.listFirst(dir)
+	d.path.enter = d.enter
 	a.dialog = d
 	ui.focus = &d.path
 }
@@ -128,16 +146,38 @@ func openSaveRequester() {
 	if dir == "" {
 		dir, _ = os.Getwd()
 	}
-	d.list(dir)
-	d.path.set(filepath.Join(dir, a.name))
+	d.listFirst(dir)
+	d.path.set(filepath.Join(d.dir, a.name))
 	for i, f := range a.modeFormats() {
 		if f.id == a.saveFmt {
 			d.choice = i
 		}
 	}
-	d.path.enter = d.ok
+	d.path.enter = d.enter
 	a.dialog = d
 	ui.focus = &d.path
+}
+
+// listFirst lists the first of dir, the home folder and / that can be listed
+// (a remembered folder may be gone, a NAS unmounted); why dir could not be is shown.
+func (d *FileReq) listFirst(dir string) {
+	home, _ := os.UserHomeDir()
+	why := ""
+	for _, p := range []string{dir, home, "/"} {
+		if p == "" {
+			continue
+		}
+		d.list(p)
+		if d.err == "" {
+			break
+		}
+		if why == "" {
+			why = d.err
+		}
+	}
+	if why != "" && d.dir != "" {
+		d.err = why
+	}
 }
 
 func (d *FileReq) list(dir string) {
@@ -173,7 +213,7 @@ func (d *FileReq) list(dir string) {
 		}
 		return strings.ToLower(rest[i].name) < strings.ToLower(rest[j].name)
 	})
-	d.sel, d.top = -1, 0
+	d.sel, d.top, d.selPath = -1, 0, ""
 	if !d.save {
 		d.path.set(dir + string(filepath.Separator))
 	} else {
@@ -190,6 +230,9 @@ func expandHome(p string) string {
 }
 
 func (d *FileReq) activate(i int) {
+	if i < 0 || i >= len(d.entries) {
+		return
+	}
 	e := d.entries[i]
 	if e.dir {
 		if e.name == ".." {
@@ -200,6 +243,16 @@ func (d *FileReq) activate(i int) {
 		return
 	}
 	d.path.set(filepath.Join(d.dir, e.name))
+	d.ok()
+}
+
+// enter is Return: on a selected entry nobody has typed over since, it opens
+// it (a drawer is entered); otherwise the typed path is used.
+func (d *FileReq) enter() {
+	if d.sel >= 0 && d.sel < len(d.entries) && d.path.String() == d.selPath && (d.entries[d.sel].dir || !d.save) {
+		d.activate(d.sel)
+		return
+	}
 	d.ok()
 }
 
@@ -235,8 +288,18 @@ func (d *FileReq) ok() {
 				}
 			}
 		}
+		id, after := formats[d.choice].id, d.after
+		write := func() {
+			if a.writeOut(p, id) && after != nil && !a.dirty {
+				after()
+			}
+		}
 		closeDialog()
-		a.writeOut(p, formats[d.choice].id)
+		if _, err := os.Stat(p); err == nil && filepath.Clean(p) != filepath.Clean(a.path) {
+			a.dialog = &Confirm{text: "\"" + filepath.Base(p) + "\" is already there. Replace it?", button: "Replace", yes: write}
+			return
+		}
+		write()
 		return
 	}
 	closeDialog()
@@ -299,6 +362,7 @@ func (d *FileReq) draw(u *UI) {
 				return
 			}
 			d.path.set(filepath.Join(d.dir, e.name))
+			d.selPath = d.path.String()
 		}
 	}
 	fb.clip = old
@@ -335,7 +399,7 @@ func (d *FileReq) draw(u *UI) {
 		h, _ := os.UserHomeDir()
 		d.list(h)
 	case 2:
-		d.ok()
+		d.enter()
 	case 3:
 		closeDialog()
 	}
@@ -344,6 +408,9 @@ func (d *FileReq) draw(u *UI) {
 func (d *FileReq) key(k string, ctrl, shift bool) bool {
 	rows := max(1, (ui.fb.h*4/5-3*gadH-lineH-80)/lineH)
 	move := func(n int) {
+		if len(d.entries) == 0 {
+			return
+		}
 		d.sel = max(0, min(len(d.entries)-1, d.sel+n))
 		if d.sel < d.top {
 			d.top = d.sel
@@ -356,6 +423,7 @@ func (d *FileReq) key(k string, ctrl, shift bool) bool {
 		} else if !d.save {
 			d.path.set(d.dir + string(filepath.Separator))
 		}
+		d.selPath = d.path.String()
 	}
 	switch k {
 	case "Up":
@@ -367,11 +435,7 @@ func (d *FileReq) key(k string, ctrl, shift bool) bool {
 	case "PageDown":
 		move(rows)
 	case "Return", "Keypad Enter":
-		if d.sel >= 0 && (d.entries[d.sel].dir || !d.save) && (d.sel == 0 || d.entries[d.sel].dir || strings.HasSuffix(d.path.String(), d.entries[d.sel].name)) {
-			d.activate(d.sel)
-		} else {
-			d.ok()
-		}
+		d.enter()
 	case "Escape":
 		closeDialog()
 	default:
@@ -534,11 +598,11 @@ const helpText = `MOUSE
 Draw: left paints the brush (character + colours), right erases, Shift+click draws a line from the last point.
 Colour: left sets the foreground, right the background (on a C64 page: the foreground only).
 Fill: left fills equal cells with the brush.
-Half (PC): left paints half-cell pixels in the foreground, right in the background colour.
+Half (PC): left paints half-cell pixels in the foreground, right in the background colour. Sixel (teletext): left sets, right clears a graphics pixel.
 Select: drag a block. While pasting, the block follows the mouse: left click stamps it, Shift+click stamps it without its blank cells, right click or Esc stops.
 Middle click or Pick: take a cell's character and colours.
 Characters strip: click = brush (types it with Type). Right click = put on the active F-key.
-Colours: left = foreground, right = background (C64: the screen colour; middle click: the border), Shift+click = change the colour.
+Colours: left = foreground, right = background (PETSCII and Atari: the screen colour; middle click: the border), Shift+click = change the colour.
 Pop-up gadgets: click opens the list, right click steps to the next item.
 Wheel scrolls the page, Shift+wheel sideways, Ctrl+wheel zooms around the mouse.
 Tabs: click to show, x or middle click closes, + opens a new page. With two pages on show, click a page to work on it.
@@ -553,11 +617,11 @@ Ctrl+T (or Ctrl+N) new page, Ctrl+W close page, Ctrl+Tab / Ctrl+PgDn next page, 
 Ctrl+L one page / side by side / top and bottom. "Sync" scrolls both together.
 Ctrl+A select all, Ctrl+C / X / V copy, cut, paste (text from other programs too), Del clears the block, Esc lets go.
 Alt+H flips the block (or the pasted block) left-right, Alt+V upside down; characters turn into their mirror images.
-Ctrl+G grid. Ctrl+Plus / Ctrl+Minus zoom, Ctrl+0 fits the page's width. Ctrl+R reverse (C64).
+Ctrl+G grid. Ctrl+Plus / Ctrl+Minus zoom, Ctrl+0 fits the page's width. Ctrl+R reverse (PETSCII, Atari).
 Ctrl+H hides all gadgets (only the art and the status line), Ctrl+H again brings them back.
-Dropping files on the window opens them.
+Dropping files on the window opens them. Keys in the W and H fields stay in the field until Enter, Esc or Tab.
 
-AMIGA, PC, ATARI AND C64
+PAGE TYPES: AMIGA, PC, ATARI, ATARI ST, PETSCII, ZX SPECTRUM, TELETEXT
 Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. Atari pages are ATASCII, the Atari 8-bit computers' text screen: inverse characters (Rev), one background, one text colour for the whole screen (left click a colour) and a border (middle click); .ata files, with EOL line ends and ESC before control characters. Width 38 (the screen editor's margins) or 40 (terminals) is guessed from the file and can be switched; the page is never wider. The font is AltirraOS's, free to pass on. PETSCII pages are exactly as wide as the machine's screen (the Machine gadget sets it): PET 40 or 80 columns (one colour: green, amber or white screen), VIC-20 (22 x 23, 8 text colours), C64 (40 x 25), C128 (40 columns, or 80 on the VDC with its RGBI colours). Each has its two character sets (the Font gadget: upper case + graphics, or lower + upper case), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
 Atari ST pages are the ST's VT52 terminal in one of its resolutions (the Resolution gadget): low 40 x 25 in 16 colours, medium 80 x 25 in 4, high 80 x 25 in black and white with taller characters. Each cell has its own colour and background (ESC b, ESC c); files are the VT52 stream (.vt). The font is EmuTOS's, downloaded on first use.
 
@@ -566,13 +630,13 @@ ZX Spectrum pages are its 32 x 24 screen: a character per cell with ink (left cl
 Teletext pages are 40 x 25 cells of 7-bit codes as on a BBC Micro in Mode 7 or a TV teletext page. Codes 0-31 are attributes that act from their cell to the right, as the teletext chip reads a row: text or graphics colour (F-key sets 1 and 2), double height, flash, conceal, separated, hold, new background. Codes shows their names in their cells. The Sixel tool paints the 2x3 graphics pixels of a cell (the row needs a graphics colour to its left). Files: .tti, .ep1, edit.tf links (.url; a text holding an edit.tf link opens too) and BBC Mode 7 dumps (1000-byte .bin). The characters are Bedstead's (public domain).
 
 SAVE AS
-ANSI, plain text, UTF-8 text, PC .bin, ATASCII .ata, XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border) and a web page (.html). Typing a file ending picks the format.
+ANSI, plain text, UTF-8 text, PC .bin, PCBoard .pcb, Avatar .avt, ATASCII .ata, Atari ST .vt, ZX Spectrum .scr, teletext .tti, .ep1 and edit.tf links (.url), XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border) and a web page (.html). Typing a file ending picks the format. Saving under the name of another file that is already there asks first.
 OPENING
-Everything above that holds characters opens again: ANSI, text, .bin, XBin, .ata (also as .txt, recognised by its bytes), .seq, .c, .petmate, and C64 programs saved by CharEdit. A .c or .petmate with several screens opens each screen in a tab of its own. Pictures and web pages do not open.
+Everything above that holds characters opens again: ANSI, text, .bin, XBin, .pcb, .avt, .ata (also as .txt, recognised by its bytes), .vt, .scr, .tti, .ep1, edit.tf links, .seq, .c, .petmate, and C64 programs saved by CharEdit; also iCEDraw .idf, ArtWorx .adf and TundraDraw .tnd. A .c or .petmate with several screens opens each screen in a tab of its own. Pictures and web pages do not open.
 The Commodore character sets are the machines' ROMs and do not come with the program: the first run offers to download them from the VICE emulator project (each checked by its SHA-1), and so does Settings.
 
 SETTINGS
-Kept in ~/.config/charcoal/prefs.json. "uiscale": 2 there doubles the whole window for big screens.`
+Kept in ~/.config/charcoal/prefs.json (a broken one is put aside as prefs.json.bad). Settings: the window size (1x to 4x for big screens) and the downloads, which run while you work on.`
 
 func (d *HelpReq) draw(u *UI) {
 	fb := u.fb
@@ -628,27 +692,22 @@ const stWhy = "Atari ST pages need the ST's font. Atari's own is in the TOS ROM;
 // FontReq asks to download fonts that may not come with the program.
 type FontReq struct {
 	title, why string
-	fetch      func() error
-	done       string // the message once they are here
-	firstRun   bool   // the C64 question asked on the first run
-	after      func() // what to do once they are here
+	what       string                 // what is downloading, for the status line
+	fetch      func() error           // the network part: runs in the background
+	load       func() (string, error) // takes the files in (main thread); the message once they are here
+	firstRun   bool                   // the C64 question asked on the first run
+	after      func()                 // what to do once they are here
 	err        string
 }
 
 func openC64Req(after func()) {
 	a.dialog = &FontReq{title: "Commodore character sets", why: c64Why, firstRun: true, after: after,
-		fetch: func() error {
-			if err := downloadChargen(); err != nil {
-				return err
-			}
-			a.hasC64 = true
-			return nil
-		}, done: "The Commodore character sets are here: PETSCII pages work now"}
+		what: "the Commodore character sets", fetch: fetchC64ROMs, load: loadC64Downloaded}
 }
 
 func openSTReq(after func()) {
-	a.dialog = &FontReq{title: "Atari ST font", why: stWhy, after: after, fetch: downloadSTFonts,
-		done: "The ST font is here: Atari ST pages work now"}
+	a.dialog = &FontReq{title: "Atari ST font", why: stWhy, after: after,
+		what: "the Atari ST font", fetch: fetchSTFontFiles, load: loadSTDownloaded}
 }
 
 func (d *FontReq) answered() {
@@ -658,16 +717,31 @@ func (d *FontReq) answered() {
 	}
 }
 
+// download starts the download and closes the requester; the window goes on
+// working meanwhile. If it fails, the requester comes back with the reason.
 func (d *FontReq) download() {
-	if err := d.fetch(); err != nil {
-		d.err = "Could not download: " + err.Error()
-		return
-	}
-	d.answered()
-	closeDialog()
-	a.msg(d.done)
-	if d.after != nil {
-		d.after()
+	ok := startDownload(d.what, d.fetch, func(err error) {
+		done, lerr := d.load() // what did come is taken in even when something failed
+		if err == nil {
+			err = lerr
+		}
+		if err != nil {
+			d.err = "Could not download: " + err.Error()
+			if a.dialog == nil {
+				a.dialog = d
+			} else {
+				a.msg(d.err)
+			}
+			return
+		}
+		d.answered()
+		a.msg(done)
+		if d.after != nil {
+			d.after()
+		}
+	})
+	if ok {
+		closeDialog()
 	}
 }
 
@@ -706,6 +780,118 @@ func (d *FontReq) key(k string, ctrl, shift bool) bool {
 	return true
 }
 
+// ---------------------------------------------------------------- downloads in the background
+
+// download is the one download running, if any. The network part runs in a
+// goroutine; what it got is taken in on the main thread, which alone touches
+// SDL and the font list.
+var download struct {
+	what   string // shown in the status line while it runs; "" when none runs
+	done   chan error
+	finish func(error)
+}
+
+// startDownload runs fetch in the background and finish on the main thread
+// once it is done. It says no while another download runs.
+func startDownload(what string, fetch func() error, finish func(error)) bool {
+	if download.what != "" {
+		a.msg("Wait: still downloading " + download.what)
+		return false
+	}
+	ch := make(chan error, 1)
+	download.what, download.done, download.finish = what, ch, finish
+	go func() { ch <- fetch() }()
+	a.msg("Downloading " + what + " ...")
+	return true
+}
+
+// pollDownload finishes a download that is done; it tells whether one was.
+func pollDownload() bool {
+	if download.what == "" {
+		return false
+	}
+	select {
+	case err := <-download.done:
+		finish := download.finish
+		download.what, download.done, download.finish = "", nil, nil
+		finish(err)
+		return true
+	default:
+		return false
+	}
+}
+
+// fetchC64ROMs gets every Commodore character ROM from VICE (the network part
+// of downloadChargen); only the C64's must come.
+func fetchC64ROMs() error {
+	client := &http.Client{Timeout: 20 * time.Second}
+	var c64err error
+	for i, r := range cbmROMs {
+		if err := fetchROM(client, r); err != nil && i == 0 {
+			c64err = err
+		}
+	}
+	return c64err
+}
+
+// loadC64Downloaded takes the downloaded ROMs in and names any that did not come.
+func loadC64Downloaded() (string, error) {
+	ok := loadC64Fonts()
+	a.hasC64 = hasROM("c64") // also after a failed or partial download: what came is used
+	if !ok {
+		return "", fmt.Errorf("saved the character sets but could not read them back")
+	}
+	var missing []string
+	for _, r := range cbmROMs {
+		if !hasROM(r.family) {
+			missing = append(missing, r.name)
+		}
+	}
+	if len(missing) > 0 {
+		return "The C64 character sets are here, but not these: " + strings.Join(missing, ", ") + " (try again under Settings)", nil
+	}
+	return "The Commodore character sets are here: PETSCII pages work now", nil
+}
+
+// fetchSTFontFiles gets EmuTOS's two font sources and checks them (the network
+// part of downloadSTFonts).
+func fetchSTFontFiles() error {
+	client := &http.Client{Timeout: 20 * time.Second}
+	for _, f := range stFontFiles {
+		u := "https://raw.githubusercontent.com/emutos/emutos/" + emutosVersion + "/bios/" + f.file
+		resp, err := client.Get(u)
+		if err != nil {
+			return err
+		}
+		b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode != 200 {
+			return fmt.Errorf("%s: %s", u, resp.Status)
+		}
+		sum := sha1.Sum(b)
+		if hex.EncodeToString(sum[:]) != f.sha1 {
+			return fmt.Errorf("%s is not the EmuTOS font expected", f.file)
+		}
+		if err := os.MkdirAll(filepath.Dir(stFontPath(f.file)), 0o755); err != nil {
+			return err
+		}
+		if err := writeAtomic(stFontPath(f.file), b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadSTDownloaded() (string, error) {
+	if !loadSTFonts() {
+		return "", fmt.Errorf("saved the EmuTOS fonts but could not read them")
+	}
+	return "The ST font is here: Atari ST pages work now", nil
+}
+
 // ---------------------------------------------------------------- settings
 
 type SettingsReq struct{ err string }
@@ -717,7 +903,7 @@ func (d *SettingsReq) draw(u *UI) {
 	in := u.window(centre(660, 380), "Settings")
 	y := in.y
 	fb.text(in.x, y+3, "Window size", cText)
-	sizes := []string{"1x (normal)", "2x (big screens)", "3x"}
+	sizes := []string{"1x (normal)", "2x (big screens)", "3x", "4x"} // as many as main allows (maxUIScale)
 	u.choice("uiscale", Rect{in.x + 120, y, choiceW(sizes), gadH}, sizes, scale-1, "", func(i int) {
 		scale = i + 1
 		savePrefs()
@@ -747,15 +933,25 @@ func (d *SettingsReq) draw(u *UI) {
 	if len(missing) == 0 {
 		label = "Download again"
 	}
+	if download.what != "" {
+		label = "Downloading ..."
+	}
 	if u.button(Rect{in.x, y + 6, buttonW(label), gadH}, label, false, "") != nil {
-		if err := downloadChargen(); err != nil {
-			d.err = "Could not download: " + err.Error()
-		} else {
-			a.hasC64, d.err = true, ""
+		d.err = ""
+		startDownload("the Commodore character sets", fetchC64ROMs, func(err error) {
+			done, lerr := loadC64Downloaded() // what did come is taken in even when something failed
+			if err == nil {
+				err = lerr
+			}
+			if err != nil {
+				d.err = "Could not download: " + err.Error()
+				a.msg(d.err)
+				return
+			}
 			prefs.C64Asked = true
 			savePrefs()
-			a.msg("The Commodore character sets are here: PETSCII pages work now")
-		}
+			a.msg(done)
+		})
 	}
 	y += gadH + 18
 	fb.text(in.x, y, "Atari ST font (EmuTOS)", cHi)
@@ -767,13 +963,23 @@ func (d *SettingsReq) draw(u *UI) {
 	} else {
 		fb.text(in.x, y, "Not here yet: Atari ST pages need it.", cText)
 	}
+	if download.what != "" {
+		stLabel = "Downloading ..."
+	}
 	if u.button(Rect{in.x, y + lineH + 4, buttonW(stLabel), gadH}, stLabel, false, "") != nil {
-		if err := downloadSTFonts(); err != nil {
-			d.err = "Could not download: " + err.Error()
-		} else {
-			d.err = ""
-			a.msg("The ST font is here: Atari ST pages work now")
-		}
+		d.err = ""
+		startDownload("the Atari ST font", fetchSTFontFiles, func(err error) {
+			done, lerr := loadSTDownloaded() // what did come is taken in even when something failed
+			if err == nil {
+				err = lerr
+			}
+			if err != nil {
+				d.err = "Could not download: " + err.Error()
+				a.msg(d.err)
+				return
+			}
+			a.msg(done)
+		})
 	}
 	if d.err != "" {
 		for i, l := range wrap(d.err, in.w/charW) {

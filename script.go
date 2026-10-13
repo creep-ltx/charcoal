@@ -43,8 +43,6 @@ func shot(path string) {
 	f.Close()
 }
 
-var keyNames = map[string]sdl.Keycode{}
-
 // scriptStep plays the next step; it returns false when there is none.
 func scriptStep() bool {
 	if len(script) == 0 {

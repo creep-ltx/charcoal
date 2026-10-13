@@ -9,8 +9,8 @@ import (
 )
 
 type Click struct {
-	x, y, button  int // 1 left, 2 middle, 3 right
-	shift, double bool
+	x, y, button int // 1 left, 2 middle, 3 right
+	shift        bool
 }
 
 type UI struct {
@@ -77,8 +77,7 @@ func (u *UI) check(x, y int, label string, on bool, hint string) (bool, int) {
 	f.bevel(box, false)
 	if on {
 		// the tick
-		for i, p := range [][2]int{{7, 10}, {8, 11}, {9, 12}, {10, 13}, {11, 12}, {12, 11}, {13, 10}, {14, 9}, {15, 8}, {16, 7}, {17, 6}, {18, 5}} {
-			_ = i
+		for _, p := range [][2]int{{7, 10}, {8, 11}, {9, 12}, {10, 13}, {11, 12}, {12, 11}, {13, 10}, {14, 9}, {15, 8}, {16, 7}, {17, 6}, {18, 5}} {
 			f.fill(Rect{x + p[0], y + 1 + p[1], 2, 2}, cHi)
 		}
 	}
