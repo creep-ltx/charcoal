@@ -1,7 +1,7 @@
-// amiansi - an Amiga and PC ANSI / ASCII art viewer and editor, drawn with
+// CharCool - an Amiga ANSI, PC ANSI and C64 PETSCII art viewer and editor, drawn with
 // the real bitmap fonts.
 //
-//	amiansi [FILE]
+//	charcool [FILE...]
 package main
 
 import (
@@ -35,7 +35,7 @@ func shiftHeld() bool { return sdl.GetModState()&sdl.KMOD_SHIFT != 0 }
 func main() {
 	runtime.LockOSThread()
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
-		fmt.Println("usage: amiansi [FILE...]\nAn Amiga ANSI, PC ANSI and C64 PETSCII art viewer and editor. Press ? in the window for the keys.")
+		fmt.Println("usage: charcool [FILE...]\nAn Amiga ANSI, PC ANSI and C64 PETSCII art viewer and editor. Press ? in the window for the keys.")
 		return
 	}
 	a = &App{tool: "draw", fg: 7, brush: 0x2F, charHover: -1, layout: "one"}
@@ -71,7 +71,7 @@ func main() {
 	}
 
 	if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
-		fmt.Fprintln(os.Stderr, "amiansi:", err)
+		fmt.Fprintln(os.Stderr, "charcool:", err)
 		os.Exit(1)
 	}
 	defer sdl.Quit()
@@ -85,10 +85,10 @@ func main() {
 		w, h = min(w, int(dm.W)-40), min(h, int(dm.H)-80)
 	}
 	var err error
-	window, err = sdl.CreateWindow("amiansi", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, int32(w), int32(h),
+	window, err = sdl.CreateWindow("CharCool", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, int32(w), int32(h),
 		sdl.WINDOW_RESIZABLE)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "amiansi:", err)
+		fmt.Fprintln(os.Stderr, "charcool:", err)
 		os.Exit(1)
 	}
 	window.SetMinimumSize(640, 480)
@@ -97,7 +97,7 @@ func main() {
 		renderer, err = sdl.CreateRenderer(window, -1, sdl.RENDERER_SOFTWARE)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "amiansi:", err)
+		fmt.Fprintln(os.Stderr, "charcool:", err)
 		os.Exit(1)
 	}
 	sdl.StartTextInput()
@@ -157,7 +157,7 @@ func pass() {
 	}
 	ui.drawPopup()
 	ui.click, ui.wheel = nil, 0
-	title := a.name + " - amiansi"
+	title := a.name + " - CharCool"
 	if a.dirty {
 		title = "* " + title
 	}
@@ -175,7 +175,7 @@ func present() {
 		var err error
 		texture, err = renderer.CreateTexture(sdl.PIXELFORMAT_ARGB8888, sdl.TEXTUREACCESS_STREAMING, int32(fb.w), int32(fb.h))
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "amiansi:", err)
+			fmt.Fprintln(os.Stderr, "charcool:", err)
 			os.Exit(1)
 		}
 		texW, texH = fb.w, fb.h

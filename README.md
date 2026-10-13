@@ -1,10 +1,12 @@
-# amiansi
+# CharCool
+
+Characters, cool, and a pun on charcoal.
 
 An art viewer and editor for Amiga ANSI, PC ANSI and C64 PETSCII, drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA on a PC page
 (CP437), the C64's two character sets on a C64 page.
 
-    amiansi [FILE...]     # opens its own window, one tab per file
+    charcool [FILE...]     # opens its own window, one tab per file
 
 A native program (Go + SDL2, one binary; needs only the SDL2 library that every Linux desktop has). The whole
 interface is drawn in Topaz, kept dark and small so the art comes first; **Ctrl+H** hides every gadget.
@@ -12,10 +14,10 @@ Press the **?** gadget for every key.
 
 ## Build
 
-    go build -o amiansi .     # needs Go and the SDL2 development files
+    go build -o charcool .     # needs Go and the SDL2 development files
     go test ./...             # the core: parser, writer, SAUCE
 
-`~/.local/bin/amiansi` links to the binary here.
+`~/.local/bin/charcool` links to the binary here.
 
 ## What it does
 
@@ -29,7 +31,7 @@ Press the **?** gadget for every key.
 - **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
   character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's
   ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its
-  GitHub mirror), checked by SHA-1, into `~/.local/share/amiansi/chargen.bin`; Settings can do it too. bbmp's
+  GitHub mirror), checked by SHA-1, into `~/.local/share/charcool/chargen.bin`; Settings can do it too. bbmp's
   and an installed VICE's copies are used if present.
 - **Tabs and two pages at once**: every file opens in a tab; show one page, two side by side or one over the other
   (Ctrl+L), optionally scrolling together.
@@ -41,7 +43,7 @@ Press the **?** gadget for every key.
   Shift+click edits the colour).
 - Tools: Type, Draw (Shift+click = line), Colour, Fill, Pick (or middle click), Select (copy/cut/paste/stamp), Half.
 - Undo/redo, play at modem speed, save as ANSI, plain text, UTF-8, `.bin` or PNG; dropping a file on the window opens it.
-- Settings in `~/.config/amiansi/prefs.json` (`"uiscale": 2` doubles the window for big screens).
+- Settings in `~/.config/charcool/prefs.json` (`"uiscale": 2` doubles the window for big screens).
 
 ## Files
 
@@ -54,8 +56,8 @@ Press the **?** gadget for every key.
 | `ui.go`, `gfx.go` | the gadgets and the pixel drawing |
 | `fonts.go`, `fonts/` | the embedded fonts and their mirror tables; `cp437.go` the CP437 table |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
-| `script.go` | `AMIANSI_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
-| `web/` | the earlier browser version (Python server + HTML/JS), kept for reference |
+| `script.go` | `CHARCOOL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
+| `web/` | the first version, called amiansi, that ran in the browser (Python server + HTML/JS), kept for reference |
 
 ## Fonts
 

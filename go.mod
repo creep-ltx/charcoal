@@ -1,4 +1,4 @@
-module amiansi
+module charcool
 
 go 1.24
 
