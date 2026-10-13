@@ -2,6 +2,8 @@
 
 Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer.
 
+**Start here: [docs/HANDOFF.md](docs/HANDOFF.md)** (state, the user's wishes, testing, next steps).
+
 An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw),
 Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens and teletext
 (BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
