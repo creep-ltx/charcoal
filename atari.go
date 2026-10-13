@@ -281,10 +281,12 @@ func looksAtascii(b []byte) bool {
 		return false // an archive, a program, or other binary data
 	}
 	eol, csi, lf, moves, ansi := 0, 0, 0, 0, 0
+	var dir [4]int
 	for i, c := range b {
 		switch c {
 		case 0x1C, 0x1D, 0x1E, 0x1F: // the Atari's cursor moves, used by animations
 			moves++
+			dir[c-0x1C]++
 		case 0x1B:
 			if i+1 < len(b) && b[i+1] == '[' {
 				ansi++
@@ -303,7 +305,13 @@ func looksAtascii(b []byte) bool {
 			}
 		}
 	}
-	if moves >= 16 && ansi*4 < moves && lf < moves {
+	ways := 0 // an animation moves the cursor more than one way
+	for _, n := range dir {
+		if n*10 >= moves {
+			ways++
+		}
+	}
+	if moves >= 16 && ways >= 2 && ansi*4 < moves && lf < moves {
 		return true
 	}
 	return eol >= 2 && eol > 4*csi && lf < eol

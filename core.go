@@ -10,7 +10,9 @@ package main
 //   bit 16     italic (Amiga), bit 17 underline (Amiga)
 
 import (
+	"bytes"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -691,40 +693,74 @@ func (t *Term) shiftRows(n int) {
 
 // ---------------------------------------------------------------- loading
 
-// guessAmiga scores the bytes: CP437 shading and box lines against Latin-1
-// accents and lone line feeds.
+// amigaWeight says how much each byte 0x80-0xFF points to Amiga (above 0) or
+// PC (below 0): learned from 1374 files whose machine is known (SAUCE, and
+// the Amiga-only asciiarena.se and BBS styles) with tools/bigcheck/learn-amiga-pc.py.
+// On files it had not seen it gets 98% of those without SAUCE right (the old
+// hand-made rules: 90%). Ø · ¯ « » are Amiga; █ ▀ ▄ ▒ are PC.
+var amigaWeight = [128]float64{
+	-0.157, 0.153, 0.141, 0.150, 0.787, 1.482, 0.183, 0.156, // 0x80
+	0.369, 0.552, 0.138, 0.151, 0.126, 0.149, 0.182, 0.210, // 0x88
+	0.167, 0.552, 0.182, 0.519, 0.238, 0.154, 0.316, 0.425, // 0x90
+	0.182, 0.167, 0.144, 0.145, 0.165, 0.307, 0.343, 0.167, // 0x98
+	2.241, 3.146, 0.866, 0.284, 0.634, -0.061, 2.759, 0.290, // 0xA0
+	1.127, 1.787, 0.222, 3.628, 2.879, 0.984, 1.274, 4.730, // 0xA8
+	-1.349, -3.153, -2.180, -0.359, 1.015, 0.829, 0.717, 5.455, // 0xB0
+	0.946, 0.930, -0.125, 3.649, 2.077, 2.077, 2.303, -0.156, // 0xB8
+	-1.034, 0.126, 0.543, 0.452, -0.885, 0.168, 0.680, 0.121, // 0xC0
+	-0.053, 0.380, 0.318, 0.201, 0.190, -0.491, 0.003, 0.344, // 0xC8
+	0.286, 2.008, 0.140, 0.096, 0.297, 0.191, 0.410, 0.817, // 0xD0
+	2.843, -0.945, -0.664, -4.354, -3.942, -2.635, -2.475, -3.998, // 0xD8
+	0.839, 0.157, 0.279, 0.158, 0.547, 0.715, 0.785, 0.309, // 0xE0
+	0.136, 0.171, 0.259, 0.309, 0.168, 0.210, 0.475, 0.586, // 0xE8
+	0.061, 0.132, 0.821, 0.326, 0.182, 0.049, 0.398, 2.529, // 0xF0
+	2.507, 0.505, -0.173, 0.194, 0.606, -0.284, -1.376, -0.018, // 0xF8
+}
+
+var amigaCSI = regexp.MustCompile(`\x9b[0-9;]*[mHJK]`)
+
+// guessAmiga tells Amiga from PC for a file without SAUCE: the high bytes by their
+// learned weights, line ends a little (art often passes through a PC on its way),
+// and the Amiga's 8-bit CSI for sure.
 func guessAmiga(b []byte) bool {
-	pc, am, cr, lf := 0.0, 0.0, 0.0, 0.0
-	for i, c := range b {
-		switch {
-		case (c >= 0xB0 && c <= 0xB2) || (c >= 0xC0 && c <= 0xDF) || c == 0xFE || c == 0xF9 || c == 0xFA:
-			pc++
-		case c == 0xAF || c == 0xB8 || c == 0xB7 || c == 0xB4 || c == 0xA8 || c == 0xA6 || c == 0xAB || c == 0xBB:
-			am++
-		case c == 0x9B && i+1 < len(b) && strings.IndexByte("0123456789;mHJK", b[i+1]) >= 0:
-			am += 20
-		case c >= 0x80 && c < 0xA0 && c != 0x9B:
-			// CP437 letters (ä 0x84, å 0x86, ö 0x94 ...): control codes on an Amiga, never drawn there
-			pc += 3
-		case c == 0xFD: // ², common in PC ASCII art
-			pc++
-		case c == 0x0A:
-			lf++
-			if i > 0 && b[i-1] == 0x0D {
-				cr++
-			}
-		case c == 0x0C:
-			am += 5
-		}
+	var h [256]int
+	for _, c := range b {
+		h[c]++
 	}
+	hi := 0
+	for _, n := range h[128:] {
+		hi += n
+	}
+	s := 0.0
+	if hi > 0 {
+		for i, w := range amigaWeight {
+			s += float64(h[128+i]) / float64(hi) * w
+		}
+		s *= float64(min(hi, 200)) / 20
+	}
+	lf, crlf := h['\n'], bytes.Count(b, []byte("\r\n"))
 	if lf > 4 {
-		if cr < lf/4 {
-			am += lf / 2
+		if crlf*4 < lf {
+			s += 0.5
 		} else {
-			pc += lf / 4
+			s -= 0.3
 		}
 	}
-	return am >= pc
+	if amigaCSI.Match(b) {
+		s += 10
+	}
+	// A byte 0x80-0x9F between letters is a CP437 letter (ä 0x84, å 0x86, ö 0x94):
+	// on an Amiga it is a control code, never inside a word.
+	letter := func(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
+	for i := 1; i+1 < len(b); i++ {
+		if c := b[i]; c >= 0x80 && c < 0xA0 && c != 0x9B && letter(b[i-1]) && (letter(b[i+1]) || b[i+1] == ' ') {
+			s -= 2
+		}
+	}
+	if h[0x0C] > 0 && !bytes.Contains(b, []byte("\x1b[")) { // form feed: the Amiga's clear screen
+		s++
+	}
+	return s >= 0
 }
 
 var cp437Rev = func() map[rune]byte {

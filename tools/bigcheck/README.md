@@ -8,6 +8,9 @@ Thousands of real art files, opened, checked, saved and opened again (`bigcheck_
    - `fetch-c64-github.sh`: .petmate and .c files found with `gh search code` (needs `pm.list`, see the script);
      .seq from `github.com/sblendorio/petscii-bbs`; ATASCII from breakintochat.com/collections/atascii.
    - Unzip only the art (`unzip -j '*.ans' '*.asc' '*.bin' '*.xb' '*.nfo' '*.diz' '*.txt' ...`).
+   - `fetch-asciiarena.sh`: 600 releases from asciiarena.se (its sitemap; files are at
+     `/collections/<name>/<file>`). `copy-local.sh`: ~/Amiga/BBS/BBS Style and the PETSCII on the NAS.
+   - **Not csdb.dk**: its robots.txt forbids Claude's agents (ClaudeBot, Claude-User, anthropic-ai).
 2. `BIGCHECK_DIR=/tmp/bigcheck/files go test -tags bigcheck -run BigCheck -timeout 25m -v`
 3. Read `/tmp/bigcheck/report.txt`; `/tmp/bigcheck/samples/` has a PNG of every 25th file for a contact sheet.
 
@@ -15,4 +18,9 @@ For each file: no crash; the page type against SAUCE where the file says (Amiga 
 (.seq/.c/.petmate C64, .xb PC, the ATASCII collection Atari); not empty; saved in its own format and read back
 cell for cell; a PNG. Links, macOS `._` files and web pages saved in place of files are skipped.
 
-2026-10-13: 4119 files, 0 issues, every file with a known type typed right (see the commit for what it found).
+`learn-amiga-pc.py` learns the Amiga/PC byte weights in core.go from the labelled files.
+`BIGCHECK_DIR=... go test -tags bigcheck -run BigCheckCompare` compares PETSCII rendering with the PETSCII
+editor's own PNGs (`/tmp/bigcheck/nas-png`).
+
+2026-10-13 (second run): 5457 files; the only issues left are 24 asciiarena.se pieces drawn with PC box
+characters (fairly read as PC) and one C source file. 2026-10-13 (first run): 4119 files, 0 issues, every file with a known type typed right (see the commit for what it found).
