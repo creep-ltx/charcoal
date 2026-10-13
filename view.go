@@ -363,12 +363,25 @@ func (a *App) drawBar(u *UI) int {
 		savePrefs()
 	})
 	fl.gap()
-	r := fl.place(textW("W") + 8 + 6*charW + 8)
-	fb.text(r.x, r.y+3, "W", cText)
-	if u.focus != fieldCols {
-		fieldCols.set(strconv.Itoa(a.doc.cols))
+	switch {
+	case a.c64(): // the machine's width, not to be changed
+		label := fmt.Sprintf("%d x %d", a.doc.cols, max(a.doc.usedRows(), a.mach().rows))
+		r := fl.place(textW(label) + 8)
+		fb.text(r.x+4, r.y+3, label, cText)
+		u.setHint(r, "The page is as wide as the machine's screen")
+	case a.atari(): // the screen editor's 38 or a terminal's 40
+		widths := []string{"38 columns", "40 columns"}
+		u.choice("atariwidth", fl.place(choiceW(widths)), widths, map[bool]int{true: 1}[a.doc.cols == 40], "38: text made in the Atari's screen editor (it keeps a margin of 2); 40: terminal art", func(i int) {
+			a.setCols([]int{38, 40}[i])
+		})
+	default:
+		r := fl.place(textW("W") + 8 + 6*charW + 8)
+		fb.text(r.x, r.y+3, "W", cText)
+		if u.focus != fieldCols {
+			fieldCols.set(strconv.Itoa(a.doc.cols))
+		}
+		u.field(Rect{r.x + 16, r.y, r.w - 16, r.h}, fieldCols, "Page width in columns (Enter sets it)")
 	}
-	u.field(Rect{r.x + 16, r.y, r.w - 16, r.h}, fieldCols, "Page width in columns (Enter sets it)")
 	zooms := []string{"1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "Fit"}
 	u.choice("zoom", fl.place(choiceW(zooms)), zooms, a.zoom-1, "Zoom (Ctrl+wheel, Ctrl+Plus/Minus; Ctrl+0 fits the width)", func(i int) {
 		if i == 8 {
@@ -377,7 +390,7 @@ func (a *App) drawBar(u *UI) int {
 			a.setZoom(i + 1)
 		}
 	})
-	r = fl.place(checkW("Grid"))
+	r := fl.place(checkW("Grid"))
 	if v, _ := u.check(r.x, r.y, "Grid", a.grid, "Lines between the cells; brighter every 10 columns and every 25 rows (Ctrl+G)"); v != a.grid {
 		a.grid = v
 		savePrefs()

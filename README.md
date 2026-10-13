@@ -45,6 +45,8 @@ Press the **?** gadget for every key.
   line settles it, else the width where characters stack best. Checked on the Break Into Chat collection: all 203
   real files recognised, none of 853 ANSI/NFO files on this PC mistaken for ATASCII. The font is AltirraOS's
   (Altirra emulator, all-permissive licence, `fonts/AltirraOS-LICENSE.txt`), built in.
+- Pages for a machine's screen keep its width: PETSCII the machine's, Atari 38 or 40; only Amiga and PC pages
+  can be any width (W).
 - **PETSCII page** (the Machine gadget): PET 40/80 columns (green, amber or white screen), VIC-20 (22x23, 8 text
   colours), C64 (40x25; Pepto or Colodore colours), C128 40 columns, C128 80 columns (VDC, RGBI colours). Each
   machine's own character set, upper/graphics and lower/upper, from VICE (first run or Settings, 18 KB, SHA-1

@@ -1078,16 +1078,28 @@ func (a *App) setMachine(id string) {
 	case a.source == nil && !a.dirty && a.doc.usedRows() == 0:
 		a.doc = newDoc(m.cols, m.rows)
 		a.applyMode()
-	case a.doc.cols != m.cols:
-		a.msg(fmt.Sprintf("The page stays %d columns wide; the %s has %d (W changes it)", a.doc.cols, m.name, m.cols))
+	case a.doc.cols != m.cols && a.srcKind != "marq" && a.srcKind != "petmate":
+		// The page takes the machine's width; Ctrl+Z brings the old one back.
+		cut := false
+		for y := 0; y < a.doc.usedRows(); y++ {
+			if a.doc.lastCol(y) >= m.cols {
+				cut = true
+			}
+		}
+		a.pushUndo()
+		a.doc = a.doc.withCols(m.cols)
+		a.cx = min(a.cx, m.cols-1)
+		if cut {
+			a.msg(fmt.Sprintf("The %s has %d columns: what was further right is cut (Ctrl+Z undoes it)", m.name, m.cols))
+		}
 	}
 	savePrefs()
 }
 
 func (a *App) setCols(n int) {
 	n = max(8, min(1000, n))
-	if n == a.doc.cols {
-		return
+	if n == a.doc.cols || a.c64() || (a.atari() && n != 38 && n != 40) {
+		return // a machine's screen has the width it has
 	}
 	if a.source != nil && !a.dirty {
 		a.forceCols = n
