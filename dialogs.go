@@ -3,11 +3,7 @@ package main
 // The requesters: open / save (a file list), info (SAUCE), colour, help, and yes / no.
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -707,7 +703,7 @@ func openC64Req(after func()) {
 
 func openSTReq(after func()) {
 	a.dialog = &FontReq{title: "Atari ST font", why: stWhy, after: after,
-		what: "the Atari ST font", fetch: fetchSTFontFiles, load: loadSTDownloaded}
+		what: "the Atari ST font", fetch: fetchSTFonts, load: loadSTDownloaded}
 }
 
 func (d *FontReq) answered() {
@@ -821,17 +817,14 @@ func pollDownload() bool {
 	}
 }
 
-// fetchC64ROMs gets every Commodore character ROM from VICE (the network part
-// of downloadChargen); only the C64's must come.
+// fetchC64ROMs gets the Commodore character ROMs in the background; only the
+// C64's must come (loadC64Downloaded names any others that did not).
 func fetchC64ROMs() error {
-	client := &http.Client{Timeout: 20 * time.Second}
-	var c64err error
-	for i, r := range cbmROMs {
-		if err := fetchROM(client, r); err != nil && i == 0 {
-			c64err = err
-		}
+	_, first := fetchChargen()
+	if cbmROMs[0].onDisk() == nil {
+		return first
 	}
-	return c64err
+	return nil
 }
 
 // loadC64Downloaded takes the downloaded ROMs in and names any that did not come.
@@ -851,38 +844,6 @@ func loadC64Downloaded() (string, error) {
 		return "The C64 character sets are here, but not these: " + strings.Join(missing, ", ") + " (try again under Settings)", nil
 	}
 	return "The Commodore character sets are here: PETSCII pages work now", nil
-}
-
-// fetchSTFontFiles gets EmuTOS's two font sources and checks them (the network
-// part of downloadSTFonts).
-func fetchSTFontFiles() error {
-	client := &http.Client{Timeout: 20 * time.Second}
-	for _, f := range stFontFiles {
-		u := "https://raw.githubusercontent.com/emutos/emutos/" + emutosVersion + "/bios/" + f.file
-		resp, err := client.Get(u)
-		if err != nil {
-			return err
-		}
-		b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		resp.Body.Close()
-		if err != nil {
-			return err
-		}
-		if resp.StatusCode != 200 {
-			return fmt.Errorf("%s: %s", u, resp.Status)
-		}
-		sum := sha1.Sum(b)
-		if hex.EncodeToString(sum[:]) != f.sha1 {
-			return fmt.Errorf("%s is not the EmuTOS font expected", f.file)
-		}
-		if err := os.MkdirAll(filepath.Dir(stFontPath(f.file)), 0o755); err != nil {
-			return err
-		}
-		if err := writeAtomic(stFontPath(f.file), b); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func loadSTDownloaded() (string, error) {
@@ -968,7 +929,7 @@ func (d *SettingsReq) draw(u *UI) {
 	}
 	if u.button(Rect{in.x, y + lineH + 4, buttonW(stLabel), gadH}, stLabel, false, "") != nil {
 		d.err = ""
-		startDownload("the Atari ST font", fetchSTFontFiles, func(err error) {
+		startDownload("the Atari ST font", fetchSTFonts, func(err error) {
 			done, lerr := loadSTDownloaded() // what did come is taken in even when something failed
 			if err == nil {
 				err = lerr

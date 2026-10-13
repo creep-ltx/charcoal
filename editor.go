@@ -167,7 +167,7 @@ type App struct {
 	rev, insert   bool
 	flash         bool // ZX Spectrum: new cells flash
 	showCodes     bool // teletext: show the attribute codes' names in their cells
-	ttBlack       bool // teletext: codes 0 and 16 are black (the page's own choice in edit.tf)
+	ttMeta        int  // teletext: edit.tf's page digit (bits 0-2 character set, bit 3 codes 0 and 16 are black)
 	clip          *Block
 	clipText      string
 	fset, factive int
@@ -200,8 +200,11 @@ func (a *App) pc() bool    { return a.mode == "pc" }
 func (a *App) c64() bool   { return a.mode == "c64" }
 func (a *App) atari() bool { return a.mode == "atari" }
 func (a *App) st() bool    { return a.mode == "st" }
-func (a *App) zx() bool    { return a.mode == "zx" }
-func (a *App) tt() bool    { return a.mode == "tt" }
+
+// ttBlack: does the page draw codes 0 and 16 black (edit.tf's own choice)?
+func (a *App) ttBlack() bool { return a.ttMeta&8 != 0 }
+func (a *App) zx() bool      { return a.mode == "zx" }
+func (a *App) tt() bool      { return a.mode == "tt" }
 
 // cellW is a cell's width in pixels: 12 for teletext, 8 for the rest.
 func (a *App) cellW() int {
@@ -670,7 +673,7 @@ func (a *App) paintSixel(gx, gy int, on bool) {
 		bits &^= 1 << bit
 	}
 	a.doc.set(x, y, makeCell(0x20|bits&0x1F|(bits&0x20)<<1, 0, 0, 0))
-	if row := ttDecode(a.doc, y, a.ttBlack); !row[x].mosaic && bits != 0 {
+	if row := ttDecode(a.doc, y, a.ttBlack()); !row[x].mosaic && bits != 0 {
 		a.msg("This cell is in text: put a graphics colour (F-keys, set 2) to its left to see sixels")
 	}
 }
@@ -933,11 +936,10 @@ func (a *App) reparse() {
 	if a.tt() {
 		switch {
 		case isEditTF(a.source):
-			d, black := parseEditTF(a.source)
-			a.doc, a.ttBlack = d, black
+			a.doc, a.ttMeta = parseEditTFMeta(a.source)
 		case isEP1(a.source):
 			a.doc = parseEP1(a.source)
-		case len(a.source) == 1000 && !isTTI(a.source):
+		case (len(a.source) == 1000 || len(a.source) == 1024) && !isTTI(a.source): // a Mode 7 dump
 			a.doc = parseMode7(a.source)
 		default:
 			a.doc = parseTTI(a.source)
@@ -1821,7 +1823,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	case "ep1":
 		return writeEP1(d), nil
 	case "tturl":
-		return writeEditTFURL(d, a.ttBlack), nil
+		return writeEditTFURLMeta(d, a.ttMeta), nil
 	case "utf8":
 		return []byte(strings.Join(docText(d, a.runeOf, 0, 0, 0, 0), nl) + nl), nil
 	case "bin":
@@ -1954,6 +1956,12 @@ func (a *App) writeOut(path, fmtID string) bool {
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
+	if fmtID == "vt52" {
+		if n := stUnprintable(a.doc); n > 0 {
+			a.msg(fmt.Sprintf("Saved %s; %d characters below 32 became spaces (an ST cannot print them)", path, n))
+			return true
+		}
+	}
 	a.msg(fmt.Sprintf("Saved %s (%d bytes)", path, len(data)))
 	return true
 }

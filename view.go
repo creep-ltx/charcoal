@@ -135,7 +135,7 @@ func (a *App) paintCells(fb *FB, x0, y0, z int, get func(x, y int) uint32, w, h 
 			}
 		}
 		for y := 0; y < h; y++ {
-			row := ttDecode(d, y, a.ttBlack)
+			row := ttDecode(d, y, a.ttBlack())
 			for x := 0; x < w; x++ {
 				a.drawTTCell(fb, x0+x*ttW*z, y0+y*ttH*z, z, row[x], false)
 			}
@@ -683,7 +683,7 @@ func (a *App) drawPage(u *UI, id string) {
 	x0, x1 := a.scrollX/colPx, min(a.doc.cols, (a.scrollX+p.w)/colPx+1)
 	for y := y0; y < y1; y++ {
 		if a.tt() { // a teletext row is read left to right as the chip reads it
-			row := ttDecode(a.doc, y, a.ttBlack)
+			row := ttDecode(a.doc, y, a.ttBlack())
 			for x := x0; x < x1; x++ {
 				a.drawTTCell(fb, ox+x*colPx, oy+y*rowPx, z, row[x], a.showCodes)
 			}

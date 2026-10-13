@@ -140,9 +140,24 @@ func addCBMFonts(r cbmROM, b []byte) {
 // fetched again. Whatever it gets is loaded; if any machine's ROM could not be
 // had, the error names those machines (the others work).
 func downloadChargen() error {
+	missing, first := fetchChargen()
+	loadC64Fonts()
+	if len(missing) > 0 {
+		return fmt.Errorf("could not get the character set of %s (%v)", strings.Join(missing, ", "), first)
+	}
+	for _, r := range cbmROMs {
+		if !hasROM(r.family) {
+			return fmt.Errorf("saved the %s character set but could not read it back", r.name)
+		}
+	}
+	return nil
+}
+
+// fetchChargen is the network part of downloadChargen (safe off the main thread:
+// it does not touch the font list). It skips ROMs already on disk and names the
+// machines whose ROM did not come, with the first reason.
+func fetchChargen() (missing []string, first error) {
 	client := &http.Client{Timeout: 20 * time.Second}
-	var missing []string
-	var first error
 	for _, r := range cbmROMs {
 		if r.onDisk() != nil {
 			continue
@@ -154,16 +169,7 @@ func downloadChargen() error {
 			}
 		}
 	}
-	loadC64Fonts()
-	if len(missing) > 0 {
-		return fmt.Errorf("could not get the character set of %s (%v)", strings.Join(missing, ", "), first)
-	}
-	for _, r := range cbmROMs {
-		if !hasROM(r.family) {
-			return fmt.Errorf("saved the %s character set but could not read it back", r.name)
-		}
-	}
-	return nil
+	return missing, first
 }
 
 // romURLs are the places a ROM is fetched from, in order.

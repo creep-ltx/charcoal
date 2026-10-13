@@ -122,6 +122,18 @@ var stFontURL = func(file string) string {
 // downloadSTFonts fetches the two font sources from EmuTOS and checks them;
 // a right copy already here is not fetched again.
 func downloadSTFonts() error {
+	if err := fetchSTFonts(); err != nil {
+		return err
+	}
+	if !loadSTFonts() {
+		return fmt.Errorf("saved the EmuTOS fonts but could not read them")
+	}
+	return nil
+}
+
+// fetchSTFonts is the network part of downloadSTFonts (safe off the main thread:
+// it does not touch the font list); fonts already on disk are kept.
+func fetchSTFonts() error {
 	client := &http.Client{Timeout: 20 * time.Second}
 	for _, f := range stFontFiles {
 		if b, err := os.ReadFile(stFontPath(f.file)); err == nil && sha1Is(b, f.sha1) {
@@ -140,9 +152,6 @@ func downloadSTFonts() error {
 		if err := writeAtomic(stFontPath(f.file), b); err != nil {
 			return err
 		}
-	}
-	if !loadSTFonts() {
-		return fmt.Errorf("saved the EmuTOS fonts but could not read them")
 	}
 	return nil
 }
