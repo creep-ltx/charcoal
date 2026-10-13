@@ -120,7 +120,7 @@ jobs:
         with:
           path: ~/sdl2
           key: sdl2-${{ env.SDL_VERSION }}-universal-static-11.0
-      - name: SDL2 (built from source: a static library for arm64 and x86_64)
+      - name: SDL2 (built from source, a static library for arm64 and x86_64)
         if: steps.sdlcache.outputs.cache-hit != 'true'
         run: |
           curl -sSfL -o sdl.tar.gz "https://github.com/libsdl-org/SDL/releases/download/release-$SDL_VERSION/SDL2-$SDL_VERSION.tar.gz"
