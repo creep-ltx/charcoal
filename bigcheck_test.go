@@ -67,8 +67,13 @@ func cellsMatch(fmtID string, x, y *Doc) (bool, string) {
 func expectedMode(path string, b []byte) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
-	case ".seq", ".petmate", ".c":
+	case ".seq", ".petmate":
 		return "c64"
+	case ".c":
+		if strings.Contains(string(b[:min(len(b), 400)]), "unsigned char") {
+			return "c64"
+		}
+		return "" // C source, not art
 	case ".xb":
 		return "pc"
 	}

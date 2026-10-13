@@ -41,6 +41,17 @@ var palettes = []*Palette{
 	{id: "custom", name: "Custom"},
 }
 
+func init() { // the other Commodore palettes go after the C64's
+	var out []*Palette
+	for _, p := range palettes {
+		out = append(out, p)
+		if p.id == "c64" {
+			out = append(out, cbmPalettes...)
+		}
+	}
+	palettes = out
+}
+
 func paletteByID(id string) *Palette {
 	for _, p := range palettes {
 		if p.id == id {
@@ -124,6 +135,7 @@ type Tab struct {
 	srcIndex            int         // which screen of a file that holds several
 	ownFont             *Font       // a font that came in the file (XBin)
 	ownPal              *[16]uint32 // a palette that came in the file (XBin)
+	machine             string      // the Commodore machine of a PETSCII page
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -158,6 +170,7 @@ type App struct {
 	defFont       map[string]string // the fonts and palettes a new tab starts with
 	defPalette    map[string]string
 	defZoom       int
+	defMachine    string
 	ch8Default    bool
 	smearDefault  bool
 }
@@ -177,6 +190,15 @@ func (a *App) font() *Font {
 	if a.ownFont != nil && a.fontFor[a.mode] == "xbin" {
 		return a.ownFont
 	}
+	if a.c64() {
+		fam := a.mach().family
+		if f := fontByID(a.fontFor["c64"]); f != nil && strings.HasPrefix(f.id, fam) {
+			return f
+		}
+		if f := fontByID(fam + "upper"); f != nil {
+			return f
+		}
+	}
 	if f := fontByID(a.fontFor[a.mode]); f != nil && f.kind == a.mode {
 		return f
 	}
@@ -189,7 +211,15 @@ func (a *App) font() *Font {
 }
 
 // lower: a C64 page in the lower + upper case set.
-func (a *App) lower() bool { return a.font().id == "c64lower" }
+func (a *App) lower() bool { return strings.HasSuffix(a.font().id, "lower") }
+
+// mach is the Commodore machine of a PETSCII page.
+func (a *App) mach() Machine { return machineByID(a.machine) }
+
+// setCase picks the upper or lower case set of the page's machine.
+func (a *App) setCase(lower bool) {
+	a.fontFor["c64"] = a.mach().family + map[bool]string{true: "lower", false: "upper"}[lower]
+}
 
 func (a *App) cellH() int {
 	if a.screen() || (a.ch8 && a.amiga()) || (a.font() == a.ownFont && a.ownFont != nil && a.ownFont.h8) {
@@ -256,8 +286,8 @@ func (a *App) setPalette() {
 		return
 	}
 	p := paletteByID(a.paletteFor[a.mode])
-	if a.c64() && p.id != "custom" && p.id != "c64" {
-		p = c64Palette
+	if a.c64() && !strings.Contains(" c64 colodore vic20 vdc petgreen petamber petwhite custom ", " "+p.id+" ") {
+		p = paletteByID(a.mach().palette)
 	}
 	if a.atari() && p.id != "custom" && p.id != "atari" {
 		p = atariPalette
@@ -708,7 +738,7 @@ func (a *App) reparse() {
 		if scr, err := a.screens(a.source, a.srcKind); err == nil && a.srcIndex < len(scr) {
 			a.doc = scr[a.srcIndex].doc
 			if l := scr[a.srcIndex].lower; l >= 0 {
-				a.fontFor["c64"] = map[bool]string{true: "c64lower", false: "c64upper"}[l == 1]
+				a.setCase(l == 1)
 			}
 		}
 		a.doc.ensureRows(max(a.doc.rows, 25))
@@ -718,12 +748,14 @@ func (a *App) reparse() {
 	if a.atari() {
 		a.doc = parseAta(a.source, a.forceCols)
 	} else if a.c64() {
-		d, lower := parseSeq(a.source, a.forceCols)
+		cols := a.forceCols
+		if cols == 0 {
+			cols = a.mach().cols
+		}
+		d, lower := parseSeq(a.source, cols)
 		a.doc = d
-		if lower == 1 {
-			a.fontFor["c64"] = "c64lower"
-		} else if lower == 0 {
-			a.fontFor["c64"] = "c64upper"
+		if lower >= 0 {
+			a.setCase(lower == 1)
 		}
 	} else {
 		d, _, fr := parseArt(a.source, ParseOpts{amiga: a.amiga(), binary: a.sourceBin, forceCols: a.forceCols})
@@ -974,7 +1006,7 @@ func (a *App) applyMode() {
 	a.setPalette()
 }
 
-var modeNames = map[string]string{"amiga": "Amiga", "pc": "PC", "c64": "C64", "atari": "Atari"}
+var modeNames = map[string]string{"amiga": "Amiga", "pc": "PC", "c64": "PETSCII", "atari": "Atari"}
 
 func (a *App) setMode(m string) {
 	if m == a.mode {
@@ -993,7 +1025,7 @@ func (a *App) setMode(m string) {
 		// An empty page takes the new machine's width and colours.
 		switch {
 		case m == "c64":
-			a.doc = newDoc(40, 25)
+			a.doc = newDoc(a.mach().cols, a.mach().rows)
 		case m == "atari":
 			a.doc = newAtariDoc()
 		case was == "c64" || was == "atari":
@@ -1012,6 +1044,33 @@ func (a *App) setMode(m string) {
 		a.msg("Shown with the " + modeNames[m] + " font and colours; the bytes are unchanged")
 	}
 	a.applyMode()
+	savePrefs()
+}
+
+// setMachine makes a PETSCII page one for another Commodore machine: its
+// character set, palette and width.
+func (a *App) setMachine(id string) {
+	m := machineByID(id)
+	if !hasROM(m.family) {
+		openC64Req(func() { a.setMachine(id) })
+		return
+	}
+	lower := a.lower()
+	a.machine, a.defMachine = id, id
+	a.setCase(lower)
+	a.paletteFor["c64"] = m.palette
+	a.setPalette()
+	switch {
+	case a.source != nil && !a.dirty && (a.srcKind == "" || a.srcKind == "seq"):
+		a.forceCols = m.cols
+		a.reparse()
+		a.setCase(lower)
+	case a.source == nil && !a.dirty && a.doc.usedRows() == 0:
+		a.doc = newDoc(m.cols, m.rows)
+		a.applyMode()
+	case a.doc.cols != m.cols:
+		a.msg(fmt.Sprintf("The page stays %d columns wide; the %s has %d (W changes it)", a.doc.cols, m.name, m.cols))
+	}
 	savePrefs()
 }
 
@@ -1053,8 +1112,10 @@ func (a *App) newTab(mode string) *Tab {
 	}
 	t.ch8, t.smear = a.ch8Default, a.smearDefault
 	t.doc = newDoc(80, 25)
+	t.machine = a.defMachine
 	if mode == "c64" {
-		t.doc = newDoc(40, 25)
+		m := machineByID(t.machine)
+		t.doc = newDoc(m.cols, m.rows)
 		t.saveFmt, t.name = "seq", "untitled.seq"
 	}
 	if mode == "atari" {
@@ -1241,7 +1302,7 @@ var formats = []Format{
 	{"utf8", "UTF-8 text, no colours (.txt)", ".txt", "amiga pc c64 atari"},
 	{"bin", "PC binary (.bin)", ".bin", "pc"},
 	{"xbin", "XBin, font and palette inside (.xb)", ".xb", "amiga pc"},
-	{"prg", "C64 program that shows it (.prg)", ".prg", "c64"},
+	{"prg", "C64 program that shows it (.prg)", ".prg", "c64 (C64)"},
 	{"marq", "C array: PETSCII editor, Petmate (.c)", ".c", "c64"},
 	{"petmate", "Petmate workspace (.petmate)", ".petmate", "c64"},
 	{"png", "Picture (.png)", ".png", "amiga pc c64 atari"},
@@ -1253,6 +1314,9 @@ var formats = []Format{
 func (a *App) modeFormats() []Format {
 	var out []Format
 	for _, f := range formats {
+		if f.modes == "c64 (C64)" && (!a.c64() || a.machine != "c64") {
+			continue // a C64 program runs on a C64 only
+		}
 		if strings.Contains(f.modes, a.mode) {
 			out = append(out, f)
 		}

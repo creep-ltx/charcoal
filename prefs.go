@@ -24,6 +24,7 @@ type Prefs struct {
 	Baud     int                `json:"baud"`
 	UIScale  int                `json:"uiscale"`
 	Grid     bool               `json:"grid"`
+	Machine  string             `json:"machine"`
 	C64Asked bool               `json:"c64asked"` // the first-run question about the C64 character set
 	Width    int                `json:"width"`
 	Height   int                `json:"height"`
@@ -56,6 +57,7 @@ func loadPrefs() {
 		a.defZoom = 2
 	}
 	a.grid = prefs.Grid
+	a.defMachine = machineByID(prefs.Machine).id
 	a.fkeys = defaultFkeys()
 	for _, m := range []string{"amiga", "pc", "c64", "atari"} {
 		if f := prefs.Fkeys[m]; len(f) > 0 {
@@ -98,6 +100,7 @@ func savePrefs() {
 	a.defZoom = a.zoom
 	p.Mode, p.Font, p.Palette, p.Zoom, p.Ch8, p.Smear = a.mode, a.defFont, a.defPalette, a.zoom, a.ch8, a.smear
 	p.Grid = a.grid
+	p.Machine = a.defMachine
 	p.UIScale = scale
 	p.Fkeys, p.Dir, p.Baud = a.fkeys, a.lastDir, a.baud
 	p.Custom = nil

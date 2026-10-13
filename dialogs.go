@@ -557,12 +557,12 @@ Ctrl+H hides all gadgets (only the art and the status line), Ctrl+H again brings
 Dropping files on the window opens them.
 
 AMIGA, PC, ATARI AND C64
-Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. Atari pages are ATASCII, the Atari 8-bit computers' text screen: inverse characters (Rev), one background, one text colour for the whole screen (left click a colour) and a border (middle click); .ata files, with EOL line ends and ESC before control characters. Width 38 (the screen editor's margins) or 40 (terminals) is guessed from the file. The font is AltirraOS's, free to pass on. C64 pages are PETSCII: 40 columns, the C64's two character sets (the Font gadget), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
+Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. Atari pages are ATASCII, the Atari 8-bit computers' text screen: inverse characters (Rev), one background, one text colour for the whole screen (left click a colour) and a border (middle click); .ata files, with EOL line ends and ESC before control characters. Width 38 (the screen editor's margins) or 40 (terminals) is guessed from the file. The font is AltirraOS's, free to pass on. PETSCII pages are for a Commodore machine (the Machine gadget): PET 40 or 80 columns (one colour: green, amber or white screen), VIC-20 (22 x 23, 8 text colours), C64 (40 x 25), C128 (40 columns, or 80 on the VDC with its RGBI colours). Each has its two character sets (the Font gadget: upper case + graphics, or lower + upper case), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
 SAVE AS
 ANSI, plain text, UTF-8 text, PC .bin, ATASCII .ata, XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border) and a web page (.html). Typing a file ending picks the format.
 OPENING
 Everything above that holds characters opens again: ANSI, text, .bin, XBin, .ata (also as .txt, recognised by its bytes), .seq, .c, .petmate, and C64 programs saved by CharEdit. A .c or .petmate with several screens opens each screen in a tab of its own. Pictures and web pages do not open.
-The C64 character set is the C64's ROM and does not come with the program: the first run offers to download it from the VICE emulator project (checked by its SHA-1), and so does Settings. A chargen.bin of your own (4096 bytes) in ~/.local/share/charcoal/ works too.
+The Commodore character sets are the machines' ROMs and do not come with the program: the first run offers to download them from the VICE emulator project (each checked by its SHA-1), and so does Settings.
 
 SETTINGS
 Kept in ~/.config/charcoal/prefs.json. "uiscale": 2 there doubles the whole window for big screens.`
@@ -609,9 +609,10 @@ func (d *HelpReq) key(k string, ctrl, shift bool) bool {
 
 // ---------------------------------------------------------------- the C64 character set
 
-const c64Why = "C64 pages (PETSCII) need the C64's character set. It is the C64's own ROM, so it does not come " +
-	"with this program, but the VICE emulator project hands it out. Download it from VICE now? (4 KB, checked " +
-	"before it is used, kept in ~/.local/share/charcoal/.) You can also do this later under Settings."
+const c64Why = "PETSCII pages need the Commodore character sets (PET, VIC-20, C64, C128). They are the machines' " +
+	"own ROMs, so they do not come with this program, but the VICE emulator project hands them out. Download them " +
+	"from VICE now? (18 KB, each checked before it is used, kept in ~/.local/share/charcoal/.) You can also do this " +
+	"later under Settings."
 
 type C64Req struct {
 	after func() // what to do once the character set is here
@@ -635,14 +636,14 @@ func (d *C64Req) download() {
 	a.hasC64 = true
 	d.answered()
 	closeDialog()
-	a.msg("The C64 character set is here: C64 pages work now")
+	a.msg("The Commodore character sets are here: PETSCII pages work now")
 	if d.after != nil {
 		d.after()
 	}
 }
 
 func (d *C64Req) draw(u *UI) {
-	in := u.window(centre(560, 240), "C64 character set")
+	in := u.window(centre(600, 260), "Commodore character sets")
 	y := in.y
 	for _, l := range wrap(c64Why, in.w/charW) {
 		u.fb.text(in.x, y, l, cText)
@@ -684,7 +685,7 @@ func openSettings() { a.dialog = &SettingsReq{} }
 
 func (d *SettingsReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(600, 260), "Settings")
+	in := u.window(centre(640, 280), "Settings")
 	y := in.y
 	fb.text(in.x, y+3, "Window size", cText)
 	sizes := []string{"1x (normal)", "2x (big screens)", "3x"}
@@ -693,24 +694,28 @@ func (d *SettingsReq) draw(u *UI) {
 		savePrefs()
 	})
 	y += gadH + 16
-	fb.text(in.x, y, "C64 character set", cHi)
+	fb.text(in.x, y, "Commodore character sets (PETSCII)", cHi)
 	y += lineH + 4
-	status := "Not here yet: C64 pages need it."
-	if a.hasC64 {
-		status = "Here. C64 pages work."
-		for _, p := range c64Paths() {
-			if st, err := os.Stat(p); err == nil && st.Size() == 4096 {
-				status = "Here: " + p
-				break
-			}
+	var have, missing []string
+	for _, r := range cbmROMs {
+		if hasROM(r.family) {
+			have = append(have, r.name)
+		} else {
+			missing = append(missing, r.name)
 		}
+	}
+	status := "Here: " + strings.Join(have, ", ") + "."
+	if len(have) == 0 {
+		status = "Not here yet: PETSCII pages need them."
+	} else if len(missing) > 0 {
+		status += " Missing: " + strings.Join(missing, ", ") + "."
 	}
 	for _, l := range wrap(status, in.w/charW) {
 		fb.text(in.x, y, l, cText)
 		y += lineH
 	}
 	label := "Download from VICE"
-	if a.hasC64 {
+	if len(missing) == 0 {
 		label = "Download again"
 	}
 	if u.button(Rect{in.x, y + 6, buttonW(label), gadH}, label, false, "") != nil {
@@ -720,7 +725,7 @@ func (d *SettingsReq) draw(u *UI) {
 			a.hasC64, d.err = true, ""
 			prefs.C64Asked = true
 			savePrefs()
-			a.msg("The C64 character set is here: C64 pages work now")
+			a.msg("The Commodore character sets are here: PETSCII pages work now")
 		}
 	}
 	if d.err != "" {

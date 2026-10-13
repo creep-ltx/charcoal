@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -35,6 +36,10 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	switch {
 	case a.atari():
 		fgc = a.pal[a.doc.ink]
+	case a.c64() && a.mach().mono: // the PET: one colour on the screen
+		fgc = a.pal[1]
+	case a.c64() && a.mach().colours == 8: // the VIC-20 shows 8 text colours
+		fgc = a.pal[fg&7]
 	case a.amiga() && a.smear && fg > 7:
 		fgc, smear = a.pal[fg&7], true
 	default:
@@ -283,7 +288,7 @@ func (a *App) drawBar(u *UI) int {
 		a.save(true)
 	}
 	fl.gap()
-	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata files. C64: PETSCII, .seq files."
+	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata files. PETSCII: PET, VIC-20, C64, C128, .seq files."
 	for _, m := range []string{"amiga", "pc", "atari", "c64"} {
 		if u.button(fl.place(buttonW(modeNames[m])), modeNames[m], a.mode == m, modeHint) != nil {
 			a.setMode(m)
@@ -307,11 +312,35 @@ func (a *App) drawBar(u *UI) int {
 		fontNames = append(fontNames, a.ownFont.name)
 		fontIDs = append(fontIDs, "xbin")
 	}
-	allFonts := []string{}
-	for _, f := range fonts {
-		allFonts = append(allFonts, f.name)
+	if a.c64() {
+		var mNames []string
+		mcur := 0
+		for i, m := range machines {
+			mNames = append(mNames, m.name)
+			if m.id == a.machine {
+				mcur = i
+			}
+		}
+		u.choice("machine", fl.place(choiceW(mNames)), mNames, mcur, "The Commodore machine: its character set, colours and screen width", func(i int) {
+			a.setMachine(machines[i].id)
+		})
+		var keep []int
+		for i, id := range fontIDs { // only this machine's two sets
+			if strings.HasPrefix(id, a.mach().family) {
+				keep = append(keep, i)
+			}
+		}
+		var n2, id2 []string
+		cur2 := 0
+		for _, i := range keep {
+			if i == cur {
+				cur2 = len(n2)
+			}
+			n2, id2 = append(n2, fontNames[i]), append(id2, fontIDs[i])
+		}
+		fontNames, fontIDs, cur = n2, id2, cur2
 	}
-	u.choice("font", fl.place(choiceW(allFonts)), fontNames, cur, "Font (on a C64 page: the character set)", func(i int) {
+	u.choice("font", fl.place(choiceW(fontNames)), fontNames, cur, "Font (on a PETSCII page: upper case + graphics, or lower + upper case)", func(i int) {
 		a.fontFor[a.mode] = fontIDs[i]
 		savePrefs()
 	})
@@ -889,7 +918,7 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		}
 		x = fb.text(x+charW*2, y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 	}
-	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": "C64 PETSCII", "atari": "Atari ATASCII"}[a.mode]
+	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII"}[a.mode]
 	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, max(a.doc.usedRows(), 1)), cText) + 24
 	name := a.path
 	if name == "" {
