@@ -763,6 +763,24 @@ func (a *App) setTool(t string) {
 	}
 }
 
+// toolKey picks a tool from the keyboard and says which.
+func (a *App) toolKey(t string) {
+	if t == "half" && !a.pc() && !a.tt() {
+		a.msg("The Half tool is for PC pages, the Sixel tool for teletext pages")
+		return
+	}
+	a.setTool(t)
+	for _, tl := range tools {
+		if tl.id == t {
+			name := tl.name
+			if t == "half" && a.tt() {
+				name = "Sixel"
+			}
+			a.msg(name + " tool")
+		}
+	}
+}
+
 // setFg sets the brush's colour; on an Atari page, the text colour of the whole screen.
 func (a *App) setFg(i int) {
 	if a.atari() {

@@ -100,3 +100,22 @@ func TestFlipBrush(t *testing.T) {
 		t.Errorf("Alt+V on the brush: %x", a.brush)
 	}
 }
+
+func TestToolKeys(t *testing.T) {
+	a := testApp(t, "amiga")
+	for k, want := range map[string]string{"T": "type", "D": "draw", "K": "colour", "L": "fill", "P": "pick", "S": "select"} {
+		editorKey(k, false, false, true)
+		if a.tool != want {
+			t.Errorf("Alt+%s: tool %s, want %s", k, a.tool, want)
+		}
+	}
+	editorKey("B", false, false, true)
+	if a.tool == "half" {
+		t.Error("Alt+B gave the Half tool on an Amiga page")
+	}
+	a = testApp(t, "pc")
+	editorKey("B", false, false, true)
+	if a.tool != "half" {
+		t.Errorf("Alt+B on a PC page: %s", a.tool)
+	}
+}
