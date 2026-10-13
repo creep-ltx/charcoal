@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
 func TestAtari(t *testing.T) {
 	// The font: ATASCII 'A' is the ROM's internal 33, the heart internal 64; the top half inverse.
@@ -75,5 +78,57 @@ func TestAtariWidth(t *testing.T) {
 	}
 	if w := atariWidth(b); w != 38 {
 		t.Fatalf("38-wide stream: %d", w)
+	}
+	// Cursor moves print nothing: 38 characters and two moves before an EOL are not a 40-wide line.
+	first := append(bytes.Repeat([]byte{'Q'}, 38), 0x1E, 0x1F, 0x9B)
+	if w := atariWidth(append(first, b...)); w != 38 {
+		t.Fatalf("cursor moves counted as characters: %d", w)
+	}
+	// But a character shown through ESC is printed.
+	if w := atariWidth(append(bytes.Repeat([]byte{'Q'}, 38), 0x1B, 0x1C, 0x9B)); w != 40 {
+		t.Fatalf("ESC + control: %d", w)
+	}
+}
+
+// Saved .ata files end without an EOL (it would scroll the Atari's screen), yet
+// every row comes back, empty ones at the end included (audit #10).
+func TestAtaHeight(t *testing.T) {
+	for _, tc := range []struct {
+		rows   int
+		filled []int // rows with something in them
+		full   int   // a row filled to the edge, -1 none
+	}{
+		{3, []int{0}, -1}, {5, []int{0, 2}, -1}, {4, []int{3}, -1}, {24, []int{0, 23}, -1},
+		{2, []int{}, -1}, {1, []int{}, -1}, {3, []int{0}, 2}, {3, []int{0}, 1},
+	} {
+		d := newAtariDoc()
+		d.glyph0 = true
+		d.rows = tc.rows
+		d.cells = make([]uint32, 40*tc.rows)
+		fillCells(d.cells, blank)
+		for _, y := range tc.filled {
+			d.set(0, y, makeCell('A'+y, 0, 0, 0))
+			d.set(5, y, makeCell(0x1C, 0, 0, 0)) // a control's glyph, sent after ESC
+		}
+		if tc.full >= 0 {
+			for x := 0; x < 40; x++ {
+				d.set(x, tc.full, makeCell('#', 0, 0, 0))
+			}
+		}
+		for _, clear := range []bool{true, false} {
+			out := writeAta(d, clear)
+			if len(out) > 0 && out[len(out)-1] == 0x9B {
+				t.Fatalf("%+v: ends with EOL", tc)
+			}
+			back := parseAta(out, 40)
+			if back.rows != tc.rows {
+				t.Fatalf("%+v clear=%v: %d rows came back: % x", tc, clear, back.rows, out)
+			}
+			for i := range d.cells[:40*tc.rows] {
+				if cellCh(back.cells[i]) != cellCh(d.cells[i]) {
+					t.Fatalf("%+v: cell %d", tc, i)
+				}
+			}
+		}
 	}
 }

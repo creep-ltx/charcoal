@@ -9,10 +9,7 @@ package main
 // The font is the 48K ROM's (fonts/zx-spectrum-NOTICE.txt); codes 128-143 are
 // the block graphics, made from their bits; 144-164 the UDGs, A-U at start-up.
 
-import (
-	_ "embed"
-	"fmt"
-)
+import _ "embed"
 
 //go:embed fonts/zx-spectrum-48-charset.font
 var zxROMFont []byte
@@ -101,13 +98,14 @@ func writeSCR(d *Doc) []byte {
 	return out
 }
 
-func isSCR(b []byte, name string) bool {
-	return len(b) == 6912
-}
-
 // parseSCR reads a screen: each cell's pixels matched to a character (as is, or
 // with ink and paper swapped); it tells how many cells were only near a character.
+// Any file can be opened as a screen: a short one is read as if padded with
+// zeros, bytes past 6912 are ignored.
 func parseSCR(b []byte) (*Doc, int) {
+	if len(b) < 6912 {
+		b = append(append(make([]byte, 0, 6912), b...), make([]byte, 6912-len(b))...)
+	}
 	d := newZXDoc()
 	approx := 0
 	for cy := 0; cy < 24; cy++ {
@@ -146,7 +144,6 @@ func parseSCR(b []byte) (*Doc, int) {
 			d.set(cx, cy, zxCell(best, ink, paper, bright, flash))
 		}
 	}
-	d.border = 7
 	return d, approx
 }
 
@@ -193,5 +190,3 @@ func zxRune(c int) rune {
 	}
 	return ' '
 }
-
-var _ = fmt.Sprint

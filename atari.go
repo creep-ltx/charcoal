@@ -179,16 +179,22 @@ func parseAta(b []byte, cols int) *Doc {
 // longer than 38 settles it; otherwise the width where the rows line up best
 // (the same character stacked over itself) wins.
 func atariWidth(b []byte) int {
-	run := 0
+	run, esc := 0, false
 	for _, c := range b {
-		switch c {
-		case 0x9B:
+		switch {
+		case esc: // ESC: the next byte is shown, whatever it is
+			esc = false
+			run++
+		case c == 0x1B:
+			esc = true
+		case c == 0x9B:
 			if run > 38 && run <= 40 { // a line of 39 or 40 ended by EOL
 				return 40
 			}
 			run = 0
-		case 0x7D:
+		case c == 0x7D:
 			run = 0
+		case atariControl(c): // cursor moves, tabs, deletes: nothing printed
 		default:
 			run++
 		}
@@ -213,7 +219,10 @@ func atariWidth(b []byte) int {
 }
 
 // writeAta gives the page as ATASCII: EOL after a row that does not fill the
-// width, ESC before characters the editor would act on.
+// width, ESC before characters the editor would act on. Every row is written,
+// but no EOL after the last one: on the Atari's bottom line it would scroll the
+// screen and lose the top row. An empty last row is a cursor right instead, so
+// the file still ends on that row (and opens exactly as tall).
 func writeAta(d *Doc, clear bool) []byte {
 	var out []byte
 	if clear {
@@ -232,8 +241,11 @@ func writeAta(d *Doc, clear bool) []byte {
 			}
 			out = append(out, c)
 		}
-		if last < d.cols-1 {
+		switch {
+		case y < rows-1 && last < d.cols-1:
 			out = append(out, 0x9B)
+		case y == rows-1 && last < 0:
+			out = append(out, 0x1F)
 		}
 	}
 	return out

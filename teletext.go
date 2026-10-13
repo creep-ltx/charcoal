@@ -223,11 +223,24 @@ func editTFMatch(b []byte) [][]byte {
 
 func isEditTF(b []byte) bool { return editTFMatch(b) != nil }
 
-// parseEditTF reads the page in an edit.tf link: 7 bits per cell, row by row, in base64url.
+// The digit before the colon in an edit.tf link (read in edit.tf's
+// teletext-editor.js): bits 0-2 the character set (0 English, 1 German,
+// 2 Swedish, 3 Italian, 4 Belgian, 5 ASCII, 6 Hebrew, 7 Cyrillic), bit 3 black
+// foreground allowed (codes 0 and 16 are black, not ignored).
+const editTFBlack = 8
+
+// parseEditTF reads the page in an edit.tf link; the bool is "black foreground allowed".
 func parseEditTF(b []byte) (*Doc, bool) {
+	d, meta := parseEditTFMeta(b)
+	return d, meta&editTFBlack != 0
+}
+
+// parseEditTFMeta reads the page in an edit.tf link: 7 bits per cell, row by
+// row, in base64url. It gives the whole meta digit back (character set and black).
+func parseEditTFMeta(b []byte) (*Doc, int) {
 	m := editTFMatch(b)
 	if m == nil {
-		return nil, false
+		return nil, 0
 	}
 	meta, _ := strconv.ParseUint(string(m[1]), 16, 8)
 	s := m[2]
@@ -247,11 +260,21 @@ func parseEditTF(b []byte) (*Doc, bool) {
 		}
 		d.cells[i] = makeCell(code, 0, 0, 0)
 	}
-	return d, meta >= 8
+	return d, int(meta)
 }
 
-// editTFHash gives the part after the # of an edit.tf link for the page.
+// editTFHash gives the part after the # of an edit.tf link for the page
+// (English character set).
 func editTFHash(d *Doc, blackFg bool) string {
+	meta := 0
+	if blackFg {
+		meta = editTFBlack
+	}
+	return editTFHashMeta(d, meta)
+}
+
+// editTFHashMeta gives the part after the # with the meta digit as read by parseEditTFMeta.
+func editTFHashMeta(d *Doc, meta int) string {
 	b64 := make([]byte, 1167)
 	for r := 0; r < 25; r++ {
 		for c := 0; c < 40; c++ {
@@ -264,12 +287,8 @@ func editTFHash(d *Doc, blackFg bool) string {
 			}
 		}
 	}
-	meta := 0
-	if blackFg {
-		meta = 8
-	}
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "%x:", meta)
+	fmt.Fprintf(&sb, "%x:", meta&15)
 	for _, v := range b64 {
 		sb.WriteByte(editTF[v])
 	}
@@ -278,6 +297,11 @@ func editTFHash(d *Doc, blackFg bool) string {
 
 func writeEditTFURL(d *Doc, blackFg bool) []byte {
 	return []byte("[InternetShortcut]\r\nURL=https://edit.tf/#" + editTFHash(d, blackFg) + "\r\n")
+}
+
+// writeEditTFURLMeta keeps the whole meta digit (the character set too).
+func writeEditTFURLMeta(d *Doc, meta int) []byte {
+	return []byte("[InternetShortcut]\r\nURL=https://edit.tf/#" + editTFHashMeta(d, meta) + "\r\n")
 }
 
 func isTTI(b []byte) bool { return bytes.Contains(b[:min(len(b), 4096)], []byte("OL,")) }
@@ -311,8 +335,8 @@ func parseTTI(b []byte) *Doc {
 		for j := 0; j < len(text) && x < 40; j++ {
 			c := int(text[j])
 			switch {
-			case c == 0x1B && j+1 < len(text):
-				j++
+			case c == 0x1B && j+1 < len(text) && text[j+1] >= 0x40 && text[j+1] <= 0x5F:
+				j++ // ESC and code+0x40; any other ESC is the code 0x1B itself
 				c = int(text[j]) - 0x40
 			case c >= 0x80:
 				c -= 0x80
@@ -372,13 +396,14 @@ func writeEP1(d *Doc) []byte {
 	return append(out, 0x00, 0x00)
 }
 
-// isMode7: a 1000-byte BBC Micro screen dump (codes may carry the top bit).
+// isMode7: a BBC Micro screen dump (codes may carry the top bit): the 1000
+// bytes on screen, or all 1024 of screen memory (&7C00-&7FFF), the first 1000 shown.
 func isMode7(b []byte, name string) bool {
-	if len(b) != 1000 || !strings.HasSuffix(strings.ToLower(name), ".bin") && !strings.HasSuffix(strings.ToLower(name), ".m7") {
+	if len(b) != 1000 && len(b) != 1024 || !strings.HasSuffix(strings.ToLower(name), ".bin") && !strings.HasSuffix(strings.ToLower(name), ".m7") {
 		return false
 	}
 	ctl := 0
-	for _, c := range b {
+	for _, c := range b[:1000] {
 		if c&0x7F < 0x20 && c&0x7F != 0 {
 			ctl++
 		}
@@ -386,9 +411,10 @@ func isMode7(b []byte, name string) bool {
 	return ctl >= 10
 }
 
+// parseMode7 reads a dump of any length: the first 1000 bytes, short ones padded with spaces.
 func parseMode7(b []byte) *Doc {
 	d := newTTDoc()
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 1000 && i < len(b); i++ {
 		d.cells[i] = makeCell(int(b[i]&0x7F), 0, 0, 0)
 	}
 	return d

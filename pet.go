@@ -18,16 +18,22 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
+// dataDir is where programs keep their data: $XDG_DATA_HOME if it is an
+// absolute path (the XDG rules say to ignore a relative one), else
+// ~/.local/share; with no home folder known, the temporary folder.
 func dataDir() string {
-	home, _ := os.UserHomeDir()
-	data := os.Getenv("XDG_DATA_HOME")
-	if data == "" {
-		data = filepath.Join(home, ".local", "share")
+	if data := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(data) {
+		return data
 	}
-	return data
+	home, err := os.UserHomeDir()
+	if err != nil || !filepath.IsAbs(home) {
+		return os.TempDir()
+	}
+	return filepath.Join(home, ".local", "share")
 }
 
 // A Commodore character ROM: where VICE keeps it, its size and SHA-1, and the
@@ -74,16 +80,31 @@ func loadC64Fonts() bool {
 		if fontByID(r.family+"upper") != nil {
 			continue
 		}
-		for _, p := range r.paths() {
-			b, err := os.ReadFile(p)
-			if err != nil || len(b) != r.size {
-				continue
-			}
+		if b := r.onDisk(); b != nil {
 			addCBMFonts(r, b)
-			break
 		}
 	}
 	return fontByID("c64upper") != nil
+}
+
+// ok: is this the ROM (size and SHA-1)?
+func (r cbmROM) ok(b []byte) bool {
+	sum := sha1.Sum(b)
+	return len(b) == r.size && hex.EncodeToString(sum[:]) == r.sha1
+}
+
+// onDisk is the first right copy of the ROM on this computer, nil if none.
+func (r cbmROM) onDisk() []byte {
+	for _, p := range r.paths() {
+		fi, err := os.Stat(p)
+		if err != nil || fi.Size() != int64(r.size) {
+			continue
+		}
+		if b, err := os.ReadFile(p); err == nil && r.ok(b) {
+			return b
+		}
+	}
+	return nil
 }
 
 // hasROM: is this machine's character set here?
@@ -114,44 +135,71 @@ func addCBMFonts(r cbmROM, b []byte) {
 	}
 }
 
-// downloadChargen fetches every Commodore character ROM from VICE, checks it and
-// keeps it in ~/.local/share/charcoal. It fails only if the C64's cannot be had.
+// downloadChargen fetches the Commodore character ROMs from VICE, checks them and
+// keeps them in ~/.local/share/charcoal; ROMs already here (and right) are not
+// fetched again. Whatever it gets is loaded; if any machine's ROM could not be
+// had, the error names those machines (the others work).
 func downloadChargen() error {
 	client := &http.Client{Timeout: 20 * time.Second}
-	var c64err error
-	for i, r := range cbmROMs {
-		if err := fetchROM(client, r); err != nil && i == 0 {
-			c64err = err
+	var missing []string
+	var first error
+	for _, r := range cbmROMs {
+		if r.onDisk() != nil {
+			continue
+		}
+		if err := fetchROM(client, r); err != nil {
+			missing = append(missing, r.name)
+			if first == nil {
+				first = err
+			}
 		}
 	}
-	if c64err != nil {
-		return c64err
+	loadC64Fonts()
+	if len(missing) > 0 {
+		return fmt.Errorf("could not get the character set of %s (%v)", strings.Join(missing, ", "), first)
 	}
-	if !loadC64Fonts() {
-		return fmt.Errorf("saved the character sets but could not read them back")
+	for _, r := range cbmROMs {
+		if !hasROM(r.family) {
+			return fmt.Errorf("saved the %s character set but could not read it back", r.name)
+		}
 	}
 	return nil
 }
 
-func fetchROM(client *http.Client, r cbmROM) error {
-	var last error
-	for _, u := range []string{
+// romURLs are the places a ROM is fetched from, in order.
+var romURLs = func(r cbmROM) []string {
+	return []string{
 		"https://sourceforge.net/p/vice-emu/code/HEAD/tree/trunk/vice/data/" + r.vice + "?format=raw",
 		"https://raw.githubusercontent.com/VICE-Team/svn-mirror/main/vice/data/" + r.vice,
-	} {
-		resp, err := client.Get(u)
+	}
+}
+
+// fetchBody gets a URL: the body (at most limit bytes), or what went wrong.
+func fetchBody(client *http.Client, u string, limit int64) ([]byte, error) {
+	resp, err := client.Get(u)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s: %s", u, resp.Status)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %v", u, err)
+	}
+	return b, nil
+}
+
+func fetchROM(client *http.Client, r cbmROM) error {
+	var last error
+	for _, u := range romURLs(r) {
+		b, err := fetchBody(client, u, 65536)
 		if err != nil {
 			last = err
 			continue
 		}
-		b, err := io.ReadAll(io.LimitReader(resp.Body, 65536))
-		resp.Body.Close()
-		if err != nil || resp.StatusCode != 200 {
-			last = fmt.Errorf("%s: %s", u, resp.Status)
-			continue
-		}
-		sum := sha1.Sum(b)
-		if len(b) != r.size || hex.EncodeToString(sum[:]) != r.sha1 {
+		if !r.ok(b) {
 			last = fmt.Errorf("the file from %s is not the %s character ROM", u, r.name)
 			continue
 		}
@@ -321,7 +369,10 @@ func (t *PetTerm) write(b []byte) {
 		case 0x8E:
 			t.lower = 0
 		case 0x14: // delete
-			if t.x > 0 {
+			if t.x == 0 && t.y > 0 { // the KERNAL goes back to the end of the line above and blanks it
+				t.x, t.y = d.cols-1, t.y-1
+				d.set(t.x, t.y, blank)
+			} else if t.x > 0 {
 				for x := t.x - 1; x < d.cols-1; x++ {
 					d.set(x, t.y, d.get(x+1, t.y))
 				}
@@ -375,6 +426,17 @@ func parseSeq(b []byte, cols int) (*Doc, int) {
 
 // writeSeq gives the page as PETSCII: colour and reverse codes only where they change,
 // RETURN after a row that does not fill the width.
+//
+// Every row is written, but no RETURN after the last one: on the C64's bottom
+// line it would scroll the screen and lose the top row. An empty last row is a
+// cursor right instead, so the file still ends on that row (and opens exactly
+// as tall).
+//
+// Quote mode: each " printed toggles the screen editor's quote mode, in which
+// colour, reverse and cursor codes print as reversed glyphs instead of acting
+// (only RETURN and DEL still act; KERNAL 901227-03, $E716-$E7EE). So before a
+// control code after an odd number of quotes, another " closes quote mode and a
+// DEL takes that quote off the screen again.
 func writeSeq(d *Doc, lower, clear bool) []byte {
 	var out []byte
 	if clear {
@@ -385,7 +447,14 @@ func writeSeq(d *Doc, lower, clear bool) []byte {
 	} else {
 		out = append(out, 0x8E)
 	}
-	fg, rev := -1, false
+	fg, rev, quote := -1, false, false
+	control := func(c byte) {
+		if quote {
+			out = append(out, 0x22, 0x14)
+			quote = false
+		}
+		out = append(out, c)
+	}
 	rows := d.rows
 	for y := 0; y < rows; y++ {
 		last := d.lastCol(y)
@@ -395,20 +464,27 @@ func writeSeq(d *Doc, lower, clear bool) []byte {
 			if r := sc&0x80 != 0; r != rev {
 				rev = r
 				if r {
-					out = append(out, 0x12)
+					control(0x12)
 				} else {
-					out = append(out, 0x92)
+					control(0x92)
 				}
 			}
 			if sc != 0x20 && cellFg(v) != fg { // a space shows no colour
 				fg = cellFg(v)
-				out = append(out, petColour[fg])
+				control(petColour[fg])
 			}
-			out = append(out, screenToPet(sc&0x7F))
+			c := screenToPet(sc & 0x7F)
+			if c == 0x22 {
+				quote = !quote
+			}
+			out = append(out, c)
 		}
-		if last < d.cols-1 {
+		switch {
+		case y < rows-1 && last < d.cols-1:
 			out = append(out, 0x0D)
-			rev = false // RETURN ends reverse on a C64
+			rev, quote = false, false // RETURN ends reverse and quote mode on a C64
+		case y == rows-1 && last < 0:
+			control(0x1D)
 		}
 	}
 	return out

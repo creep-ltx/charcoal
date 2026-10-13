@@ -11,7 +11,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -78,7 +77,7 @@ func loadSTFonts() bool {
 			continue
 		}
 		src, err := os.ReadFile(stFontPath(f.file))
-		if err != nil {
+		if err != nil || !sha1Is(src, f.sha1) {
 			continue
 		}
 		start := bytes.Index(src, []byte("dat_table[]"))
@@ -110,22 +109,29 @@ func loadSTFonts() bool {
 	return hasSTFont()
 }
 
-// downloadSTFonts fetches the two font sources from EmuTOS and checks them.
+func sha1Is(b []byte, want string) bool {
+	sum := sha1.Sum(b)
+	return hex.EncodeToString(sum[:]) == want
+}
+
+// stFontURL is where an EmuTOS font source is fetched from.
+var stFontURL = func(file string) string {
+	return "https://raw.githubusercontent.com/emutos/emutos/" + emutosVersion + "/bios/" + file
+}
+
+// downloadSTFonts fetches the two font sources from EmuTOS and checks them;
+// a right copy already here is not fetched again.
 func downloadSTFonts() error {
 	client := &http.Client{Timeout: 20 * time.Second}
 	for _, f := range stFontFiles {
-		u := "https://raw.githubusercontent.com/emutos/emutos/" + emutosVersion + "/bios/" + f.file
-		resp, err := client.Get(u)
+		if b, err := os.ReadFile(stFontPath(f.file)); err == nil && sha1Is(b, f.sha1) {
+			continue
+		}
+		b, err := fetchBody(client, stFontURL(f.file), 1<<20)
 		if err != nil {
 			return err
 		}
-		b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		resp.Body.Close()
-		if err != nil || resp.StatusCode != 200 {
-			return fmt.Errorf("%s: %s", u, resp.Status)
-		}
-		sum := sha1.Sum(b)
-		if hex.EncodeToString(sum[:]) != f.sha1 {
+		if !sha1Is(b, f.sha1) {
 			return fmt.Errorf("%s is not the EmuTOS font expected", f.file)
 		}
 		if err := os.MkdirAll(filepath.Dir(stFontPath(f.file)), 0o755); err != nil {
@@ -169,10 +175,11 @@ type STTerm struct {
 	sx, sy      int
 	state       int // 0 text, 1 ESC, 2 ESC Y row, 3 ESC Y column, 4 ESC b, 5 ESC c
 	row         int
+	rows        int // the screen's rows: ESC Y goes no further down (TOS clamps it)
 }
 
 func newSTTerm(d *Doc, r STRes) *STTerm {
-	return &STTerm{doc: d, fg: r.fg, bg: r.bg, wrap: true}
+	return &STTerm{doc: d, fg: r.fg, bg: r.bg, wrap: true, rows: r.rows}
 }
 
 func (t *STTerm) cursor() (int, int) { return t.x, t.y }
@@ -191,7 +198,7 @@ func (t *STTerm) write(b []byte) {
 			t.row, t.state = int(c)-32, 3
 			continue
 		case 3:
-			t.y, t.x = max(0, t.row), max(0, min(d.cols-1, int(c)-32))
+			t.y, t.x = max(0, min(max(1, t.rows)-1, t.row)), max(0, min(d.cols-1, int(c)-32))
 			t.state = 0
 			continue
 		case 4:
@@ -201,19 +208,24 @@ func (t *STTerm) write(b []byte) {
 			t.bg, t.state = int(c)&15, 0
 			continue
 		}
+		// The controls as TOS takes them (EmuTOS bios/vt52.c normal_ascii):
+		// 7-13 act, ESC starts a sequence, every other byte below 32 is thrown away.
 		switch c {
 		case 0x1B:
 			t.state = 1
 		case '\r':
 			t.x = 0
-		case '\n':
+		case '\n', 0x0B, 0x0C: // vertical tab and form feed are line feeds too
 			t.y++
 		case 0x08:
 			t.x = max(0, t.x-1)
 		case 0x09:
 			t.x = min(d.cols-1, (t.x&^7)+8)
-		case 0x07, 0x00:
+		case 0x07: // the bell
 		default:
+			if c < 0x20 {
+				continue
+			}
 			fg, bg := t.fg, t.bg
 			if t.rev {
 				fg, bg = bg, fg
@@ -320,8 +332,13 @@ func parseVT52(b []byte, r STRes, cols int) *Doc {
 	return d
 }
 
-// writeVT52 gives the page as VT52: clear screen, the colours where they change
-// (as '0'+pen, which TOS reads as pen & 15), CR LF after every row.
+// writeVT52 gives the page as VT52: clear screen, wrap off (as TOS starts), the
+// colours where they change (as '0'+pen, which TOS reads as pen & 15), CR LF
+// between rows. Every row is written, but no CR LF after the last one: on the
+// ST's bottom line the line feed would scroll the screen and lose the top row.
+// An empty last row is a cursor right (ESC C) instead, so the file still ends on
+// that row (and opens exactly as tall). Wrap stays off at the end: that is how
+// TOS starts (EmuTOS vt52_init).
 func writeVT52(d *Doc, r STRes) []byte {
 	out := []byte{0x1B, 'b', byte('0' + r.fg), 0x1B, 'c', byte('0' + r.bg), 0x1B, 'E', 0x1B, 'w'}
 	fg, bg := r.fg, r.bg
@@ -337,19 +354,48 @@ func writeVT52(d *Doc, r STRes) []byte {
 				bg = b
 				out = append(out, 0x1B, 'c', byte('0'+b))
 			}
-			out = append(out, safeByte(byte(cellCh(v))))
+			out = append(out, stSafeByte(byte(cellCh(v))))
 		}
-		out = append(out, '\r', '\n')
+		switch {
+		case y < d.rows-1:
+			out = append(out, '\r', '\n')
+		case last < 0:
+			out = append(out, 0x1B, 'C')
+		}
 	}
 	return out
 }
 
-// The F-key sets of an ST page: ASCII line drawing, then the ST's own symbols.
+// stSafeByte: TOS prints every byte from 32 up; the ones below are controls or
+// thrown away (and would pull the rest of the row left), so they cannot be
+// shown by printing: they are written as spaces. stUnprintable counts them.
+func stSafeByte(c byte) byte {
+	if c < 0x20 {
+		return ' '
+	}
+	return c
+}
+
+// stUnprintable counts the cells an ST cannot show by printing (glyphs 0-31),
+// which writeVT52 saves as spaces.
+func stUnprintable(d *Doc) int {
+	n := 0
+	for _, v := range d.cells[:d.rows*d.cols] {
+		if cellCh(v) < 0x20 {
+			n++
+		}
+	}
+	return n
+}
+
+// The F-key sets of an ST page: ASCII line drawing, then the ST's own symbols
+// from 127 up (the ones below 32 cannot be printed on an ST, see stSafeByte):
+// ⌂ † ¶ © ® ™ « » ¿ ¡, then ± ≥ ≤ ÷ ≈ ⌠ ⌡ Σ Ω π, then • · √ ⁿ ² ³ ° ≡ ∞ §.
 var stFkeys = [][]int{
 	{'-', '=', '|', '/', '\\', '_', '+', '*', '#', '.'},
 	{'(', ')', '[', ']', '<', '>', '{', '}', ':', ';'},
-	{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0B},
-	{0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17},
+	{0x7F, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xAE, 0xAF, 0xA8, 0xAD},
+	{0xF1, 0xF2, 0xF3, 0xF6, 0xF7, 0xF4, 0xF5, 0xE4, 0xEA, 0xE3},
 	{0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xF8, 0xF0, 0xDF, 0xDD},
 }
 
