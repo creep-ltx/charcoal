@@ -306,6 +306,130 @@ func writeEditTFURLMeta(d *Doc, meta int) []byte {
 
 func isTTI(b []byte) bool { return bytes.Contains(b[:min(len(b), 4096)], []byte("OL,")) }
 
+// A .tti file is lines of "XX,..." commands (MRG Systems' format, read by
+// wxTED, vbit2, QTeletextMaker, edit.tf). Lines before the first PN belong to
+// the whole file (DE description, DS source, SP path, and CT/PS/RE that the
+// subpages take as their defaults); each PN line (page mppss: magazine 1-8,
+// page 00-FF hex, subpage 00-99) starts a subpage with its own SC subcode, PS
+// status, CT cycle time, RE region, FL Fastext links, PF page function and its
+// OL rows: 0-24 the page, 25 hidden, 26-28 enhancement packets, 29 the
+// magazine's M/29. Only OL rows 0-24 are the page; every other line is kept
+// byte for byte when a subpage is saved again.
+
+// ttiSubpages cuts a .tti file into its subpages, each from its PN line up to
+// the next one; the lines before the first PN go with the first. Joined
+// together they are the file again, byte for byte.
+func ttiSubpages(b []byte) [][]byte {
+	var out [][]byte
+	start, seenPN := 0, false
+	for i := 0; i < len(b); {
+		end := bytes.IndexByte(b[i:], '\n')
+		if end < 0 {
+			end = len(b)
+		} else {
+			end += i + 1
+		}
+		if bytes.HasPrefix(b[i:end], []byte("PN,")) {
+			if seenPN {
+				out = append(out, b[start:i])
+				start = i
+			}
+			seenPN = true
+		}
+		i = end
+	}
+	return append(out, b[start:])
+}
+
+// ttiPageRow tells whether a .tti line is one of the page's rows (OL,0 to
+// OL,24 as parseTTI reads them), and which.
+func ttiPageRow(line []byte) (int, bool) {
+	line = bytes.TrimRight(line, "\r\n")
+	if !bytes.HasPrefix(line, []byte("OL,")) {
+		return 0, false
+	}
+	rest := line[3:]
+	comma := bytes.IndexByte(rest, ',')
+	if comma < 0 {
+		return 0, false
+	}
+	row, err := strconv.Atoi(string(rest[:comma]))
+	if err != nil || row < 0 || row > 24 {
+		return 0, false
+	}
+	return row, true
+}
+
+// ttiSameChars: do two teletext pages hold the same codes (all a .tti keeps)?
+func ttiSameChars(x, y *Doc) bool {
+	for r := 0; r < 25; r++ {
+		for c := 0; c < 40; c++ {
+			if cellCh(x.get(c, r))&0x7F != cellCh(y.get(c, r))&0x7F {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// ttiReplaceSubpage gives the subpage seg with its page rows written from d
+// and every other line (PN, SC, PS, CT, FL, OL 25-29, unknown ones) kept as it
+// was, in order; the new rows go where the first old one was. A page that
+// still holds the same codes keeps its bytes as they are.
+func ttiReplaceSubpage(seg []byte, d *Doc) []byte {
+	if ttiSameChars(parseTTI(seg), d) {
+		return seg
+	}
+	nl := "\r\n"
+	if bytes.Contains(seg, []byte("\n")) && !bytes.Contains(seg, []byte("\r\n")) {
+		nl = "\n"
+	}
+	rows := ttiRows(d, nl)
+	var out []byte
+	done := false
+	for i := 0; i < len(seg); {
+		end := bytes.IndexByte(seg[i:], '\n')
+		if end < 0 {
+			end = len(seg)
+		} else {
+			end += i + 1
+		}
+		line := seg[i:end]
+		i = end
+		if _, ok := ttiPageRow(line); ok {
+			if !done {
+				out, done = append(out, rows...), true
+			}
+			continue
+		}
+		out = append(out, line...)
+	}
+	if !done {
+		if len(out) > 0 && out[len(out)-1] != '\n' {
+			out = append(out, nl...)
+		}
+		out = append(out, rows...)
+	}
+	return out
+}
+
+// writeTTISubpage gives the .tti file b back with its subpage i (from 0)
+// written from d and everything else as it was.
+func writeTTISubpage(b []byte, i int, d *Doc) []byte {
+	segs := ttiSubpages(b)
+	if i < 0 || i >= len(segs) {
+		return writeTTI(d)
+	}
+	var out []byte
+	for j, s := range segs {
+		if j == i {
+			s = ttiReplaceSubpage(s, d)
+		}
+		out = append(out, s...)
+	}
+	return out
+}
+
 // parseTTI reads the first subpage of a .tti page: OL,row,text lines; codes 0-31
 // are written as 0x80+code, or as ESC and code+0x40.
 func parseTTI(b []byte) *Doc {
@@ -352,6 +476,12 @@ func parseTTI(b []byte) *Doc {
 func writeTTI(d *Doc) []byte {
 	var out []byte
 	out = append(out, "DE,Made with CharEdit\r\nPN,10000\r\nSC,0000\r\nPS,8000\r\n"...)
+	return append(out, ttiRows(d, "\r\n")...)
+}
+
+// ttiRows gives a page's OL lines, codes 0-31 written as ESC and code+0x40.
+func ttiRows(d *Doc, nl string) []byte {
+	var out []byte
 	for y := 0; y < min(d.rows, 25); y++ {
 		last := -1
 		for x := d.cols - 1; x >= 0; x-- {
@@ -372,7 +502,7 @@ func writeTTI(d *Doc) []byte {
 				out = append(out, c)
 			}
 		}
-		out = append(out, "\r\n"...)
+		out = append(out, nl...)
 	}
 	return out
 }

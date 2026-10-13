@@ -50,6 +50,7 @@ type autosaveMeta struct {
 	WriteSauce bool      `json:"write_sauce"`
 	Clear      bool      `json:"clear,omitempty"`
 	Notes      []string  `json:"notes,omitempty"`
+	Subpage    int       `json:"tti_subpage,omitempty"` // a .tti carousel's subpage, from 1 (saving keeps the others)
 }
 
 // An autosave on disk: id.json and id.cells (the cells, 4 bytes each, little-endian).
@@ -81,6 +82,9 @@ func writeAutosave(t *Tab) error {
 		Cols: d.cols, Rows: d.rows, Bg: d.bg, Border: d.border, Ink: d.ink, Glyph0: d.glyph0,
 		Title: t.info.title, Author: t.info.author, Group: t.info.group, WriteSauce: t.info.writeSauce,
 		Clear: t.info.clear, Notes: t.info.notes}
+	if t.srcKind == "tti" {
+		m.Subpage = t.srcIndex + 1
+	}
 	js, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
@@ -226,6 +230,12 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	}
 	a.info = Info{title: m.Title, author: m.Author, group: m.Group, writeSauce: m.WriteSauce, clear: m.Clear, notes: m.Notes}
 	a.source, a.srcKind = nil, ""
+	if m.Subpage > 0 && m.Path != "" {
+		// A subpage of a carousel: the file as it is now gives the other subpages.
+		if b, err := os.ReadFile(m.Path); err == nil && isTTI(b) && m.Subpage <= len(ttiSubpages(b)) {
+			a.source, a.srcKind, a.srcIndex = b, "tti", m.Subpage-1
+		}
+	}
 	a.gen = nextGen() // changed, not saved
 	a.dirty = true
 	a.cx, a.cy = 0, 0

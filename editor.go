@@ -147,8 +147,8 @@ type Tab struct {
 	scrollX, scrollY    int
 	page                Rect // where the page view was laid out
 	pal                 [16]uint32
-	srcKind             string      // "xbin", "marq", "petmate" or "prg" for files that are not a stream of codes
-	srcIndex            int         // which screen of a file that holds several
+	srcKind             string      // "xbin", "marq", "petmate" or "prg" for files that are not a stream of codes; "tti" for a teletext .tti
+	srcIndex            int         // which screen (or .tti subpage) of a file that holds several
 	ownFont             *Font       // a font that came in the file (XBin)
 	ownPal              *[16]uint32 // a palette that came in the file (XBin)
 	machine             string      // the Commodore machine of a PETSCII page
@@ -1093,6 +1093,9 @@ func (a *App) reparse() {
 	}
 	if a.tt() {
 		switch {
+		case a.srcKind == "tti":
+			segs := ttiSubpages(a.source)
+			a.doc = parseTTI(segs[min(a.srcIndex, len(segs)-1)])
 		case isEditTF(a.source):
 			a.doc, a.ttMeta = parseEditTFMeta(a.source)
 		case isEP1(a.source):
@@ -1253,12 +1256,12 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		mode = "c64"
 	case strings.HasSuffix(strings.ToLower(name), ".ata") && sauce == nil:
 		mode = "atari"
+	case isEditTF(b) || isEP1(b) || isMode7(b, name) || (strings.HasSuffix(strings.ToLower(name), ".tti") && isTTI(b)):
+		mode = "tt" // before VT52: a .tti row may hold ESC codes
 	case sauce == nil && isVT52(b):
 		mode = "st"
 	case strings.HasSuffix(strings.ToLower(name), ".scr") && len(b) == 6912:
 		mode = "zx"
-	case isEditTF(b) || isEP1(b) || isMode7(b, name) || (strings.HasSuffix(strings.ToLower(name), ".tti") && isTTI(b)):
-		mode = "tt"
 	case sauce == nil && !utf && looksAtascii(b):
 		mode = "atari"
 	case strings.HasPrefix(sfont, "amiga"):
@@ -1341,14 +1344,40 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		a.saveFmt = "ansi"
 	}
 	a.undo, a.redo = nil, nil
+	ttiSubs := 0
+	if a.saveFmt == "tti" && isTTI(b) {
+		a.srcKind, a.srcIndex = "tti", 0
+		ttiSubs = len(ttiSubpages(b))
+	}
 	a.reparse()
 	a.applyMode()
 	a.gen = nextGen()
 	a.markSaved()
 	a.scrollX, a.scrollY = 0, 0
+	if ttiSubs > 1 {
+		a.openTTISubpages(b, name, path, ttiSubs)
+		return
+	}
 	if a.doc.fullest {
 		a.msg("An animation that ends nearly empty: showing its fullest picture (Play shows it all)")
 	}
+}
+
+// openTTISubpages opens subpages 2 and on of a .tti carousel, each in a tab
+// of its own; every tab keeps the whole file, so that saving one writes the
+// file back with only its own subpage changed.
+func (a *App) openTTISubpages(b []byte, name, path string, n int) {
+	first := a.Tab
+	first.name = fmt.Sprintf("%s (subpage 1 of %d)", name, n)
+	for i := 1; i < n; i++ {
+		t := a.newTab("tt")
+		a.Tab = t
+		a.mode, a.srcKind, a.srcIndex = "tt", "tti", i
+		a.finishLoad(b, fmt.Sprintf("%s (subpage %d of %d)", name, i+1, n), path, nil, "tti")
+	}
+	a.Tab = first
+	a.applyMode()
+	a.msg(fmt.Sprintf("%s has %d subpages: each is in a tab of its own; saving one keeps the others", name, n))
 }
 
 // notArt names files that are surely not art (archives, programs, pictures), or "".
@@ -2122,6 +2151,9 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	case "scr":
 		return writeSCR(d), nil
 	case "tti":
+		if a.srcKind == "tti" && isTTI(a.source) {
+			return writeTTISubpage(a.source, a.srcIndex, d), nil
+		}
 		return writeTTI(d), nil
 	case "ep1":
 		return writeEP1(d), nil
@@ -2263,11 +2295,22 @@ func (a *App) writeOut(path, fmtID string) bool {
 	if strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") { // the page's own file; the others are exports
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
-		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg", "pcb": "pcb", "avt": "avt"}[fmtID]
-		a.srcIndex = 0
+		wasTTI := a.srcKind == "tti"
+		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg", "pcb": "pcb", "avt": "avt", "tti": "tti"}[fmtID]
+		if fmtID != "tti" || !wasTTI {
+			a.srcIndex = 0
+		}
 		a.markSaved()
 		dropAutosave(a.Tab)
 		addRecent(path)
+		if n := ttiCount(fmtID, data); n > 1 {
+			a.name = fmt.Sprintf("%s (subpage %d of %d)", a.name, a.srcIndex+1, n)
+			for _, t := range a.tabs { // the other subpages' tabs of this file now build on what was saved
+				if t != a.Tab && t.srcKind == "tti" && t.path == path {
+					t.source = data
+				}
+			}
+		}
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
@@ -2281,8 +2324,20 @@ func (a *App) writeOut(path, fmtID string) bool {
 			return true
 		}
 	}
+	if n := ttiCount(fmtID, data); n > 1 {
+		a.msg(fmt.Sprintf("Saved %s (%d bytes): subpage %d written, the other %d kept as they were", path, len(data), a.srcIndex+1, n-1))
+		return true
+	}
 	a.msg(fmt.Sprintf("Saved %s (%d bytes)", path, len(data)))
 	return true
+}
+
+// ttiCount is how many subpages a saved .tti holds (0 for other formats).
+func ttiCount(fmtID string, data []byte) int {
+	if fmtID != "tti" {
+		return 0
+	}
+	return len(ttiSubpages(data))
 }
 
 func (a *App) save(as bool) {

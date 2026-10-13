@@ -20,10 +20,13 @@ against each platform's best editor. Each step says what it wins.
   configurable keys, crash autosave, a quiet interface, a fast viewer.
 - **The one blocker for everybody**: Linux only, no release, no website.
 
-## Step 0: data loss, now
+## Step 0: data loss, now (done 2026-10-14)
 
-- Teletext: a .tti with several subpages (a carousel) keeps only the first; saving drops the rest.
-  Keep all subpages (as frames, step 3), and the page number, header, Fastext links (PN, SC, PS, FL).
+- [x] Teletext: a .tti with several subpages (a carousel) kept only the first; saving dropped the rest.
+  Done: each subpage opens in a tab of its own; saving a tab writes the whole file back with only its
+  subpage's OL rows 0-24 changed, every other line (PN, SC, PS, CT, DE, FL, RE, OL 25-29 enhancement
+  packets, unknown commands) kept byte for byte; an unchanged page saves byte-identical. Frames come in step 2.
+  Also fixed: a .tti whose rows hold ESC E / ESC Y opened as Atari ST VT52.
 
 ## Step 1: everyone can get it (wins: every artist not on Linux - most of them)
 
