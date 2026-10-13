@@ -350,7 +350,7 @@ func (t *PetTerm) write(b []byte) {
 			if t.beforeClear != nil {
 				t.beforeClear()
 			}
-			fillCells(d.cells[:d.rows*d.cols], blank)
+			d.clearPage(blank, 25) // also gives back the rows below the screen
 			t.x, t.y = 0, 0
 		case 0x13:
 			t.x, t.y = 0, 0

@@ -458,7 +458,7 @@ func openInfo() {
 }
 
 func (d *InfoReq) ok() {
-	a.info = Info{title: d.title.String(), author: d.author.String(), group: d.group.String(), writeSauce: d.sauce, clear: d.clear}
+	a.info = Info{title: d.title.String(), author: d.author.String(), group: d.group.String(), writeSauce: d.sauce, clear: d.clear, notes: a.info.notes}
 	closeDialog()
 }
 

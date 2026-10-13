@@ -68,14 +68,8 @@ func FuzzParsers(f *testing.F) {
 		check("edit.tf", func() []*Doc { d, _ := parseEditTF(b); return one(d) })
 		check("tti", func() []*Doc { return one(parseTTI(b)) })
 		check("ep1", func() []*Doc { return one(parseEP1(b)) })
-		// parseMode7 and parseSCR crash on input of another size today (audit #2); that is
-		// being fixed in teletext.go / zx.go. Until then they only get the size they expect.
-		if len(b) == 1000 {
-			check("mode7", func() []*Doc { return one(parseMode7(b)) })
-		}
-		if len(b) == 6912 {
-			check("scr", func() []*Doc { d, _ := parseSCR(b); return one(d) })
-		}
+		check("mode7", func() []*Doc { return one(parseMode7(b)) }) // any length (Open as)
+		check("scr", func() []*Doc { d, _ := parseSCR(b); return one(d) })
 		check("marq", func() []*Doc { return screens(parseMarq(b)) })
 		check("xbin", func() []*Doc { return own(parseXBin(b)) })
 		check("petmate", func() []*Doc { return screens(parsePetmate(b)) })

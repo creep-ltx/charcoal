@@ -112,7 +112,7 @@ func (t *AtariTerm) write(b []byte) {
 			if t.beforeClear != nil {
 				t.beforeClear()
 			}
-			fillCells(d.cells[:d.rows*d.cols], blank)
+			d.clearPage(blank, 24) // also gives back the rows below the screen
 			t.x, t.y = 0, 0
 		case 0x1C:
 			t.y = max(0, t.y-1)
@@ -134,10 +134,10 @@ func (t *AtariTerm) write(b []byte) {
 		case 0x7F: // tab
 			t.x = min(d.cols-1, (t.x&^7)+8)
 		case 0x9C: // delete line
-			sh := &Term{doc: d, y: t.y}
+			sh := &Term{doc: d, y: t.y, screenH: 24}
 			sh.shiftRows(-1)
 		case 0x9D: // insert line
-			sh := &Term{doc: d, y: t.y}
+			sh := &Term{doc: d, y: t.y, screenH: 24}
 			sh.shiftRows(1)
 		case 0xFE: // delete character
 			for x := t.x; x < d.cols-1; x++ {

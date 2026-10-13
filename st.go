@@ -267,7 +267,7 @@ func (t *STTerm) esc(c byte) {
 		if t.beforeClear != nil {
 			t.beforeClear()
 		}
-		fillCells(d.cells[:d.rows*d.cols], t.blankCell())
+		d.clearPage(t.blankCell(), t.rows) // also gives back the rows below the screen
 		t.x, t.y = 0, 0
 	case 'H':
 		t.x, t.y = 0, 0
@@ -295,11 +295,11 @@ func (t *STTerm) esc(c byte) {
 			d.set(x, t.y, t.blankCell())
 		}
 	case 'L':
-		sh := &Term{doc: d, y: t.y}
+		sh := &Term{doc: d, y: t.y, screenH: t.rows}
 		sh.shiftRows(1)
 		t.x = 0
 	case 'M':
-		sh := &Term{doc: d, y: t.y}
+		sh := &Term{doc: d, y: t.y, screenH: t.rows}
 		sh.shiftRows(-1)
 		t.x = 0
 	case 'Y':

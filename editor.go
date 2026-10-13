@@ -96,6 +96,7 @@ var bauds = []int{2400, 9600, 14400, 28800, 57600, 115200}
 type Info struct {
 	title, author, group string
 	writeSauce, clear    bool
+	notes                []string // SAUCE comment lines, kept from the file
 }
 
 type Sel struct{ x0, y0, x1, y1 int }
@@ -1154,7 +1155,7 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.source, a.sourceBin, a.sauce, a.forceCols = src, binary && mode == "pc", sauce, 0
 	a.info = Info{writeSauce: sauce != nil}
 	if sauce != nil {
-		a.info.title, a.info.author, a.info.group = sauce.title, sauce.author, sauce.group
+		a.info.title, a.info.author, a.info.group, a.info.notes = sauce.title, sauce.author, sauce.group, sauce.notes
 	}
 	a.path, a.name = path, name
 	head := b[:min(len(b), 4096)]
@@ -1789,7 +1790,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		if a.ice {
 			flags = 1
 		}
-		return append(art, makeSauce(SauceInfo{title: info.title, author: info.author, group: info.group,
+		return append(art, makeSauce(SauceInfo{title: info.title, author: info.author, group: info.group, notes: info.notes,
 			cols: d.cols, rows: max(1, d.rows), font: a.font().sauce, fileType: fileType, flags: flags}, len(art))...)
 	}
 	nl := "\r\n"
@@ -1827,13 +1828,19 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	case "utf8":
 		return []byte(strings.Join(docText(d, a.runeOf, 0, 0, 0, 0), nl) + nl), nil
 	case "bin":
+		if err := binSaveError(d); err != nil {
+			return nil, err
+		}
 		art := writeBin(d)
 		if !info.writeSauce && d.cols == 160 {
 			return art, nil // 160 is what a .bin without a record is taken to be
 		}
-		return append(art, makeSauce(SauceInfo{title: info.title, author: info.author, group: info.group,
+		return append(art, makeSauce(SauceInfo{title: info.title, author: info.author, group: info.group, notes: info.notes,
 			cols: d.cols, font: a.font().sauce, binaryText: true, flags: map[bool]int{true: 1}[a.ice]}, len(art))...), nil
 	case "xbin":
+		if err := xbinSaveError(d); err != nil {
+			return nil, err
+		}
 		return writeXBin(d, a.pal, a.font(), a.cellH(), a.ice), nil
 	case "pcb":
 		return writePCBoard(d, info.clear), nil
