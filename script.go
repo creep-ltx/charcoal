@@ -48,6 +48,7 @@ func scriptStep() bool {
 	if len(script) == 0 {
 		return false
 	}
+	pass() // lay out first, as a person would see the window
 	step := strings.Fields(script[0])
 	script = script[1:]
 	n := func(i int) int { v, _ := strconv.Atoi(step[i]); return v }
@@ -97,6 +98,9 @@ func scriptStep() bool {
 			if strings.HasPrefix(k, "ctrl+") {
 				mod |= sdl.KMOD_LCTRL
 				k = k[5:]
+			} else if strings.HasPrefix(k, "alt+") {
+				mod |= sdl.KMOD_LALT
+				k = k[4:]
 			} else if strings.HasPrefix(k, "shift+") {
 				mod |= sdl.KMOD_LSHIFT
 				k = k[6:]

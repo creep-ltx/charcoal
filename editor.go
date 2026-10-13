@@ -36,6 +36,7 @@ var palettes = []*Palette{
 	pal("vga", "PC VGA", 0x000000, 0xaa0000, 0x00aa00, 0xaa5500, 0x0000aa, 0xaa00aa, 0x00aaaa, 0xaaaaaa),
 	pal("wb", "Workbench 2/3", 0x000000, 0xbb0000, 0x00bb00, 0xeeaa00, 0x6688bb, 0xbb66bb, 0x55aaaa, 0xaaaaaa,
 		0x666666, 0xff6666, 0x66ff66, 0xffee55, 0x88aaff, 0xff88ff, 0x88ffff, 0xffffff),
+	c64Palette,
 	{id: "custom", name: "Custom"},
 }
 
@@ -65,6 +66,7 @@ func defaultFkeys() map[string][][]int {
 			{0xC5, 0xCE, 0xD5, 0xB8, 0xD4, 0xBE, 0xD6, 0xB7, 0xD3, 0xBD},
 			{0xF9, 0xF8, 0xFD, 0xF7, 0xFB, 0xEF, 0xA9, 0xAA, 0x10, 0x11},
 		},
+		"c64": c64Fkeys,
 	}
 }
 
@@ -86,74 +88,102 @@ type Snap struct {
 type Play struct {
 	bytes []byte
 	pos   int
-	term  *Term
+	term  emulator
 	saved Snap
 	last  time.Time
 }
 
+// Tab is one open page with everything that belongs to it.
+type Tab struct {
+	doc                 *Doc
+	mode                string // "amiga", "pc" or "c64"
+	fontFor, paletteFor map[string]string
+	zoom                int
+	ch8, smear, ice     bool
+	cx, cy              int
+	path, name          string
+	dirty               bool
+	source              []byte // the file as read (or last saved), to read again with other rules
+	sourceBin           bool
+	sauce               *Sauce
+	saveFmt             string
+	forceCols           int
+	info                Info
+	sel                 *Sel
+	selecting           bool
+	float               *Block
+	undo, redo          []Snap
+	hover, last         *Hover
+	playing             *Play
+	scrollX, scrollY    int
+	page                Rect // where the page view was laid out
+	pal                 [16]uint32
+}
+
+// App is the editor: the tab being worked on (its fields read as a's own),
+// the other tabs, and what all tabs share (tool, brush, colours, F-keys).
 type App struct {
-	doc                  *Doc
-	mode                 string // "amiga" or "pc"
-	fontFor, paletteFor  map[string]string
-	zoom                 int
-	ch8, smear, ice      bool
-	tool                 string
-	fg, bg, brush        int
-	ital, under, insert  bool
-	cx, cy               int
-	path, name           string
-	dirty                bool
-	source               []byte // the file as read (or last saved), to read again with other rules
-	sourceBin            bool
-	sauce                *Sauce
-	saveFmt              string
-	forceCols            int
-	info                 Info
-	sel                  *Sel
-	selecting            bool
-	float, clip          *Block
-	clipText             string
-	undo, redo           []Snap
-	fset, factive        int
-	fkeys                map[string][][]int
-	hover                *Hover
-	last                 *Hover
-	button               int
-	playing              *Play
-	blink                bool
-	lastDir              string
-	baud                 int
-	message              string
-	messageAt            time.Time
-	scrollX, scrollY     int
-	page                 Rect // where the page view was laid out
-	custom               [16]uint32
-	pal                  [16]uint32
-	dialog               Dialog
-	charHover            int
-	quit                 bool
-	bare                 bool // gadgets hidden: only the page and the status line
-	needLayoutScrollDown bool
+	*Tab
+	tabs          []*Tab
+	layout        string // "one", "cols" (side by side) or "rows" (top and bottom)
+	shown         [2]*Tab
+	syncScroll    bool
+	grid          bool
+	tool          string
+	fg, bg, brush int
+	ital, under   bool
+	rev, insert   bool
+	clip          *Block
+	clipText      string
+	fset, factive int
+	fkeys         map[string][][]int
+	button        int
+	blink         bool
+	lastDir       string
+	baud          int
+	message       string
+	messageAt     time.Time
+	custom        [16]uint32
+	dialog        Dialog
+	charHover     int
+	quit          bool
+	bare          bool // gadgets hidden: only the page and the status line
+	hasC64        bool
+	defFont       map[string]string // the fonts and palettes a new tab starts with
+	defPalette    map[string]string
+	defZoom       int
+	ch8Default    bool
+	smearDefault  bool
 }
 
 var a *App
 
 func (a *App) amiga() bool { return a.mode == "amiga" }
+func (a *App) pc() bool    { return a.mode == "pc" }
+func (a *App) c64() bool   { return a.mode == "c64" }
+
 func (a *App) font() *Font {
-	if f := fontByID(a.fontFor[a.mode]); f != nil && f.amiga == a.amiga() {
+	if f := fontByID(a.fontFor[a.mode]); f != nil && f.kind == a.mode {
 		return f
 	}
-	if a.amiga() {
-		return fonts[1]
+	for _, f := range fonts {
+		if f.kind == a.mode && f.id != "topaz1" {
+			return f
+		}
 	}
-	return fonts[len(fonts)-1]
+	return fonts[1]
 }
+
+// lower: a C64 page in the lower + upper case set.
+func (a *App) lower() bool { return a.font().id == "c64lower" }
+
 func (a *App) cellH() int {
-	if a.ch8 && a.amiga() {
+	if a.c64() || (a.ch8 && a.amiga()) {
 		return 8
 	}
 	return 16
 }
+
 func (a *App) styleFlags() uint32 {
 	if !a.amiga() {
 		return 0
@@ -167,10 +197,41 @@ func (a *App) styleFlags() uint32 {
 	}
 	return f
 }
-func (a *App) brushCell() uint32 { return makeCell(a.brush, a.fg, a.bg, a.styleFlags()) }
+
+// cell makes a cell of the page in the brush's colours.
+func (a *App) cell(ch int) uint32 {
+	if a.c64() {
+		if a.rev {
+			ch |= 0x80
+		}
+		return makeCell(ch, a.fg, 0, 0)
+	}
+	return makeCell(ch, a.fg, a.bg, a.styleFlags())
+}
+
+func (a *App) brushCell() uint32 {
+	if a.c64() {
+		return makeCell(a.brush, a.fg, 0, 0)
+	}
+	return makeCell(a.brush, a.fg, a.bg, a.styleFlags())
+}
+
+// previewFg is a colour that shows on the page's background, for the character table.
+func (a *App) previewFg() int {
+	if !a.c64() {
+		return 7
+	}
+	if a.doc.bg == 15 || a.doc.bg == 1 || a.doc.bg == 7 || a.doc.bg == 13 {
+		return 0
+	}
+	return 15
+}
 
 func (a *App) setPalette() {
 	p := paletteByID(a.paletteFor[a.mode])
+	if a.c64() && p.id != "custom" && p.id != "c64" {
+		p = c64Palette
+	}
 	if p.id == "custom" {
 		a.pal = a.custom
 	} else {
@@ -180,6 +241,9 @@ func (a *App) setPalette() {
 
 // printable: is this byte a glyph on the current page?
 func (a *App) printable(c int) bool {
+	if a.c64() {
+		return true
+	}
 	if a.amiga() {
 		return !(c < 0x20 || (c >= 0x7F && c < 0xA0))
 	}
@@ -187,6 +251,9 @@ func (a *App) printable(c int) bool {
 }
 
 func (a *App) charToByte(r rune) int {
+	if a.c64() {
+		return petFromRune(r, a.lower())
+	}
 	if a.amiga() {
 		if r <= 0xFF && a.printable(int(r)) {
 			return int(r)
@@ -200,6 +267,14 @@ func (a *App) charToByte(r rune) int {
 		return int(b)
 	}
 	return -1
+}
+
+// runeOf is the character a byte of the page shows, as Unicode.
+func (a *App) runeOf(c int) rune {
+	if a.c64() {
+		return petRune(c, a.lower())
+	}
+	return byteRune(c, a.amiga())
 }
 
 func (a *App) msg(s string) {
@@ -260,7 +335,7 @@ func (a *App) typeByte(b int) {
 			d.set(x, a.cy, d.get(x-1, a.cy))
 		}
 	}
-	a.setCell(a.cx, a.cy, makeCell(b, a.fg, a.bg, a.styleFlags()))
+	a.setCell(a.cx, a.cy, a.cell(b))
 	a.cx++
 	if a.cx >= d.cols {
 		a.cx, a.cy = 0, a.cy+1
@@ -346,6 +421,9 @@ func (a *App) paintAt(x, y, button int) {
 			a.setCell(x, y, a.brushCell())
 		}
 	case "colour":
+		if button == 3 && a.c64() {
+			return // a C64 cell has no background of its own
+		}
 		if button == 3 {
 			a.setCell(x, y, old&^0xF000|uint32(a.bg)<<12)
 		} else {
@@ -416,12 +494,15 @@ func (a *App) floodFill(x, y int) {
 
 func (a *App) pick(x, y int) {
 	v := a.doc.get(x, y)
-	a.brush, a.fg, a.bg = cellCh(v), cellFg(v), cellBg(v)
+	a.brush, a.fg = cellCh(v), cellFg(v)
+	if !a.c64() {
+		a.bg = cellBg(v)
+	}
 	a.ital, a.under = v&italic != 0, v&underline != 0
 }
 
 func (a *App) setTool(t string) {
-	if t == "half" && a.amiga() {
+	if t == "half" && !a.pc() {
 		t = "draw"
 	}
 	a.tool = t
@@ -431,6 +512,13 @@ func (a *App) setTool(t string) {
 }
 
 func (a *App) setBg(i int) {
+	if a.c64() { // one background for the whole C64 screen
+		if a.doc.bg != i {
+			a.pushUndo()
+			a.doc.bg = i
+		}
+		return
+	}
 	a.bg = i
 	if i > 7 && !a.ice {
 		a.msg("Backgrounds 8-15 need iCE colours (otherwise they blink on PC)")
@@ -457,7 +545,7 @@ func (a *App) copySel(cut bool) {
 	}
 	r := a.selRect()
 	a.clip = a.doc.copyRect(r.x, r.y, r.w, r.h)
-	a.clipText = strings.Join(docText(a.doc, a.amiga(), r.x, r.y, r.w, r.h), "\n")
+	a.clipText = strings.Join(docText(a.doc, a.runeOf, r.x, r.y, r.w, r.h), "\n")
 	setClipboard(a.clipText)
 	if cut {
 		a.clearSel()
@@ -539,7 +627,7 @@ func (a *App) textBlock(text string) *Block {
 			if c < 0 {
 				c = '?'
 			}
-			b.cells[y*w+x] = makeCell(c, a.fg, a.bg, a.styleFlags())
+			b.cells[y*w+x] = a.cell(c)
 			x++
 		}
 	}
@@ -549,64 +637,78 @@ func (a *App) textBlock(text string) *Block {
 // ---------------------------------------------------------------- loading
 
 func (a *App) reparse() {
-	d, _, fr := parseArt(a.source, ParseOpts{amiga: a.amiga(), binary: a.sourceBin, forceCols: a.forceCols})
-	a.doc = d
-	a.doc.ensureRows(max(d.rows, 25))
-	if fr >= 0 {
-		for _, f := range fonts {
-			if f.syncterm == fr && f.amiga == a.amiga() {
-				a.fontFor[a.mode] = f.id
+	if a.c64() {
+		d, lower := parseSeq(a.source, a.forceCols)
+		a.doc = d
+		if lower == 1 {
+			a.fontFor["c64"] = "c64lower"
+		} else if lower == 0 {
+			a.fontFor["c64"] = "c64upper"
+		}
+	} else {
+		d, _, fr := parseArt(a.source, ParseOpts{amiga: a.amiga(), binary: a.sourceBin, forceCols: a.forceCols})
+		a.doc = d
+		if fr >= 0 {
+			for _, f := range fonts {
+				if f.syncterm == fr && f.kind == a.mode {
+					a.fontFor[a.mode] = f.id
+				}
 			}
 		}
 	}
+	a.doc.ensureRows(max(a.doc.rows, 25))
 	a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
 }
 
 var textExt = regexp.MustCompile(`(?i)\.(txt|asc|nfo|diz)$`)
+var seqExt = regexp.MustCompile(`(?i)\.(seq|pet)$`)
 
-// loadBytes takes a file's bytes; as is "auto", "amiga" or "pc".
+// loadBytes reads a file into the current tab; as is "auto", "amiga", "pc" or "c64".
 func (a *App) loadBytes(b []byte, name, path, as string) {
 	sauce, _ := readSauce(b)
 	binary := strings.HasSuffix(strings.ToLower(name), ".bin") || (sauce != nil && sauce.dataType == 5)
 	utf := sauce == nil && !binary && fromUtf8(b, true) != nil
-	var isAmiga bool
 	sfont := ""
 	if sauce != nil {
 		sfont = strings.ToLower(sauce.font)
 	}
+	mode := ""
 	switch {
 	case as != "auto":
-		isAmiga = as == "amiga"
+		mode = as
+	case seqExt.MatchString(name) && sauce == nil:
+		mode = "c64"
 	case strings.HasPrefix(sfont, "amiga"):
-		isAmiga = true
+		mode = "amiga"
 	case sauce != nil && regexp.MustCompile(`^(ibm|cp437|vga|ega|mda)`).MatchString(sfont):
-		isAmiga = false
+		mode = "pc"
 	case binary:
-		isAmiga = false
+		mode = "pc"
 	case utf:
-		isAmiga = !utf8LooksPc(b)
+		mode = map[bool]string{true: "pc", false: "amiga"}[utf8LooksPc(b)]
 	default:
-		isAmiga = guessAmiga(b)
+		mode = map[bool]string{true: "amiga", false: "pc"}[guessAmiga(b)]
 	}
-	a.mode = "pc"
-	if isAmiga {
-		a.mode = "amiga"
+	if mode == "c64" && !a.hasC64 {
+		a.msg("PETSCII needs the C64 character ROM: put chargen.bin (4096 bytes) in ~/.local/share/amiansi/")
+		mode = "pc"
 	}
+	a.mode = mode
 	src := b
-	if utf {
-		src = fromUtf8(b, isAmiga)
+	if utf && mode != "c64" {
+		src = fromUtf8(b, mode == "amiga")
 		a.msg("Read as UTF-8 text")
 	}
 	a.ice = false
 	if sauce != nil {
 		for _, f := range fonts {
-			if strings.EqualFold(f.sauce, sauce.font) && f.amiga == isAmiga {
-				a.fontFor[a.mode] = f.id
+			if strings.EqualFold(f.sauce, sauce.font) && f.kind == mode {
+				a.fontFor[mode] = f.id
 			}
 		}
 		a.ice = sauce.flags&1 != 0
 	}
-	a.source, a.sourceBin, a.sauce, a.forceCols = src, binary, sauce, 0
+	a.source, a.sourceBin, a.sauce, a.forceCols = src, binary && mode == "pc", sauce, 0
 	a.info = Info{writeSauce: sauce != nil}
 	if sauce != nil {
 		a.info.title, a.info.author, a.info.group = sauce.title, sauce.author, sauce.group
@@ -614,6 +716,8 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.path, a.name = path, name
 	head := b[:min(len(b), 4096)]
 	switch {
+	case mode == "c64":
+		a.saveFmt = "seq"
 	case binary:
 		a.saveFmt = "bin"
 	case textExt.MatchString(name) && !bytes.ContainsAny(head, "\x1b\x9b"):
@@ -629,7 +733,7 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 }
 
 func (a *App) applyMode() {
-	if a.tool == "half" && a.amiga() {
+	if a.tool == "half" && !a.pc() {
 		a.setTool("draw")
 	}
 	if a.fset >= len(a.fkeys[a.mode]) {
@@ -638,15 +742,34 @@ func (a *App) applyMode() {
 	a.setPalette()
 }
 
+var modeNames = map[string]string{"amiga": "Amiga", "pc": "PC", "c64": "C64"}
+
 func (a *App) setMode(m string) {
 	if m == a.mode {
 		return
 	}
+	if m == "c64" && !a.hasC64 {
+		a.msg("PETSCII needs the C64 character ROM: put chargen.bin (4096 bytes) in ~/.local/share/amiansi/")
+		return
+	}
+	was := a.mode
 	a.mode = m
-	if a.source != nil && !a.dirty {
+	switch {
+	case a.source != nil && !a.dirty:
 		a.reparse()
-	} else if a.dirty {
-		a.msg("Shown with the " + map[bool]string{true: "Amiga", false: "PC"}[a.amiga()] + " font and colours; the bytes are unchanged")
+	case a.source == nil && !a.dirty && a.doc.usedRows() == 0:
+		// An empty page takes the new machine's width.
+		if m == "c64" {
+			a.doc = newDoc(40, 25)
+		} else if was == "c64" {
+			a.doc = newDoc(80, 25)
+		}
+		a.saveFmt = map[bool]string{true: "seq", false: "ansi"}[m == "c64"]
+		if a.path == "" {
+			a.name = "untitled" + map[bool]string{true: ".seq", false: ".ans"}[m == "c64"]
+		}
+	case a.dirty:
+		a.msg("Shown with the " + modeNames[m] + " font and colours; the bytes are unchanged")
 	}
 	a.applyMode()
 	savePrefs()
@@ -667,14 +790,118 @@ func (a *App) setCols(n int) {
 	a.cx = min(a.cx, n-1)
 }
 
-func (a *App) newDoc() {
-	a.doc = newDoc(80, 25)
-	a.source, a.sauce, a.path, a.name, a.saveFmt = nil, nil, "", "untitled.ans", "ansi"
-	a.info = Info{writeSauce: true}
-	a.undo, a.redo = nil, nil
-	a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
-	a.dirty = false
-	a.scrollX, a.scrollY = 0, 0
+// ---------------------------------------------------------------- tabs
+
+func (a *App) newTab(mode string) *Tab {
+	t := &Tab{mode: mode, zoom: a.defZoom, fontFor: map[string]string{}, paletteFor: map[string]string{},
+		info: Info{writeSauce: true}, saveFmt: "ansi", name: "untitled.ans"}
+	for k, v := range a.defFont {
+		t.fontFor[k] = v
+	}
+	for k, v := range a.defPalette {
+		t.paletteFor[k] = v
+	}
+	if t.zoom == 0 {
+		t.zoom = 2
+	}
+	t.ch8, t.smear = a.ch8Default, a.smearDefault
+	t.doc = newDoc(80, 25)
+	if mode == "c64" {
+		t.doc = newDoc(40, 25)
+		t.saveFmt, t.name = "seq", "untitled.seq"
+	}
+	a.tabs = append(a.tabs, t)
+	return t
+}
+
+// pristine: an untitled tab nobody has touched, which an opened file may take over.
+func (t *Tab) pristine() bool {
+	return t.path == "" && !t.dirty && t.source == nil && t.doc.usedRows() == 0 && len(t.undo) == 0
+}
+
+// focusTab makes t the tab being worked on, and shows it in the active pane.
+func (a *App) focusTab(t *Tab) {
+	if a.Tab == t {
+		return
+	}
+	if a.Tab != nil {
+		a.Tab.hover = nil
+	}
+	pane := 0
+	if a.layout != "one" && a.shown[1] == a.Tab {
+		pane = 1
+	}
+	if a.layout != "one" && a.shown[1-pane] == t {
+		pane = 1 - pane // already on show in the other pane: just go there
+	}
+	a.shown[pane] = t
+	a.Tab = t
+	a.applyMode()
+}
+
+func (a *App) tabIndex(t *Tab) int {
+	for i, o := range a.tabs {
+		if o == t {
+			return i
+		}
+	}
+	return -1
+}
+
+func (a *App) cycleTab(n int) {
+	i := a.tabIndex(a.Tab)
+	a.focusTab(a.tabs[((i+n)%len(a.tabs)+len(a.tabs))%len(a.tabs)])
+}
+
+func (a *App) addTab() {
+	a.focusTab(a.newTab(a.mode))
+}
+
+func (a *App) closeTab(t *Tab) {
+	if t.dirty {
+		a.dialog = &Confirm{text: "\"" + t.name + "\" has changes that are not saved. Close it and throw them away?",
+			button: "Throw away", yes: func() { t.dirty = false; a.closeTab(t) }}
+		return
+	}
+	i := a.tabIndex(t)
+	a.tabs = append(a.tabs[:i], a.tabs[i+1:]...)
+	if len(a.tabs) == 0 {
+		a.newTab(t.mode)
+	}
+	next := a.tabs[min(i, len(a.tabs)-1)]
+	for p := range a.shown {
+		if a.shown[p] == t {
+			a.shown[p] = next
+		}
+	}
+	if a.Tab == t {
+		a.Tab = nil
+		a.focusTab(next)
+	}
+}
+
+// setLayout shows one page, or two side by side ("cols") or one over the other ("rows").
+func (a *App) setLayout(l string) {
+	a.layout = l
+	if l == "one" {
+		a.shown = [2]*Tab{a.Tab, nil}
+		return
+	}
+	a.shown[0] = a.Tab
+	if a.shown[1] == nil || a.shown[1] == a.Tab || a.tabIndex(a.shown[1]) < 0 {
+		a.shown[1] = nil
+		for _, t := range a.tabs { // the next tab, or a new one
+			if t != a.Tab {
+				a.shown[1] = t
+				break
+			}
+		}
+		if a.shown[1] == nil {
+			cur := a.Tab
+			a.shown[1] = a.newTab(a.mode)
+			a.Tab = cur
+		}
+	}
 }
 
 func (a *App) openPath(path, as string) {
@@ -682,6 +909,15 @@ func (a *App) openPath(path, as string) {
 	if err != nil {
 		a.msg("Could not open: " + err.Error())
 		return
+	}
+	for _, t := range a.tabs { // already open: go there
+		if t.path == path && as == "auto" {
+			a.focusTab(t)
+			return
+		}
+	}
+	if !a.pristine() {
+		a.focusTab(a.newTab(a.mode))
 	}
 	a.loadBytes(b, filepath.Base(path), path, as)
 	a.lastDir = filepath.Dir(path)
@@ -691,14 +927,79 @@ func (a *App) openPath(path, as string) {
 	}
 }
 
+func (a *App) anyDirty() int {
+	n := 0
+	for _, t := range a.tabs {
+		if t.dirty {
+			n++
+		}
+	}
+	return n
+}
+
+// ---------------------------------------------------------------- flipping
+
+// flip mirrors the floating block, or else the selection, left-right or upside down;
+// the characters are swapped for their mirror images where the font has one.
+func (a *App) flip(vertical bool) {
+	f := a.font()
+	mirror := func(b *Block) {
+		out := make([]uint32, len(b.cells))
+		for y := 0; y < b.h; y++ {
+			for x := 0; x < b.w; x++ {
+				sx, sy := b.w-1-x, y
+				if vertical {
+					sx, sy = x, b.h-1-y
+				}
+				v := b.cells[sy*b.w+sx]
+				c := f.flipped(cellCh(v), vertical)
+				out[y*b.w+x] = v&^255 | uint32(c)
+			}
+		}
+		b.cells = out
+	}
+	switch {
+	case a.float != nil:
+		mirror(a.float)
+	case a.sel != nil:
+		r := a.selRect()
+		b := a.doc.copyRect(r.x, r.y, r.w, r.h)
+		mirror(b)
+		a.pushUndo()
+		for y := 0; y < b.h; y++ {
+			for x := 0; x < b.w; x++ {
+				a.doc.set(r.x+x, r.y+y, b.cells[y*b.w+x])
+			}
+		}
+	default:
+		a.msg("Select a block (Select tool) or paste one first, then flip it")
+		return
+	}
+	a.msg(map[bool]string{false: "Flipped left-right", true: "Flipped upside down"}[vertical])
+}
+
 // ---------------------------------------------------------------- saving
 
-var formats = []struct{ id, name, ext string }{
-	{"ansi", "ANSI (.ans)", ".ans"},
-	{"text", "Plain text, no colours (.asc)", ".asc"},
-	{"utf8", "UTF-8 text, no colours (.txt)", ".txt"},
-	{"bin", "PC binary (.bin)", ".bin"},
-	{"png", "Picture (.png)", ".png"},
+type Format struct{ id, name, ext, modes string }
+
+var formats = []Format{
+	{"ansi", "ANSI (.ans)", ".ans", "amiga pc"},
+	{"text", "Plain text, no colours (.asc)", ".asc", "amiga pc"},
+	{"seq", "PETSCII stream (.seq)", ".seq", "c64"},
+	{"utf8", "UTF-8 text, no colours (.txt)", ".txt", "amiga pc c64"},
+	{"bin", "PC binary (.bin)", ".bin", "pc"},
+	{"png", "Picture (.png)", ".png", "amiga pc c64"},
+}
+
+// modeFormats are the formats the current page can be saved in.
+func (a *App) modeFormats() []Format {
+	var out []Format
+	for _, f := range formats {
+		if strings.Contains(f.modes, a.mode) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func (a *App) encode(fmtID string) ([]byte, error) {
@@ -715,7 +1016,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 			cols: d.cols, rows: max(1, d.usedRows()), font: a.font().sauce, fileType: fileType, flags: flags}, len(art))...)
 	}
 	nl := "\r\n"
-	if am {
+	if !a.pc() {
 		nl = "\n"
 	}
 	switch fmtID {
@@ -723,8 +1024,10 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		return withSauce(writeAnsi(d, am, true, info.clear), 1), nil
 	case "text":
 		return withSauce(writeAnsi(d, am, false, false), 0), nil
+	case "seq":
+		return writeSeq(d, a.lower(), info.clear), nil
 	case "utf8":
-		return []byte(strings.Join(docText(d, am, 0, 0, 0, 0), nl) + nl), nil
+		return []byte(strings.Join(docText(d, a.runeOf, 0, 0, 0, 0), nl) + nl), nil
 	case "bin":
 		return writeBin(d), nil
 	case "png":
@@ -786,7 +1089,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	if fmtID == "ansi" || fmtID == "text" || fmtID == "bin" { // the page's own file; png and utf8 are exports
+	if fmtID == "ansi" || fmtID == "text" || fmtID == "bin" || fmtID == "seq" { // the page's own file; png and utf8 are exports
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
 		a.dirty = false
@@ -807,6 +1110,11 @@ func (a *App) save(as bool) {
 
 // ---------------------------------------------------------------- playback at modem speed
 
+type emulator interface {
+	write([]byte)
+	cursor() (int, int)
+}
+
 func (a *App) play() {
 	if a.playing != nil {
 		a.stopPlay(true)
@@ -818,12 +1126,21 @@ func (a *App) play() {
 	}
 	b := a.source
 	if b == nil || a.dirty {
-		b = writeAnsi(a.doc, a.amiga(), true, false)
+		if a.c64() {
+			b = writeSeq(a.doc, a.lower(), false)
+		} else {
+			b = writeAnsi(a.doc, a.amiga(), true, false)
+		}
 	}
 	_, end := readSauce(b)
 	b = b[:end]
 	d := newDoc(a.doc.cols, 25)
-	a.playing = &Play{bytes: b, term: newTerm(d, a.amiga()), saved: a.snapshot(), last: time.Now()}
+	d.bg = a.doc.bg
+	var em emulator = newTerm(d, a.amiga())
+	if a.c64() {
+		em = newPetTerm(d)
+	}
+	a.playing = &Play{bytes: b, term: em, saved: a.snapshot(), last: time.Now()}
 	a.doc, a.sel, a.float = d, nil, nil
 	a.scrollY = 0
 }
@@ -836,7 +1153,8 @@ func (a *App) playStep() {
 	end := min(len(p.bytes), p.pos+n)
 	p.term.write(p.bytes[p.pos:end])
 	p.pos = end
-	a.cx, a.cy = min(p.term.x, a.doc.cols-1), p.term.y
+	x, y := p.term.cursor()
+	a.cx, a.cy = min(x, a.doc.cols-1), y
 	a.doc.ensureRows(a.cy + 1)
 	a.ensureVisible(a.cx, a.cy)
 	if p.pos >= len(p.bytes) {

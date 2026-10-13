@@ -21,11 +21,14 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	it, ul := v&italic != 0, v&underline != 0
 	var fgc, bgc uint32
 	smear := false
-	if a.ice {
+	switch {
+	case a.c64():
+		bgc, it, ul = a.pal[a.doc.bg], false, false
+	case a.ice:
 		bgc = a.pal[bg]
-	} else {
+	default:
 		bgc = a.pal[bg&7]
-		if bg > 7 && !a.amiga() && !a.blink {
+		if bg > 7 && a.pc() && !a.blink {
 			ch = 32 // blinking text, off phase
 		}
 	}
@@ -83,10 +86,6 @@ func (a *App) paintCells(fb *FB, x0, y0, z int, get func(x, y int) uint32, w, h 
 	}
 }
 
-func (a *App) glyphBox(fb *FB, x, y, z, c, fg, bg int) {
-	a.drawCell(fb, x, y, z, makeCell(c, fg, bg, a.styleFlags()))
-}
-
 // ---------------------------------------------------------------- layout
 
 const gadH = lineH + 6
@@ -125,6 +124,7 @@ func (a *App) drawWindow(u *UI) {
 	top := 0
 	if !a.bare {
 		top = a.drawBar(u)
+		top = a.drawTabs(u, top)
 	}
 
 	// The status line and the pane, from the bottom up.
@@ -134,15 +134,128 @@ func (a *App) drawWindow(u *UI) {
 		paneH = 0
 	}
 	pane := Rect{0, status.y - paneH, W, paneH}
-	a.page = Rect{0, top, W - 18, pane.y - top - 18}
-	if a.page.h < 32 { // a tiny window: the page wins over the pane
-		pane.h = max(0, status.y-top-50)
+	if pane.y-top < 80 { // a tiny window: the page wins over the pane
+		pane.h = max(0, status.y-top-80)
 		pane.y = status.y - pane.h
-		a.page.h = pane.y - top - 18
 	}
-	a.drawPage(u)
+	a.drawPages(u, Rect{0, top, W, pane.y - top})
 	a.drawPane(u, pane)
 	a.drawStatus(u, status)
+}
+
+// drawPages lays out one page, or two side by side or one over the other.
+func (a *App) drawPages(u *UI, area Rect) {
+	if a.layout == "one" || a.shown[1] == nil {
+		a.shown[0] = a.Tab
+		a.page = Rect{area.x, area.y, area.w - 18, area.h - 18}
+		a.drawPage(u, "0")
+		return
+	}
+	var rs [2]Rect
+	if a.layout == "cols" {
+		w := (area.w - 4) / 2
+		rs[0], rs[1] = Rect{area.x, area.y, w, area.h}, Rect{area.x + w + 4, area.y, area.w - w - 4, area.h}
+		u.fb.fill(Rect{area.x + w, area.y, 4, area.h}, cEdgeDk)
+	} else {
+		h := (area.h - 4) / 2
+		rs[0], rs[1] = Rect{area.x, area.y, area.w, h}, Rect{area.x, area.y + h + 4, area.w, area.h - h - 4}
+		u.fb.fill(Rect{area.x, area.y + h, area.w, 4}, cEdgeDk)
+	}
+	active := a.Tab
+	pressed := (*Tab)(nil)
+	for i, t := range a.shown {
+		a.Tab = t
+		a.applyMode()
+		r := rs[i]
+		// The pane's title: its tab, bright in the pane being worked on.
+		col := uint32(cText)
+		if t == active {
+			col = cHi
+			u.fb.fill(Rect{r.x, r.y, r.w, lineH + 2}, cBlue)
+		}
+		title := t.name
+		if t.dirty {
+			title = "* " + title
+		}
+		u.fb.text(r.x+6, r.y+1, title, col)
+		if u.take(Rect{r.x, r.y, r.w, lineH + 2}) != nil && t != active {
+			pressed = t
+		}
+		r.y, r.h = r.y+lineH+2, r.h-lineH-2
+		t.page = Rect{r.x, r.y, r.w - 18, r.h - 18}
+		hadClick := u.click != nil
+		a.drawPage(u, strconv.Itoa(i))
+		if hadClick && u.click == nil && t != active && pressed == nil && (rs[i].has(ui.mx, ui.my)) {
+			pressed = t
+		}
+	}
+	if a.syncScroll {
+		other := a.shown[0]
+		if other == active {
+			other = a.shown[1]
+		}
+		other.scrollX, other.scrollY = active.scrollX, active.scrollY
+	}
+	a.Tab = active
+	if pressed != nil {
+		a.Tab = pressed
+	}
+	a.applyMode()
+}
+
+// drawTabs draws the strip of open pages under the gadget bar.
+func (a *App) drawTabs(u *UI, top int) int {
+	fb := u.fb
+	h := lineH + 4
+	fb.fill(Rect{0, top, fb.w, h}, cDark)
+	x := 4
+	for _, t := range a.tabs {
+		label := t.name
+		if t.dirty {
+			label = "* " + label
+		}
+		w := textW(label) + 30
+		r := Rect{x, top + 1, w, h - 1}
+		on := t == a.Tab
+		shown := t == a.shown[0] || (a.layout != "one" && t == a.shown[1])
+		bg := uint32(cDark)
+		switch {
+		case on:
+			bg = cBlue
+		case shown:
+			bg = cGrey
+		}
+		fb.fill(r, bg)
+		col := uint32(cText)
+		if on {
+			col = cHi
+		}
+		fb.text(r.x+6, r.y+1, label, col)
+		xr := Rect{r.x + w - 18, r.y, 16, r.h}
+		fb.text(xr.x+4, r.y+1, "x", cText)
+		u.setHint(r, t.path+"  (Ctrl+Tab next page, Ctrl+W closes, middle click closes)")
+		if c := u.take(xr); c != nil {
+			a.closeTab(t)
+			break
+		}
+		if c := u.take(r); c != nil {
+			if c.button == 2 {
+				a.closeTab(t)
+				break
+			}
+			a.focusTab(t)
+		}
+		x += w + 2
+		if x > fb.w-40 {
+			break
+		}
+	}
+	if u.button(Rect{x + 2, top + 1, 22, h - 1}, "+", false, "New page (Ctrl+T)") != nil {
+		a.addTab()
+	}
+	top += h
+	fb.fill(Rect{0, top, fb.w, 1}, cEdgeDk)
+	return top + 1
 }
 
 // drawBar draws the gadget bar and returns where the page starts.
@@ -150,11 +263,11 @@ func (a *App) drawBar(u *UI) int {
 	fb := u.fb
 	W := fb.w
 	fl := &flow{x0: 6, x: 6, y: 4, right: W - 6}
-	if u.button(fl.place(buttonW("New")), "New", false, "New page (clears it)") != nil {
-		confirmDiscard(func() { a.newDoc() })
+	if u.button(fl.place(buttonW("New")), "New", false, "New page in a new tab (Ctrl+T)") != nil {
+		a.addTab()
 	}
-	if u.button(fl.place(buttonW("Open")), "Open", false, "Open a file (Ctrl+O)") != nil {
-		confirmDiscard(openOpenRequester)
+	if u.button(fl.place(buttonW("Open")), "Open", false, "Open a file in a new tab (Ctrl+O)") != nil {
+		openOpenRequester()
 	}
 	if u.button(fl.place(buttonW("Save")), "Save", false, "Save (Ctrl+S)") != nil {
 		a.save(false)
@@ -163,18 +276,19 @@ func (a *App) drawBar(u *UI) int {
 		a.save(true)
 	}
 	fl.gap()
-	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI, LF lines. PC: CP437, VGA font, CRLF lines."
-	if u.button(fl.place(buttonW("Amiga")), "Amiga", a.amiga(), modeHint) != nil {
-		a.setMode("amiga")
+	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. C64: PETSCII, 40 columns, .seq files."
+	for _, m := range []string{"amiga", "pc", "c64"} {
+		if m == "c64" && !a.hasC64 {
+			continue
+		}
+		if u.button(fl.place(buttonW(modeNames[m])), modeNames[m], a.mode == m, modeHint) != nil {
+			a.setMode(m)
+		}
 	}
-	if u.button(fl.place(buttonW("PC")), "PC", !a.amiga(), modeHint) != nil {
-		a.setMode("pc")
-	}
-	var fontNames []string
-	var fontIDs []string
+	var fontNames, fontIDs []string
 	cur := 0
 	for _, f := range fonts {
-		if f.amiga == a.amiga() {
+		if f.kind == a.mode {
 			if f == a.font() {
 				cur = len(fontIDs)
 			}
@@ -186,7 +300,7 @@ func (a *App) drawBar(u *UI) int {
 	for _, f := range fonts {
 		allFonts = append(allFonts, f.name)
 	}
-	u.choice("font", fl.place(choiceW(allFonts)), fontNames, cur, "Font", func(i int) {
+	u.choice("font", fl.place(choiceW(allFonts)), fontNames, cur, "Font (on a C64 page: the character set)", func(i int) {
 		a.fontFor[a.mode] = fontIDs[i]
 		savePrefs()
 	})
@@ -210,26 +324,49 @@ func (a *App) drawBar(u *UI) int {
 		fieldCols.set(strconv.Itoa(a.doc.cols))
 	}
 	u.field(Rect{r.x + 16, r.y, r.w - 16, r.h}, fieldCols, "Page width in columns (Enter sets it)")
-	zooms := []string{"1x", "2x", "3x", "4x"}
-	u.choice("zoom", fl.place(choiceW(zooms)), zooms, a.zoom-1, "Zoom", func(i int) {
-		row := float64(a.scrollY) / float64(a.cellH()*a.zoom)
-		a.zoom = i + 1
-		a.scrollY = int(row * float64(a.cellH()*a.zoom))
-		savePrefs()
+	zooms := []string{"1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "Fit"}
+	u.choice("zoom", fl.place(choiceW(zooms)), zooms, a.zoom-1, "Zoom (Ctrl+wheel, Ctrl+Plus/Minus; Ctrl+0 fits the width)", func(i int) {
+		if i == 8 {
+			a.fitZoom()
+		} else {
+			a.setZoom(i + 1)
+		}
 	})
+	r = fl.place(checkW("Grid"))
+	if v, _ := u.check(r.x, r.y, "Grid", a.grid, "Lines between the cells; brighter every 10 columns and every 25 rows (Ctrl+G)"); v != a.grid {
+		a.grid = v
+		savePrefs()
+	}
+	layouts := []string{"One page", "Side by side", "Top / bottom"}
+	ids := []string{"one", "cols", "rows"}
+	lcur := 0
+	for i, id := range ids {
+		if id == a.layout {
+			lcur = i
+		}
+	}
+	u.choice("layout", fl.place(choiceW(layouts)), layouts, lcur, "Show one page, or two pages side by side or one over the other (Ctrl+L)", func(i int) {
+		a.setLayout(ids[i])
+	})
+	if a.layout != "one" {
+		r = fl.place(checkW("Sync"))
+		a.syncScroll, _ = u.check(r.x, r.y, "Sync", a.syncScroll, "Scroll both pages together")
+	}
 	if a.amiga() {
 		r = fl.place(checkW("8x8"))
 		if v, _ := u.check(r.x, r.y, "8x8", a.ch8, "Amiga fonts at 8x8 (no line doubling)"); v != a.ch8 {
-			a.ch8 = v
+			a.ch8, a.ch8Default = v, v
 			savePrefs()
 		}
 	}
-	r = fl.place(checkW("iCE"))
-	a.ice, _ = u.check(r.x, r.y, "iCE", a.ice, "Background colours 8-15 instead of blink (iCE colours)")
+	if !a.c64() {
+		r = fl.place(checkW("iCE"))
+		a.ice, _ = u.check(r.x, r.y, "iCE", a.ice, "Background colours 8-15 instead of blink (iCE colours)")
+	}
 	if a.amiga() {
 		r = fl.place(checkW("Bold smear"))
 		if v, _ := u.check(r.x, r.y, "Bold smear", a.smear, "Draw bold as the Amiga console does (smeared glyph, same colour) instead of bright colours"); v != a.smear {
-			a.smear = v
+			a.smear, a.smearDefault = v, v
 			savePrefs()
 		}
 	}
@@ -264,6 +401,33 @@ func (a *App) drawBar(u *UI) int {
 	return top + 1
 }
 
+// ---------------------------------------------------------------- zoom
+
+func (a *App) setZoom(z int) {
+	a.zoomAt(z, a.page.x+a.page.w/2, a.page.y)
+}
+
+// zoomAt changes the zoom keeping the page still under the point (mx, my).
+func (a *App) zoomAt(z, mx, my int) {
+	z = max(1, min(8, z))
+	if z == a.zoom {
+		return
+	}
+	px, py := mx-a.page.x+a.scrollX, my-a.page.y+a.scrollY
+	a.scrollX = px*z/a.zoom - (mx - a.page.x)
+	a.scrollY = py*z/a.zoom - (my - a.page.y)
+	a.scrollX, a.scrollY = max(0, a.scrollX), max(0, a.scrollY)
+	a.zoom = z
+	savePrefs()
+}
+
+// fitZoom picks the biggest zoom that shows the whole width.
+func (a *App) fitZoom() {
+	a.scrollX = 0
+	a.setZoom(max(1, min(8, a.page.w/(a.doc.cols*8))))
+	a.scrollX = 0
+}
+
 // ---------------------------------------------------------------- the page
 
 func (a *App) contentSize() (int, int) {
@@ -272,15 +436,15 @@ func (a *App) contentSize() (int, int) {
 	return a.doc.cols * 8 * z, rows * H * z
 }
 
-func (a *App) drawPage(u *UI) {
+func (a *App) drawPage(u *UI, id string) {
 	fb, p := u.fb, a.page
 	z, H := a.zoom, a.cellH()
 	cw, ch := a.contentSize()
 	// Scrollbars.
 	vbar := Rect{p.x + p.w, p.y, 18, p.h}
 	hbar := Rect{p.x, p.y + p.h, p.w, 18}
-	a.scrollY = u.scrollbar("vscroll", vbar, true, a.scrollY, p.h, ch)
-	a.scrollX = u.scrollbar("hscroll", hbar, false, a.scrollX, p.w, cw)
+	a.scrollY = u.scrollbar("vscroll"+id, vbar, true, a.scrollY, p.h, ch)
+	a.scrollX = u.scrollbar("hscroll"+id, hbar, false, a.scrollX, p.w, cw)
 	fb.fill(Rect{p.x + p.w, p.y + p.h, 18, 18}, cGrey)
 	if w := u.takeWheel(p); w != 0 {
 		if shiftHeld() {
@@ -288,14 +452,12 @@ func (a *App) drawPage(u *UI) {
 		} else {
 			a.scrollY += w * H * z * 3
 		}
-		a.scrollY = max(0, min(a.scrollY, ch-p.h))
-		a.scrollX = max(0, min(a.scrollX, cw-p.w))
 	}
 	a.scrollY = max(0, min(a.scrollY, max(0, ch-p.h)))
 	a.scrollX = max(0, min(a.scrollX, max(0, cw-p.w)))
 
 	old := fb.clip
-	fb.clip = p
+	fb.clip = p.and(old)
 	fb.fill(p, 0xFF141518) // beyond the page width
 	fb.fill(Rect{p.x, p.y, min(p.w, cw-a.scrollX), p.h}, cPaper)
 	ox, oy := p.x-a.scrollX, p.y-a.scrollY
@@ -305,6 +467,23 @@ func (a *App) drawPage(u *UI) {
 	for y := y0; y < y1; y++ {
 		for x := x0; x < x1; x++ {
 			a.drawCell(fb, ox+x*colPx, oy+y*rowPx, z, a.doc.get(x, y))
+		}
+	}
+	if a.grid {
+		w := min(p.w, cw-a.scrollX)
+		for x := x0; x <= x1; x++ {
+			al := 34
+			if x%10 == 0 {
+				al = 80
+			}
+			fb.blend(Rect{ox + x*colPx, p.y, 1, p.h}, 0xFFFFFFFF, al)
+		}
+		for y := y0; y <= y1; y++ {
+			al := 34
+			if y%25 == 0 {
+				al = 110
+			}
+			fb.blend(Rect{p.x, oy + y*rowPx, w, 1}, 0xFFFFFFFF, al)
 		}
 	}
 	cell := func(x, y, w, h int) Rect { return Rect{ox + x*colPx, oy + y*rowPx, w * colPx, h * rowPx} }
@@ -464,7 +643,7 @@ func (a *App) pageRelease() {
 	if a.selecting {
 		a.selecting = false
 		r := a.selRect()
-		a.msg(fmt.Sprintf("%dx%d selected: Ctrl+C copy, Ctrl+X cut, Del clear", r.w, r.h))
+		a.msg(fmt.Sprintf("%dx%d selected: Ctrl+C copy, Ctrl+X cut, Del clear, Alt+H / Alt+V flip", r.w, r.h))
 	}
 	a.button = 0
 }
@@ -503,7 +682,7 @@ func (a *App) drawPane(u *UI, pane Rect) {
 	bw := buttonW("Colour")
 	i := 0
 	for _, t := range tools {
-		if t.id == "half" && a.amiga() {
+		if t.id == "half" && !a.pc() {
 			continue
 		}
 		r := Rect{x + (i%2)*(bw+4), y + (i/2)*(smallH+4), bw, smallH}
@@ -526,6 +705,9 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		a.ital = toggle("I", a.ital, "Italic (Amiga console SGR 3)")
 		a.under = toggle("U", a.under, "Underline (Amiga console SGR 4)")
 	}
+	if a.c64() {
+		a.rev = toggle("Rev", a.rev, "Reverse: typing gives reversed characters, like RVS ON (Ctrl+R)")
+	}
 	a.insert = toggle("Ins", a.insert, "Insert mode for typing (Insert key)")
 	x += 2*bw + 4 + 14
 
@@ -535,7 +717,7 @@ func (a *App) drawPane(u *UI, pane Rect) {
 	for c := 0; c < 256; c++ {
 		px, py := cm.x+(c%32)*8, cm.y+(c/32)*H
 		if a.printable(c) {
-			a.drawCell(fb, px, py, 1, makeCell(c, 7, 0, 0))
+			a.drawCell(fb, px, py, 1, makeCell(c, a.previewFg(), 0, 0))
 		} else {
 			fb.fill(Rect{px + 1, py + 1, 6, H - 2}, 0xFF1A1B1E)
 		}
@@ -580,7 +762,7 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		fb.fill(r, cGrey)
 		fb.bevel(r, true)
 		fb.fill(Rect{r.x + 9, r.y + 2, 8, H}, cPaper)
-		a.drawCell(fb, r.x+9, r.y+2, 1, makeCell(c, 7, 0, a.styleFlags()))
+		a.drawCell(fb, r.x+9, r.y+2, 1, makeCell(c, a.previewFg(), 0, a.styleFlags()))
 		name := fmt.Sprintf("F%d", i+1)
 		col := uint32(cText)
 		if i == a.factive {
@@ -605,10 +787,15 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		if i == a.fg {
 			fb.frame(r.inset(-2), cHi)
 		}
-		if i == a.bg {
+		bgNow := a.bg
+		bgName := "background"
+		if a.c64() {
+			bgNow, bgName = a.doc.bg, "the screen colour"
+		}
+		if i == bgNow {
 			fb.dashed(r.inset(-2), cOrange)
 		}
-		u.setHint(r, fmt.Sprintf("Colour %d: #%06X. Left: foreground, right: background, Shift+click: change it", i, a.pal[i]&0xFFFFFF))
+		u.setHint(r, fmt.Sprintf("Colour %d: #%06X. Left: foreground, right: %s, Shift+click: change it", i, a.pal[i]&0xFFFFFF, bgName))
 		if c := u.take(r); c != nil {
 			switch {
 			case c.shift:
@@ -629,7 +816,11 @@ func (a *App) drawPane(u *UI, pane Rect) {
 	if u.button(Rect{br.x + br.w + 8, by, buttonW("Swap"), smallH}, "Swap", false, "Swap foreground and background") != nil {
 		a.fg, a.bg = a.bg, a.fg
 	}
-	fb.text(br.x+br.w+8+buttonW("Swap")+10, by+2, fmt.Sprintf("char %d  fg %d  bg %d", a.brush, a.fg, a.bg), cText)
+	bgShown := a.bg
+	if a.c64() {
+		bgShown = a.doc.bg
+	}
+	fb.text(br.x+br.w+8+buttonW("Swap")+10, by+2, fmt.Sprintf("char %d  fg %d  bg %d", a.brush, a.fg, bgShown), cText)
 	fb.clip = old
 }
 
@@ -664,10 +855,7 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		}
 		x = fb.text(x+charW*2, y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 	}
-	set := "PC CP437"
-	if a.amiga() {
-		set = "Amiga Latin-1"
-	}
+	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": "C64 PETSCII"}[a.mode]
 	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, max(a.doc.usedRows(), 1)), cText) + 24
 	name := a.path
 	if name == "" {

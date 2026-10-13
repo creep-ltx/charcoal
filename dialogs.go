@@ -46,16 +46,9 @@ func buttonRow(u *UI, r Rect, labels ...string) int {
 // ---------------------------------------------------------------- yes / no
 
 type Confirm struct {
-	text string
-	yes  func()
-}
-
-func confirmDiscard(then func()) {
-	if !a.dirty {
-		then()
-		return
-	}
-	a.dialog = &Confirm{text: "The page has changes that are not saved. Throw them away?", yes: then}
+	text   string
+	button string // the yes button, "Throw away" if empty
+	yes    func()
 }
 
 func (d *Confirm) draw(u *UI) {
@@ -64,7 +57,11 @@ func (d *Confirm) draw(u *UI) {
 	for i, l := range lines {
 		u.fb.text(in.x, in.y+i*lineH, l, cText)
 	}
-	switch buttonRow(u, in, "Throw away", "Cancel") {
+	yes := d.button
+	if yes == "" {
+		yes = "Throw away"
+	}
+	switch buttonRow(u, in, yes, "Cancel") {
 	case 0:
 		closeDialog()
 		d.yes()
@@ -107,7 +104,8 @@ type FileReq struct {
 	lastSel int
 }
 
-var openAs = []string{"auto", "amiga", "pc"}
+var openAs = []string{"auto", "amiga", "pc", "c64"}
+var openAsNames = []string{"detect", "Amiga", "PC", "C64 PETSCII"}
 
 func openOpenRequester() {
 	d := &FileReq{sel: -1}
@@ -132,7 +130,7 @@ func openSaveRequester() {
 	}
 	d.list(dir)
 	d.path.set(filepath.Join(dir, a.name))
-	for i, f := range formats {
+	for i, f := range a.modeFormats() {
 		if f.id == a.saveFmt {
 			d.choice = i
 		}
@@ -224,6 +222,7 @@ func (d *FileReq) ok() {
 	if d.save {
 		// A typed file ending picks the format (.txt keeps a chosen text format).
 		ext := strings.ToLower(filepath.Ext(p))
+		formats := a.modeFormats()
 		if !(ext == ".txt" && (formats[d.choice].id == "text" || formats[d.choice].id == "utf8")) {
 			for i, f := range formats {
 				if f.ext == ext || (ext == ".txt" && f.id == "utf8") || (ext == ".ansi" && f.id == "ansi") {
@@ -246,7 +245,7 @@ func (d *FileReq) setFormat(i int) {
 	if ext != "" && !strings.Contains(ext, "/") {
 		p = strings.TrimSuffix(p, ext)
 	}
-	d.path.set(p + formats[i].ext)
+	d.path.set(p + a.modeFormats()[i].ext)
 }
 
 func (d *FileReq) draw(u *UI) {
@@ -305,14 +304,17 @@ func (d *FileReq) draw(u *UI) {
 	if d.save {
 		fb.text(in.x, y+3, "Format", cText)
 		names := []string{}
-		for _, f := range formats {
+		for _, f := range a.modeFormats() {
 			names = append(names, f.name)
 		}
 		u.choice("fmt", Rect{in.x + 64, y, choiceW(names), gadH}, names, d.choice, "", d.setFormat)
 	} else {
 		fb.text(in.x, y+3, "Open as", cText)
-		u.choice("as", Rect{in.x + 72, y, choiceW([]string{"detect", "Amiga", "PC"}), gadH},
-			[]string{"detect", "Amiga", "PC"}, d.choice, "", func(i int) { d.choice = i })
+		names := openAsNames
+		if !a.hasC64 {
+			names = names[:3]
+		}
+		u.choice("as", Rect{in.x + 72, y, choiceW(names), gadH}, names, d.choice, "", func(i int) { d.choice = i })
 	}
 	if d.err != "" {
 		fb.text(in.x, in.y+in.h-gadH-lineH-6, d.err, cHi)
@@ -525,26 +527,33 @@ func openHelp() { a.dialog = &HelpReq{} }
 
 const helpText = `MOUSE
 Draw: left paints the brush (character + colours), right erases, Shift+click draws a line from the last point.
-Colour: left sets the foreground, right the background.
+Colour: left sets the foreground, right the background (on a C64 page: the foreground only).
 Fill: left fills equal cells with the brush.
 Half (PC): left paints half-cell pixels in the foreground, right in the background colour.
 Select: drag a block. While pasting, the block follows the mouse: left click stamps it, Shift+click stamps it without its blank cells, right click or Esc stops.
 Middle click or Pick: take a cell's character and colours.
-Characters pane: click = brush (types it with Type). Right click = put on the active F-key.
-Colours: left = foreground, right = background, Shift+click = change the colour.
+Characters strip: click = brush (types it with Type). Right click = put on the active F-key.
+Colours: left = foreground, right = background (C64: the screen colour), Shift+click = change the colour.
 Pop-up gadgets: click opens the list, right click steps to the next item.
-Wheel scrolls the page, Shift+wheel sideways.
+Wheel scrolls the page, Shift+wheel sideways, Ctrl+wheel zooms around the mouse.
+Tabs: click to show, x or middle click closes, + opens a new page. With two pages on show, click a page to work on it.
 
 KEYS
 Typing writes at the cursor in the brush colours (any tool). Arrows, Home, End, PgUp, PgDn, Enter, Tab, Backspace, Delete, Insert.
 F1-F10 type the F-key set, Ctrl+Up/Down change set.
 Ctrl+Left/Right foreground -/+, Ctrl+Shift+Left/Right background -/+.
-Ctrl+Z undo, Ctrl+Y redo, Ctrl+S save, Ctrl+Shift+S save as, Ctrl+O open, Ctrl+N new, Ctrl+Q quit.
+Ctrl+Z undo, Ctrl+Y redo, Ctrl+S save, Ctrl+Shift+S save as, Ctrl+O open, Ctrl+Q quit.
+Ctrl+T (or Ctrl+N) new page, Ctrl+W close page, Ctrl+Tab / Ctrl+PgDn next page, Ctrl+Shift+Tab / Ctrl+PgUp previous.
+Ctrl+L one page / side by side / top and bottom. "Sync" scrolls both together.
 Ctrl+A select all, Ctrl+C / X / V copy, cut, paste (text from other programs too), Del clears the block, Esc lets go.
-Ctrl+H hides all gadgets (only the art and the status line), Ctrl+H again brings them back. Ctrl+Plus / Ctrl+Minus zoom. Dropping a file on the window opens it.
+Alt+H flips the block (or the pasted block) left-right, Alt+V upside down; characters turn into their mirror images.
+Ctrl+G grid. Ctrl+Plus / Ctrl+Minus zoom, Ctrl+0 fits the page's width. Ctrl+R reverse (C64).
+Ctrl+H hides all gadgets (only the art and the status line), Ctrl+H again brings them back.
+Dropping files on the window opens them.
 
-AMIGA AND PC
-Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
+AMIGA, PC AND C64
+Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. C64 pages are PETSCII: 40 columns, the C64's two character sets (the Font gadget), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
+The C64 character set is the C64's ROM and does not come with the program: put chargen.bin (4096 bytes, from VICE or your own C64) in ~/.local/share/amiansi/.
 
 SETTINGS
 Kept in ~/.config/amiansi/prefs.json. "uiscale": 2 there doubles the whole window for big screens.`

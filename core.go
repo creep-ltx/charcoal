@@ -34,6 +34,7 @@ var blank = makeCell(32, 7, 0, 0)
 type Doc struct {
 	cols, rows int
 	cells      []uint32
+	bg         int // the screen colour of a C64 page
 }
 
 func newDoc(cols, rows int) *Doc {
@@ -80,7 +81,7 @@ func (d *Doc) ensureRows(n int) {
 }
 
 func (d *Doc) clone() *Doc {
-	c := &Doc{cols: d.cols, rows: d.rows, cells: make([]uint32, d.rows*d.cols)}
+	c := &Doc{cols: d.cols, rows: d.rows, cells: make([]uint32, d.rows*d.cols), bg: d.bg}
 	copy(c.cells, d.cells[:d.rows*d.cols])
 	if d.rows == 0 {
 		c.cells = make([]uint32, d.cols)
@@ -125,6 +126,7 @@ func (d *Doc) trim(minRows int) {
 
 func (d *Doc) withCols(cols int) *Doc {
 	n := newDoc(cols, d.rows)
+	n.bg = d.bg
 	w := min(cols, d.cols)
 	for y := 0; y < d.rows; y++ {
 		copy(n.cells[y*cols:y*cols+w], d.cells[y*d.cols:y*d.cols+w])
@@ -309,6 +311,8 @@ func (t *Term) put(ch byte) {
 		t.x, t.y = 0, t.y+1
 	}
 }
+
+func (t *Term) cursor() (int, int) { return t.x, t.y }
 
 func (t *Term) write(b []byte) {
 	for _, c := range b {
@@ -881,7 +885,7 @@ func byteRune(c int, amiga bool) rune {
 
 // docText gives the characters only, as Unicode lines with trailing blanks dropped.
 // w == 0 means the whole page.
-func docText(d *Doc, amiga bool, x0, y0, w, h int) []string {
+func docText(d *Doc, runeOf func(int) rune, x0, y0, w, h int) []string {
 	if w == 0 {
 		w, h = d.cols, d.usedRows()
 	}
@@ -889,7 +893,7 @@ func docText(d *Doc, amiga bool, x0, y0, w, h int) []string {
 	for y := y0; y < y0+h; y++ {
 		var sb strings.Builder
 		for x := x0; x < x0+w; x++ {
-			sb.WriteRune(byteRune(cellCh(d.get(x, y)), amiga))
+			sb.WriteRune(runeOf(cellCh(d.get(x, y))))
 		}
 		lines = append(lines, strings.TrimRight(sb.String(), " "))
 	}

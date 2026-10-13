@@ -23,6 +23,7 @@ type Prefs struct {
 	Dir     string             `json:"dir"`
 	Baud    int                `json:"baud"`
 	UIScale int                `json:"uiscale"`
+	Grid    bool               `json:"grid"`
 	Width   int                `json:"width"`
 	Height  int                `json:"height"`
 }
@@ -41,26 +42,24 @@ func loadPrefs() {
 	if b, err := os.ReadFile(prefsPath()); err == nil {
 		json.Unmarshal(b, &prefs)
 	}
-	a.mode = "amiga"
-	if prefs.Mode == "pc" {
-		a.mode = "pc"
-	}
-	a.fontFor = map[string]string{"amiga": "topaz1p", "pc": "vga"}
+	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper"}
 	for k, v := range prefs.Font {
-		a.fontFor[k] = v
+		a.defFont[k] = v
 	}
-	a.paletteFor = map[string]string{"amiga": "amiga", "pc": "vga"}
+	a.defPalette = map[string]string{"amiga": "amiga", "pc": "vga", "c64": "c64"}
 	for k, v := range prefs.Palette {
-		a.paletteFor[k] = v
+		a.defPalette[k] = v
 	}
-	a.zoom = max(1, min(4, prefs.Zoom))
+	a.defZoom = max(1, min(8, prefs.Zoom))
 	if prefs.Zoom == 0 {
-		a.zoom = 2
+		a.defZoom = 2
 	}
-	a.ch8, a.smear = prefs.Ch8, prefs.Smear
+	a.grid = prefs.Grid
 	a.fkeys = defaultFkeys()
-	if f := prefs.Fkeys; len(f["amiga"]) > 0 && len(f["pc"]) > 0 {
-		a.fkeys = f
+	for _, m := range []string{"amiga", "pc", "c64"} {
+		if f := prefs.Fkeys[m]; len(f) > 0 {
+			a.fkeys[m] = f
+		}
 	}
 	a.custom = palettes[0].colors
 	if len(prefs.Custom) == 16 {
@@ -81,7 +80,16 @@ func loadPrefs() {
 
 func savePrefs() {
 	p := prefs
-	p.Mode, p.Font, p.Palette, p.Zoom, p.Ch8, p.Smear = a.mode, a.fontFor, a.paletteFor, a.zoom, a.ch8, a.smear
+	// The page being worked on sets what new tabs start with.
+	for k, v := range a.fontFor {
+		a.defFont[k] = v
+	}
+	for k, v := range a.paletteFor {
+		a.defPalette[k] = v
+	}
+	a.defZoom = a.zoom
+	p.Mode, p.Font, p.Palette, p.Zoom, p.Ch8, p.Smear = a.mode, a.defFont, a.defPalette, a.zoom, a.ch8, a.smear
+	p.Grid = a.grid
 	p.Fkeys, p.Dir, p.Baud = a.fkeys, a.lastDir, a.baud
 	p.Custom = nil
 	for _, c := range a.custom {

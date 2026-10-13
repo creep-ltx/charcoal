@@ -1,9 +1,10 @@
 # amiansi
 
-An Amiga and PC ANSI/ASCII art viewer and editor, drawn with the real bitmap fonts: Topaz 1/1+/2/2+,
-MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA on a PC page (CP437).
+An art viewer and editor for Amiga ANSI, PC ANSI and C64 PETSCII, drawn with the real bitmap fonts: Topaz
+1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA on a PC page
+(CP437), the C64's two character sets on a C64 page.
 
-    amiansi [FILE]        # opens its own window
+    amiansi [FILE...]     # opens its own window, one tab per file
 
 A native program (Go + SDL2, one binary; needs only the SDL2 library that every Linux desktop has). The whole
 interface is drawn in Topaz, kept dark and small so the art comes first; **Ctrl+H** hides every gadget.
@@ -25,6 +26,15 @@ Press the **?** gadget for every key.
 - Both: cursor movement, erase, insert/delete lines and characters, save/restore cursor, SyncTERM's font switch
   (`CSI 0;n SP D`), SAUCE read and written (width, font name, title, author, group, iCE flag). Amiga or PC is guessed
   from SAUCE and the bytes; "Open as" overrides. UTF-8 text files are read too.
+- **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
+  character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's
+  ROM, not shipped: `chargen.bin` (4096 bytes) is read from `~/.local/share/amiansi/` or bbmp's and VICE's copies.
+- **Tabs and two pages at once**: every file opens in a tab; show one page, two side by side or one over the other
+  (Ctrl+L), optionally scrolling together.
+- **Grid** (Ctrl+G, brighter every 10 columns and every 25 rows), **zoom** 1x-8x, fit to width (Ctrl+0),
+  Ctrl+wheel zooms around the mouse.
+- **Flip** a block left-right (Alt+H) or upside down (Alt+V): characters become their mirror images (known
+  pairs first, then by comparing the glyphs' pixels, so it works in every font).
 - Bottom strip: tools, all 256 characters (click = brush), 5 F-key sets (F1–F10), 16 colours (left fg, right bg,
   Shift+click edits the colour).
 - Tools: Type, Draw (Shift+click = line), Colour, Fill, Pick (or middle click), Select (copy/cut/paste/stamp), Half.
@@ -40,7 +50,8 @@ Press the **?** gadget for every key.
 | `view.go` | the main window: gadget bar, page, bottom strip, status line |
 | `dialogs.go` | open/save, info, colour, help, yes/no requesters |
 | `ui.go`, `gfx.go` | the gadgets and the pixel drawing |
-| `fonts.go`, `fonts/` | the embedded fonts; `cp437.go` the CP437 table |
+| `fonts.go`, `fonts/` | the embedded fonts and their mirror tables; `cp437.go` the CP437 table |
+| `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
 | `script.go` | `AMIANSI_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
 | `web/` | the earlier browser version (Python server + HTML/JS), kept for reference |
 

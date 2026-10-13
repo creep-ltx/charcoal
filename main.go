@@ -35,22 +35,36 @@ func shiftHeld() bool { return sdl.GetModState()&sdl.KMOD_SHIFT != 0 }
 func main() {
 	runtime.LockOSThread()
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
-		fmt.Println("usage: amiansi [FILE]\nAn Amiga / PC ANSI and ASCII art viewer and editor. Press ? in the window for the keys.")
+		fmt.Println("usage: amiansi [FILE...]\nAn Amiga ANSI, PC ANSI and C64 PETSCII art viewer and editor. Press ? in the window for the keys.")
 		return
 	}
-	a = &App{tool: "draw", fg: 7, brush: 0x2F, name: "untitled.ans", saveFmt: "ansi", charHover: -1,
-		info: Info{writeSauce: true}, doc: newDoc(80, 25)}
+	a = &App{tool: "draw", fg: 7, brush: 0x2F, charHover: -1, layout: "one"}
+	a.hasC64 = loadC64Fonts()
 	loadPrefs()
 	uiFont = fontByID("topaz2")
-	a.applyMode()
-	if len(os.Args) > 1 {
-		p, _ := filepath.Abs(os.Args[1])
+	mode := prefs.Mode
+	if mode != "pc" && !(mode == "c64" && a.hasC64) {
+		mode = "amiga"
+	}
+	a.ch8Default, a.smearDefault = prefs.Ch8, prefs.Smear
+	a.focusTab(a.newTab(mode))
+	for _, arg := range os.Args[1:] {
+		p, _ := filepath.Abs(arg)
 		if _, err := os.Stat(p); err == nil {
 			a.openPath(p, "auto")
 		} else {
+			if !a.pristine() {
+				a.focusTab(a.newTab(a.mode))
+			}
 			a.path, a.name = p, filepath.Base(p)
+			if seqExt.MatchString(p) && a.hasC64 {
+				a.setMode("c64")
+			}
 			a.msg("New file: " + p)
 		}
+	}
+	if len(a.tabs) > 0 {
+		a.focusTab(a.tabs[0])
 	}
 
 	if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
@@ -171,8 +185,12 @@ func present() {
 }
 
 func requestQuit() {
-	if a.dirty {
-		a.dialog = &Confirm{text: "The page has changes that are not saved. Quit and throw them away?", yes: func() { a.quit = true }}
+	if n := a.anyDirty(); n > 0 {
+		text := "A page has changes that are not saved. Quit and throw them away?"
+		if n > 1 {
+			text = fmt.Sprintf("%d pages have changes that are not saved. Quit and throw them away?", n)
+		}
+		a.dialog = &Confirm{text: text, button: "Quit", yes: func() { a.quit = true }}
 		return
 	}
 	a.quit = true
@@ -213,6 +231,10 @@ func handleEvent(ev sdl.Event) bool {
 		ui.click = c
 		pass()
 	case *sdl.MouseWheelEvent:
+		if sdl.GetModState()&sdl.KMOD_CTRL != 0 && a.dialog == nil {
+			a.zoomAt(a.zoom+int(e.Y), ui.mx, ui.my)
+			return true
+		}
 		ui.wheel = -int(e.Y)
 		if ui.popup == nil {
 			pass()
@@ -226,7 +248,7 @@ func handleEvent(ev sdl.Event) bool {
 	case *sdl.DropEvent:
 		if e.Type == sdl.DROPFILE && a.dialog == nil {
 			p := e.File
-			confirmDiscard(func() { a.openPath(p, "auto") })
+			a.openPath(p, "auto")
 		}
 	default:
 		return false
@@ -239,7 +261,7 @@ func textInput(s string) {
 		ui.focus.insert(s)
 		return
 	}
-	if a.dialog != nil || a.playing != nil || ui.popup != nil || sdl.GetModState()&sdl.KMOD_CTRL != 0 {
+	if a.dialog != nil || a.playing != nil || ui.popup != nil || sdl.GetModState()&(sdl.KMOD_CTRL|sdl.KMOD_LALT) != 0 {
 		return
 	}
 	for _, r := range s {
@@ -289,10 +311,10 @@ func keyDown(e *sdl.KeyboardEvent) {
 		a.dialog.key(k, ctrl, shift)
 		return
 	}
-	editorKey(k, ctrl, shift)
+	editorKey(k, ctrl, shift, mod&sdl.KMOD_LALT != 0)
 }
 
-func editorKey(k string, ctrl, shift bool) {
+func editorKey(k string, ctrl, shift, alt bool) {
 	if ctrl {
 		switch k {
 		case "Z":
@@ -311,9 +333,30 @@ func editorKey(k string, ctrl, shift bool) {
 		case "S":
 			a.save(shift)
 		case "O":
-			confirmDiscard(openOpenRequester)
-		case "N":
-			confirmDiscard(func() { a.newDoc() })
+			openOpenRequester()
+		case "N", "T":
+			a.addTab()
+		case "W":
+			a.closeTab(a.Tab)
+		case "Tab":
+			if shift {
+				a.cycleTab(-1)
+			} else {
+				a.cycleTab(1)
+			}
+		case "PageDown":
+			a.cycleTab(1)
+		case "PageUp":
+			a.cycleTab(-1)
+		case "R":
+			a.rev = !a.rev
+		case "G":
+			a.grid = !a.grid
+			savePrefs()
+		case "L":
+			a.setLayout(map[string]string{"one": "cols", "cols": "rows", "rows": "one"}[a.layout])
+		case "0":
+			a.fitZoom()
 		case "Q":
 			requestQuit()
 		case "A":
@@ -341,11 +384,20 @@ func editorKey(k string, ctrl, shift bool) {
 				a.fg = (a.fg + 1) % 16
 			}
 		case "=", "+", "Keypad +":
-			a.zoom = min(4, a.zoom+1)
+			a.zoom = min(8, a.zoom+1)
 			savePrefs()
 		case "-", "Keypad -":
 			a.zoom = max(1, a.zoom-1)
 			savePrefs()
+		}
+		return
+	}
+	if alt {
+		switch k {
+		case "H":
+			a.flip(false)
+		case "V":
+			a.flip(true)
 		}
 		return
 	}
