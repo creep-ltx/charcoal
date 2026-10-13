@@ -119,3 +119,12 @@ func TestToolKeys(t *testing.T) {
 		t.Errorf("Alt+B on a PC page: %s", a.tool)
 	}
 }
+
+func TestInfoKey(t *testing.T) {
+	a := testApp(t, "pc")
+	editorKey("I", true, false, false)
+	if _, ok := a.dialog.(*InfoReq); !ok {
+		t.Errorf("Ctrl+I opened %T", a.dialog)
+	}
+	ui.focus = nil
+}

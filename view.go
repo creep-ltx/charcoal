@@ -584,10 +584,10 @@ func (a *App) drawBar(u *UI) int {
 	if u.button(fl.place(buttonW("Play")), playLabel, a.playing != nil, "Play the file as if it came over a modem (Esc stops)") != nil {
 		a.play()
 	}
-	if u.button(fl.place(buttonW("Info")), "Info", false, "SAUCE info (title, author, group) and save options") != nil {
+	if u.button(fl.place(buttonW("Info")), "Info", false, "SAUCE info (title, author, group) and save options ("+keyName("info")+")") != nil {
 		openInfo()
 	}
-	if u.button(fl.place(buttonW("Settings")), "Settings", false, "Settings: window size, the C64 character set") != nil {
+	if u.button(fl.place(buttonW("Settings")), "Settings", false, "Settings: window size, .bak files, the C64 character set and the ST font") != nil {
 		openSettings()
 	}
 	if u.button(fl.place(buttonW("?")), "?", false, "Keys and mouse") != nil {

@@ -146,6 +146,7 @@ func init() {
 		{"open_recent", "Ctrl+Shift+O", "Open the most recent file again (the Open requester lists the last 10)", func() { a.reopenRecent() }},
 		{"save", "Ctrl+S", "Save", func() { a.save(false) }},
 		{"save_as", "Ctrl+Shift+S", "Save as (another name or format)", func() { a.save(true) }},
+		{"info", "Ctrl+I", "Info: SAUCE title, author, group and save options", openInfo},
 		{"new_page", "Ctrl+T, Ctrl+N", "New page (tab)", func() { a.addTab() }},
 		{"close_page", "Ctrl+W", "Close the page", func() { a.closeTab(a.Tab) }},
 		{"next_page", "Ctrl+Tab, Ctrl+PageDown", "Next page", func() { a.cycleTab(1) }},
