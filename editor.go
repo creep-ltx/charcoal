@@ -349,10 +349,13 @@ func (a *App) previewFg() int {
 	if !a.c64() {
 		return 7
 	}
-	if a.doc.bg == 15 || a.doc.bg == 1 || a.doc.bg == 7 || a.doc.bg == 13 {
+	// Black or white, whichever shows better on the screen colour (by its brightness).
+	c := a.pal[a.doc.bg&15]
+	r, g, b := float64(c>>16&255), float64(c>>8&255), float64(c&255)
+	if 0.299*r+0.587*g+0.114*b > 110 {
 		return 0
 	}
-	return 15
+	return 1
 }
 
 func (a *App) setPalette() {
