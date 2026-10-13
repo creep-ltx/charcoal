@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>amiansi</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="bar">
+  <div class="group">
+    <button id="bNew" title="New (clears the page)">New</button>
+    <button id="bOpen" title="Open… (Ctrl+O)">Open</button>
+    <button id="bSave" title="Save (Ctrl+S)">Save</button>
+    <button id="bSaveAs" title="Save as / export… (Ctrl+Shift+S)">Save as</button>
+  </div>
+  <div class="group">
+    <div class="seg" id="modeSeg" title="Amiga: Latin-1, Amiga fonts, 0x9B CSI, LF lines. PC: CP437, VGA font, CRLF lines.">
+      <button data-mode="amiga">Amiga</button><button data-mode="pc">PC</button>
+    </div>
+    <select id="font" title="Font"></select>
+    <select id="palette" title="Palette (Shift+click a colour below to change it)"></select>
+  </div>
+  <div class="group">
+    <label title="Page width in columns">W <input id="cols" type="number" min="8" max="1000" value="80"></label>
+    <select id="zoom" title="Zoom"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select>
+    <label class="chk" id="lbl8x8" title="Amiga fonts at 8×8 (no line doubling)"><input type="checkbox" id="ch8">8×8</label>
+    <label class="chk" title="Background colours 8-15 instead of blink (iCE colours)"><input type="checkbox" id="ice">iCE</label>
+    <label class="chk" id="lblSmear" title="Draw bold as the Amiga console does (smeared glyph, same colour) instead of bright colours"><input type="checkbox" id="smear">Bold smear</label>
+  </div>
+  <div class="group">
+    <select id="baud" title="Play speed">
+      <option value="2400">2400</option><option value="9600">9600</option><option value="14400" selected>14400</option>
+      <option value="28800">28800</option><option value="57600">57600</option><option value="115200">115200</option>
+    </select>
+    <button id="bPlay" title="Play the file as if it came over a modem (Esc stops)">▶ Play</button>
+    <button id="bInfo" title="SAUCE info (title, author, group) and save options">Info</button>
+    <button id="bHelp" title="Keys and mouse">?</button>
+  </div>
+</header>
+
+<main id="viewport" tabindex="-1">
+  <div id="sizer"><canvas id="screen"></canvas></div>
+</main>
+
+<footer id="pane">
+  <section id="tools">
+    <h3>Tool</h3>
+    <div class="toolgrid">
+      <button data-tool="type" title="Type: click to place the cursor, then type">Type</button>
+      <button data-tool="draw" title="Draw: left paints the brush, right erases, Shift+click draws a line">Draw</button>
+      <button data-tool="colour" title="Colour: left paints the foreground, right the background, the characters stay">Colour</button>
+      <button data-tool="fill" title="Fill: fills the area of equal cells with the brush">Fill</button>
+      <button data-tool="pick" title="Pick: takes the character and colours of a cell (middle click does this with any tool)">Pick</button>
+      <button data-tool="select" title="Select: drag a block; Ctrl+C / Ctrl+X / Ctrl+V / Del">Select</button>
+      <button data-tool="half" id="toolHalf" title="Half blocks: paint pixels of half a cell (PC page)">Half</button>
+    </div>
+    <h3>Style</h3>
+    <div class="toolgrid">
+      <label class="chk" title="Italic (Amiga console SGR 3)"><input type="checkbox" id="stItalic"><i>Italic</i></label>
+      <label class="chk" title="Underline (Amiga console SGR 4)"><input type="checkbox" id="stUnder"><u>Under</u></label>
+      <label class="chk" title="Insert mode for typing (Insert key)"><input type="checkbox" id="insMode">Insert</label>
+    </div>
+  </section>
+  <section id="chars">
+    <h3>Characters <span id="charInfo"></span></h3>
+    <canvas id="charmap" title="Click: brush (types it with the Type tool). Right click: put it on the active F-key."></canvas>
+  </section>
+  <section id="fkeys">
+    <h3>F-keys <button id="fPrev" class="mini" title="Previous set (Ctrl+Down)">◀</button><span id="fSet">1</span><button id="fNext" class="mini" title="Next set (Ctrl+Up)">▶</button></h3>
+    <div id="fslots"></div>
+    <p class="hint">F1–F10 type these. Click a key to make it the brush; right click a character to put it on the active key.</p>
+  </section>
+  <section id="colours">
+    <h3>Colours</h3>
+    <div id="swatches" title="Left: foreground. Right: background. Shift+click: change the colour."></div>
+    <div class="brushrow">
+      <canvas id="brush" width="8" height="16" title="The brush"></canvas>
+      <button id="bSwap" class="mini" title="Swap foreground and background">⇄</button>
+      <span id="brushInfo"></span>
+    </div>
+    <input type="color" id="colorEdit" hidden>
+  </section>
+</footer>
+<div id="status"><span id="stPos"></span><span id="stCell"></span><span id="stMode"></span><span id="stFile"></span><span id="stMsg"></span></div>
+
+<dialog id="dlgOpen">
+  <form method="dialog">
+    <h2>Open</h2>
+    <div class="row"><input id="openPath" spellcheck="false"><button id="openGo" value="go">Go</button></div>
+    <ul id="openList"></ul>
+    <div class="row right">
+      <label class="chk">Open as <select id="openAs"><option value="auto">detect</option><option value="amiga">Amiga</option><option value="pc">PC</option></select></label>
+      <button id="openBrowse" value="browse" type="button">From the browser…</button>
+      <button value="cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgSave">
+  <form method="dialog">
+    <h2>Save as</h2>
+    <div class="row"><input id="savePath" spellcheck="false"></div>
+    <div class="row">
+      <label>Format <select id="saveFmt">
+        <option value="ansi">ANSI (.ans)</option>
+        <option value="text">Plain text, no colours (.asc / .txt)</option>
+        <option value="utf8">UTF-8 text, no colours (.txt)</option>
+        <option value="bin">PC binary (.bin)</option>
+        <option value="png">Picture (.png)</option>
+      </select></label>
+    </div>
+    <div class="row right"><button value="cancel">Cancel</button><button id="saveGo" value="save">Save</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgInfo">
+  <form method="dialog">
+    <h2>Info</h2>
+    <div class="grid2">
+      <label>Title</label><input id="sTitle" maxlength="35">
+      <label>Author</label><input id="sAuthor" maxlength="20">
+      <label>Group</label><input id="sGroup" maxlength="20">
+    </div>
+    <label class="chk"><input type="checkbox" id="sSauce"> Write a SAUCE record when saving (width, font, title)</label>
+    <label class="chk"><input type="checkbox" id="sClear"> Start the file with clear screen (form feed on Amiga, ESC[2J on PC)</label>
+    <p id="sOrig" class="hint"></p>
+    <div class="row right"><button value="ok">OK</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgHelp">
+  <form method="dialog">
+    <h2>amiansi</h2>
+    <div class="cols2">
+      <div>
+        <h4>Mouse</h4>
+        <p><b>Draw</b>: left paints the brush (character + colours), right erases, Shift+click draws a line from the last point.<br>
+        <b>Colour</b>: left sets the foreground, right the background.<br>
+        <b>Fill</b>: left fills equal cells with the brush.<br>
+        <b>Half</b> (PC): left paints half-cell pixels in the foreground, right in the background colour.<br>
+        <b>Select</b>: drag a block. While pasting, the block follows the mouse: left click stamps it, Shift+click stamps it without its blank cells, Esc stops.<br>
+        <b>Middle click</b> or <b>Pick</b>: take a cell's character and colours.<br>
+        Characters pane: click = brush (types it with Type). Right click = put on the active F-key.<br>
+        Colours: left = foreground, right = background, Shift+click = change the colour.</p>
+      </div>
+      <div>
+        <h4>Keys</h4>
+        <p>Typing writes at the cursor in the brush colours (any tool). Arrows, Home, End, PgUp, PgDn, Enter, Tab, Backspace, Delete, Insert.<br>
+        <b>F1–F10</b> type the F-key set, <b>Ctrl+Up/Down</b> change set.<br>
+        <b>Ctrl+Left/Right</b> foreground −/+, <b>Ctrl+Shift+Left/Right</b> background −/+.<br>
+        <b>Ctrl+Z</b> undo, <b>Ctrl+Y</b> redo, <b>Ctrl+S</b> save, <b>Ctrl+O</b> open.<br>
+        <b>Ctrl+A</b> select all, <b>Ctrl+C / X / V</b> copy, cut, paste (text from other programs too), <b>Del</b> clears the block, <b>Esc</b> lets go.</p>
+        <h4>Amiga and PC</h4>
+        <p>Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends.
+        PC pages are CP437 in the VGA font and save with CRLF. Switching keeps the bytes and only changes how they are shown;
+        an unchanged file is read again with the other page's rules.</p>
+      </div>
+    </div>
+    <div class="row right"><button value="ok">OK</button></div>
+  </form>
+</dialog>
+
+<input type="file" id="fileInput" hidden>
+<script src="fonts.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

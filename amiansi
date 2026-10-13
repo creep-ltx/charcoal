@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""amiansi - an Amiga / PC ANSI and ASCII art viewer and editor.
+
+Starts a small web server on 127.0.0.1 that serves the editor (app/) and lets
+it read and write real files, then opens it in the browser. Ctrl+C quits.
+
+    amiansi [FILE] [--port N] [--no-browser]
+"""
+import argparse
+import json
+import mimetypes
+import os
+import secrets
+import sys
+import tempfile
+import threading
+import urllib.parse
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+APP = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'app')
+TOKEN = secrets.token_urlsafe(18)
+STATE = {'file': None}
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = 'amiansi'
+
+    def log_message(self, fmt, *args):
+        pass
+
+    def reply(self, code, body=b'', ctype='application/json'):
+        if isinstance(body, (dict, list)):
+            body = json.dumps(body).encode()
+        elif isinstance(body, str):
+            body = body.encode()
+        self.send_response(code)
+        self.send_header('Content-Type', ctype)
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def fail(self, code, msg):
+        self.reply(code, {'error': msg})
+
+    def authorised(self):
+        # The token keeps other web pages from reading or writing files through us.
+        if self.headers.get('X-Token') != TOKEN:
+            self.fail(403, 'bad token')
+            return False
+        return True
+
+    def query(self):
+        return urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+
+    def do_GET(self):
+        path = urllib.parse.urlsplit(self.path).path
+        if path.startswith('/api/'):
+            if not self.authorised():
+                return
+            q = self.query()
+            p = q.get('path', [''])[0]
+            try:
+                if path == '/api/init':
+                    return self.reply(200, {'file': STATE['file'], 'cwd': os.getcwd(),
+                                            'home': os.path.expanduser('~')})
+                if path == '/api/read':
+                    p = os.path.abspath(os.path.expanduser(p))
+                    with open(p, 'rb') as f:
+                        data = f.read()
+                    return self.reply(200, data, 'application/octet-stream')
+                if path == '/api/ls':
+                    return self.reply(200, listdir(p or os.getcwd()))
+            except OSError as e:
+                return self.fail(404, f'{e.strerror}: {e.filename or p}')
+            return self.fail(404, 'no such call')
+        # Static files from app/.
+        rel = os.path.normpath(urllib.parse.unquote(path)).lstrip('/')
+        if rel in ('', '.'):
+            rel = 'index.html'
+        full = os.path.join(APP, rel)
+        if not full.startswith(APP + os.sep) or not os.path.isfile(full):
+            return self.fail(404, 'not found')
+        ctype = mimetypes.guess_type(full)[0] or 'application/octet-stream'
+        if ctype.startswith('text/') or ctype.endswith('javascript'):
+            ctype += '; charset=utf-8'
+        with open(full, 'rb') as f:
+            self.reply(200, f.read(), ctype)
+
+    def do_POST(self):
+        path = urllib.parse.urlsplit(self.path).path
+        if not self.authorised():
+            return
+        n = int(self.headers.get('Content-Length') or 0)
+        body = self.rfile.read(n)
+        if path == '/api/write':
+            p = os.path.abspath(os.path.expanduser(self.query().get('path', [''])[0]))
+            try:
+                write_atomic(p, body)
+            except OSError as e:
+                return self.fail(500, f'{e.strerror}: {e.filename or p}')
+            return self.reply(200, {'ok': True, 'path': p})
+        if path == '/api/quit':
+            self.reply(200, {'ok': True})
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            return
+        self.fail(404, 'no such call')
+
+
+def listdir(p):
+    p = os.path.abspath(os.path.expanduser(p))
+    if os.path.isfile(p):
+        p = os.path.dirname(p)
+    entries = []
+    with os.scandir(p) as it:
+        for e in it:
+            if e.name.startswith('.'):
+                continue
+            try:
+                d = e.is_dir()
+                size = 0 if d else e.stat().st_size
+            except OSError:
+                continue
+            entries.append({'name': e.name, 'dir': d, 'size': size})
+    entries.sort(key=lambda e: (not e['dir'], e['name'].lower()))
+    return {'path': p, 'parent': os.path.dirname(p), 'entries': entries}
+
+
+def write_atomic(p, data):
+    d = os.path.dirname(p) or '.'
+    fd, tmp = tempfile.mkstemp(dir=d, prefix='.amiansi-')
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(data)
+        if os.path.exists(p):
+            os.chmod(tmp, os.stat(p).st_mode & 0o7777)
+        else:
+            os.chmod(tmp, 0o644)
+        os.replace(tmp, p)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def main():
+    ap = argparse.ArgumentParser(description='Amiga / PC ANSI and ASCII art viewer and editor.')
+    ap.add_argument('file', nargs='?', help='file to open (it need not exist yet)')
+    ap.add_argument('--port', type=int, default=0, help='port to listen on (default: any free one)')
+    ap.add_argument('--no-browser', action='store_true', help='only print the address')
+    a = ap.parse_args()
+    if a.file:
+        STATE['file'] = os.path.abspath(os.path.expanduser(a.file))
+    srv = ThreadingHTTPServer(('127.0.0.1', a.port), Handler)
+    url = f'http://127.0.0.1:{srv.server_address[1]}/#t={TOKEN}'
+    print(f'amiansi: {url}\n(Ctrl+C quits)', flush=True)
+    if not a.no_browser:
+        threading.Timer(0.2, lambda: webbrowser.open_new(url)).start()
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    srv.server_close()
+
+
+if __name__ == '__main__':
+    sys.exit(main())
