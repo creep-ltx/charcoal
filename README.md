@@ -157,9 +157,20 @@ come back cell for cell after saving in their own format.
 | `script.go` | `CHARCOAL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
 | `web/` | the first version, called amiansi, that ran in the browser (Python server + HTML/JS), kept for reference |
 
-## Fonts
+## Licences
 
-The Amiga fonts are TrueSchool's *Multi Platform Amiga Fonts* raw conversions (dMG/t!s^dS!, GPL-FE,
-github.com/rewtnull/amigafonts): 256 glyphs × 16 rows, every row of the 8×8 original doubled. The VGA font is
-rendered from Px437_IBM_VGA_8x16 (VileR, *The Ultimate Oldschool PC Font Pack*, CC BY-SA 4.0); the licence is in
-`fonts/`.
+Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karlsson. These parts keep theirs:
+
+| Part | From | Licence |
+|---|---|---|
+| Amiga fonts (Topaz 1/1+/2/2+, MicroKnight/+, P0T-NOoDLE, mO'sOul) | TrueSchool's *Multi Platform Amiga Fonts* raw conversions, dMG/t!s^dS!, github.com/rewtnull/amigafonts (256 glyphs × 16 rows, each row of the 8×8 original doubled) | GPL with the font exception, `fonts/amigafonts-NOTICE.txt` |
+| IBM VGA 8×16 | rendered from Px437_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` |
+| Atari 8-bit fonts | AltirraOS, from the Altirra emulator | all-permissive, `fonts/AltirraOS-LICENSE.txt` |
+| ZX Spectrum font | the 48K ROM's character set | © Amstrad, who allow passing it on, `fonts/zx-spectrum-NOTICE.txt` |
+| Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |
+| PETSCII flip and turn tables (`cbmturn.go`) | Marq's PETSCII editor, Marq / Fit^L!T, tables by Dr. TerrorZ | WTFPL, `third_party/marq-petscii-LICENSE.txt` |
+| Petmate's file formats | Petmate, C. T. Lin | MIT, `third_party/petmate-LICENSE.txt` |
+| Test art in `testdata/alove` | ansilove's tests | BSD 2-clause, `testdata/alove/LICENSE-ansilove.txt` |
+
+Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE
+project) and the EmuTOS font sources (GPL), for PETSCII and Atari ST pages.

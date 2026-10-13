@@ -1,0 +1,17 @@
+cbmturn.go holds the flip and turn tables of Marq's PETSCII editor
+(Marq / Fit^L!T, http://www.kameli.net/marq/?page_id=2717; the tables by Dr. TerrorZ),
+from petscii.zip's src/petscii/c_petscii.pde, under this licence:
+
+            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
+                    Version 2, December 2004
+
+ Copyright (C) 2004 Sam Hocevar <sam@hocevar.net>
+
+ Everyone is permitted to copy and distribute verbatim or modified
+ copies of this license document, and changing it is allowed as long
+ as the name is changed.
+
+            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+  0. You just DO WHAT THE FUCK YOU WANT TO.
