@@ -53,9 +53,11 @@ Press the **?** gadget for every key.
 - Undo/redo, play at modem speed; dropping a file on the window opens it.
 - **Save as**: ANSI, plain text, UTF-8, PC `.bin`, **XBin** (`.xb`, font and palette inside, so it looks the same in
   any viewer; opens again too), PETSCII `.seq`, a **C64 program** (`.prg`: LOAD and RUN on a C64 or in VICE, a key
-  goes back to BASIC), the **C array** of Marq's PETSCII editor and Petmate (`.c`, opens again too), **PNG**
+  goes back to BASIC; CharEdit's own open again), the **C array** of Marq's PETSCII editor and Petmate (`.c`), a
+  **Petmate workspace** (`.petmate`), **PNG**
   (normal or twice the size; C64 pages with their border) and a **web page** (`.html`). A typed file ending picks
-  the format.
+  the format. Everything that holds characters opens too; a `.c` or `.petmate` with several screens opens each
+  screen in its own tab. (Pictures and web pages do not open.)
 - Settings in `~/.config/charcoal/prefs.json` (`"uiscale": 2` doubles the window for big screens).
 
 ## Files

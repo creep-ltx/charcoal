@@ -118,7 +118,8 @@ type Tab struct {
 	scrollX, scrollY    int
 	page                Rect // where the page view was laid out
 	pal                 [16]uint32
-	srcKind             string      // "xbin" or "marq" for files that are not a stream of codes
+	srcKind             string      // "xbin", "marq", "petmate" or "prg" for files that are not a stream of codes
+	srcIndex            int         // which screen of a file that holds several
 	ownFont             *Font       // a font that came in the file (XBin)
 	ownPal              *[16]uint32 // a palette that came in the file (XBin)
 }
@@ -655,11 +656,11 @@ func (a *App) reparse() {
 		a.doc.ensureRows(max(a.doc.rows, 25))
 		a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
 		return
-	case "marq":
-		if d, lower, err := parseMarq(a.source); err == nil {
-			a.doc = d
-			if lower >= 0 {
-				a.fontFor["c64"] = map[bool]string{true: "c64lower", false: "c64upper"}[lower == 1]
+	case "marq", "petmate", "prg":
+		if scr, err := a.screens(a.source, a.srcKind); err == nil && a.srcIndex < len(scr) {
+			a.doc = scr[a.srcIndex].doc
+			if l := scr[a.srcIndex].lower; l >= 0 {
+				a.fontFor["c64"] = map[bool]string{true: "c64lower", false: "c64upper"}[l == 1]
 			}
 		}
 		a.doc.ensureRows(max(a.doc.rows, 25))
@@ -712,9 +713,48 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		a.finishLoad(b, name, path, nil, "xbin")
 		return
 	}
-	if isMarq(b) && as == "auto" && a.hasC64 {
-		a.mode, a.srcKind = "c64", "marq"
-		a.finishLoad(b, name, path, nil, "marq")
+	kind := ""
+	switch {
+	case isPetmate(b):
+		kind = "petmate"
+	case isMarq(b):
+		kind = "marq"
+	case strings.HasSuffix(strings.ToLower(name), ".prg") && isOurPrg(b):
+		kind = "prg"
+	case strings.HasSuffix(strings.ToLower(name), ".prg"):
+		a.msg("Only C64 programs saved by CharEdit can be opened")
+		return
+	}
+	if kind != "" && (as == "auto" || as == "c64") {
+		if !a.hasC64 {
+			t := a.Tab
+			openC64Req(func() { a.focusTab(t); a.loadBytes(b, name, path, as) })
+			return
+		}
+		scr, err := a.screens(b, kind)
+		if err != nil {
+			a.msg("Could not read " + name + ": " + err.Error())
+			return
+		}
+		a.mode, a.srcKind, a.srcIndex = "c64", kind, 0
+		own := map[string]string{"petmate": "petmate", "marq": "marq", "prg": "prg"}[kind]
+		a.finishLoad(b, name, path, nil, own)
+		first := a.Tab
+		for i := 1; i < len(scr); i++ { // every further screen in a tab of its own
+			t := a.newTab("c64")
+			a.Tab = t
+			a.mode, a.srcKind, a.srcIndex = "c64", kind, i
+			label := scr[i].name
+			if label == "" {
+				label = fmt.Sprintf("screen %d", i+1)
+			}
+			a.finishLoad(b, name+" ("+label+")", "", nil, own)
+		}
+		a.Tab = first
+		a.applyMode()
+		if len(scr) > 1 {
+			a.msg(fmt.Sprintf("%s has %d screens: each is in a tab of its own", name, len(scr)))
+		}
 		return
 	}
 	sauce, _ := readSauce(b)
@@ -788,6 +828,21 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.applyMode()
 	a.dirty = false
 	a.scrollX, a.scrollY = 0, 0
+}
+
+// screens reads a file that holds whole C64 screens.
+func (a *App) screens(b []byte, kind string) ([]PetScreen, error) {
+	switch kind {
+	case "petmate":
+		return parsePetmate(b)
+	case "prg":
+		d, lower, err := parsePrg(b)
+		if err != nil {
+			return nil, err
+		}
+		return []PetScreen{{doc: d, lower: lower}}, nil
+	}
+	return parseMarq(b)
 }
 
 // finishLoad is the end of loading for files that are not streams of codes.
@@ -1061,6 +1116,7 @@ var formats = []Format{
 	{"xbin", "XBin, font and palette inside (.xb)", ".xb", "amiga pc"},
 	{"prg", "C64 program that shows it (.prg)", ".prg", "c64"},
 	{"marq", "C array: PETSCII editor, Petmate (.c)", ".c", "c64"},
+	{"petmate", "Petmate workspace (.petmate)", ".petmate", "c64"},
 	{"png", "Picture (.png)", ".png", "amiga pc c64"},
 	{"png2", "Picture, twice the size (.png)", ".png", "amiga pc c64"},
 	{"html", "Web page (.html)", ".html", "amiga pc c64"},
@@ -1115,6 +1171,8 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 			return writePrg(d, a.lower()), nil
 		}
 		return writeMarq(d, a.lower()), nil
+	case "petmate":
+		return writePetmate(d, a.lower(), strings.TrimSuffix(a.name, filepath.Ext(a.name))), nil
 	case "html":
 		return a.writeHTML(), nil
 	case "png", "png2":
@@ -1189,10 +1247,11 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	if strings.Contains(" ansi text bin seq xbin marq ", " "+fmtID+" ") { // the page's own file; the others are exports
+	if strings.Contains(" ansi text bin seq xbin marq petmate prg ", " "+fmtID+" ") { // the page's own file; the others are exports
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
-		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq"}[fmtID]
+		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg"}[fmtID]
+		a.srcIndex = 0
 		a.dirty = false
 	}
 	a.lastDir = filepath.Dir(path)

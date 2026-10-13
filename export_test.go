@@ -80,9 +80,24 @@ func TestMarq(t *testing.T) {
 	d := newDoc(40, 25)
 	d.bg, d.border = 0, 11
 	d.set(3, 2, makeCell(0xA0, 7, 0, 0))
-	back, lower, err := parseMarq(writeMarq(d, false))
-	if err != nil || lower != 0 || back.get(3, 2) != d.get(3, 2) || back.border != 11 {
-		t.Fatalf("marq: %v %d %x %d", err, lower, back.get(3, 2), back.border)
+	scr, err := parseMarq(writeMarq(d, false))
+	if err != nil || scr[0].lower != 0 || scr[0].doc.get(3, 2) != d.get(3, 2) || scr[0].doc.border != 11 {
+		t.Fatalf("marq: %v", err)
+	}
+	// Two frames, as Petmate writes several screens.
+	two := append(writeMarq(d, true), writeMarq(newDoc(40, 25), true)...)
+	if scr, err := parseMarq(two); err != nil || len(scr) != 2 || scr[0].lower != 1 {
+		t.Fatalf("two frames: %v %d", err, len(scr))
+	}
+	// Petmate's workspace.
+	pm, err := parsePetmate(writePetmate(d, true, "x"))
+	if err != nil || len(pm) != 1 || pm[0].lower != 1 || pm[0].doc.get(3, 2) != d.get(3, 2) || pm[0].doc.border != 11 {
+		t.Fatalf("petmate: %v", err)
+	}
+	// CharEdit's own .prg reads back.
+	pd, lower, err := parsePrg(writePrg(d, true))
+	if err != nil || lower != 1 || pd.get(3, 2) != d.get(3, 2) || pd.border != 11 {
+		t.Fatalf("prg: %v", err)
 	}
 }
 

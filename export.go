@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html"
 	"regexp"
@@ -106,36 +107,39 @@ func isMarq(b []byte) bool {
 	return bytes.Contains(b[:min(len(b), 400)], []byte("unsigned char")) && bytes.Contains(b, []byte("{"))
 }
 
-// parseMarq reads the first frame of a PETSCII editor / Petmate C array; lower is -1 if not said.
-func parseMarq(b []byte) (*Doc, int, error) {
+// parseMarq reads the frames of a PETSCII editor / Petmate C array.
+func parseMarq(b []byte) ([]PetScreen, error) {
 	s := string(b)
-	lower := -1
-	if strings.Contains(s, "C64 lower") {
-		lower = 1
-	} else if strings.Contains(s, "C64 upper") {
-		lower = 0
+	lower, w, h := -1, 40, 25
+	if m := regexp.MustCompile(`// META:\s*(\d+) (\d+) .* (upper|lower)`).FindStringSubmatch(s); m != nil {
+		w, _ = strconv.Atoi(m[1])
+		h, _ = strconv.Atoi(m[2])
+		lower = map[string]int{"upper": 0, "lower": 1}[m[3]]
+		w, h = max(1, min(w, 1000)), max(1, min(h, 10000))
 	}
-	start, end := strings.Index(s, "{"), strings.Index(s, "}")
-	if start < 0 || end < start {
-		return nil, -1, fmt.Errorf("no array in the file")
+	var out []PetScreen
+	for _, m := range regexp.MustCompile(`(?s)\{(.*?)\}`).FindAllStringSubmatch(s, -1) {
+		body := regexp.MustCompile(`//[^\n]*`).ReplaceAllString(m[1], "")
+		var nums []int
+		for _, n := range marqNumbers.FindAllString(body, -1) {
+			v, _ := strconv.Atoi(n)
+			nums = append(nums, v)
+		}
+		if len(nums) < 2+2*w*h {
+			continue
+		}
+		d := newDoc(w, h)
+		d.border, d.bg = nums[0]&15, nums[1]&15
+		for i := 0; i < w*h; i++ {
+			d.cells[i] = makeCell(nums[2+i]&255, nums[2+w*h+i]&15, 0, 0)
+		}
+		d.trim(1)
+		out = append(out, PetScreen{doc: d, lower: lower})
 	}
-	body := s[start+1 : end]
-	body = regexp.MustCompile(`//[^\n]*`).ReplaceAllString(body, "")
-	var nums []int
-	for _, m := range marqNumbers.FindAllString(body, -1) {
-		v, _ := strconv.Atoi(m)
-		nums = append(nums, v)
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no %dx%d screen in the array", w, h)
 	}
-	if len(nums) < 2002 {
-		return nil, -1, fmt.Errorf("the array has %d numbers, a screen needs 2002", len(nums))
-	}
-	d := newDoc(40, 25)
-	d.border, d.bg = nums[0]&15, nums[1]&15
-	for i := 0; i < 1000; i++ {
-		d.cells[i] = makeCell(nums[2+i]&255, nums[1002+i]&15, 0, 0)
-	}
-	d.trim(1)
-	return d, lower, nil
+	return out, nil
 }
 
 // ---------------------------------------------------------------- XBin
@@ -335,4 +339,118 @@ func (a *App) writeHTML() []byte {
 	}
 	b.WriteString("</pre></body></html>\n")
 	return []byte(b.String())
+}
+
+// ---------------------------------------------------------------- Petmate workspaces
+
+type petmatePixel struct {
+	Code  int `json:"code"`
+	Color int `json:"color"`
+}
+
+type petmateScreen struct {
+	Width           int              `json:"width"`
+	Height          int              `json:"height"`
+	BackgroundColor int              `json:"backgroundColor"`
+	BorderColor     int              `json:"borderColor"`
+	Charset         string           `json:"charset"`
+	Name            string           `json:"name,omitempty"`
+	Framebuf        [][]petmatePixel `json:"framebuf"`
+}
+
+type petmateFile struct {
+	Version     int             `json:"version"`
+	Screens     []int           `json:"screens"`
+	Framebufs   []petmateScreen `json:"framebufs"`
+	CustomFonts map[string]any  `json:"customFonts"`
+}
+
+func isPetmate(b []byte) bool {
+	head := b[:min(len(b), 200)]
+	return bytes.HasPrefix(bytes.TrimSpace(head), []byte("{")) && bytes.Contains(b, []byte(`"framebufs"`))
+}
+
+// PetScreen is one screen of a file that holds several (.petmate, a .c with frames).
+type PetScreen struct {
+	doc   *Doc
+	lower int // -1 not said, 0 upper, 1 lower
+	name  string
+}
+
+func parsePetmate(b []byte) ([]PetScreen, error) {
+	var f petmateFile
+	if err := json.Unmarshal(b, &f); err != nil {
+		return nil, fmt.Errorf("not a Petmate file: %v", err)
+	}
+	var out []PetScreen
+	for _, s := range f.Framebufs {
+		w, h := max(1, s.Width), max(1, s.Height)
+		d := newDoc(w, h)
+		d.bg, d.border = s.BackgroundColor&15, s.BorderColor&15
+		for y, row := range s.Framebuf {
+			for x, p := range row {
+				if x < w && y < h {
+					d.cells[y*w+x] = makeCell(p.Code&255, p.Color&15, 0, 0)
+				}
+			}
+		}
+		d.trim(1)
+		lower := 0
+		if s.Charset == "lower" {
+			lower = 1
+		}
+		out = append(out, PetScreen{doc: d, lower: lower, name: s.Name})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("the Petmate file has no screens")
+	}
+	return out, nil
+}
+
+// writePetmate gives a Petmate workspace with this one page as its screen.
+func writePetmate(d *Doc, lower bool, name string) []byte {
+	rows := max(d.usedRows(), 25)
+	s := petmateScreen{Width: d.cols, Height: rows, BackgroundColor: d.bg, BorderColor: d.borderColour(),
+		Charset: "upper", Name: name}
+	if lower {
+		s.Charset = "lower"
+	}
+	for y := 0; y < rows; y++ {
+		row := make([]petmatePixel, d.cols)
+		for x := range row {
+			v := d.get(x, y)
+			row[x] = petmatePixel{cellCh(v), cellFg(v)}
+		}
+		s.Framebuf = append(s.Framebuf, row)
+	}
+	out, _ := json.Marshal(petmateFile{Version: 2, Screens: []int{0}, Framebufs: []petmateScreen{s}, CustomFonts: map[string]any{}})
+	return out
+}
+
+// ---------------------------------------------------------------- CharEdit's own .prg
+
+// parsePrg reads back a .prg that writePrg made (it does not take other programs apart).
+func parsePrg(b []byte) (*Doc, int, error) {
+	probe := writePrg(newDoc(40, 25), false)
+	n := len(probe)
+	if len(b) != n || !bytes.Equal(b[:14], probe[:14]) || b[14] != 0xA9 || b[16] != 0x8D || b[17] != 0x20 || b[18] != 0xD0 {
+		return nil, -1, fmt.Errorf("only C64 programs saved by CharEdit can be opened")
+	}
+	d := newDoc(40, 25)
+	d.border, d.bg = int(b[15]&15), int(b[20]&15)
+	lower := 0
+	if b[25] == 0x17 {
+		lower = 1
+	}
+	data := n - 2000
+	for i := 0; i < 1000; i++ {
+		d.cells[i] = makeCell(int(b[data+i]), int(b[data+1000+i]&15), 0, 0)
+	}
+	d.trim(1)
+	return d, lower, nil
+}
+
+func isOurPrg(b []byte) bool {
+	_, _, err := parsePrg(b)
+	return err == nil
 }

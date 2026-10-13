@@ -559,7 +559,9 @@ Dropping files on the window opens them.
 AMIGA, PC AND C64
 Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. C64 pages are PETSCII: 40 columns, the C64's two character sets (the Font gadget), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
 SAVE AS
-ANSI, plain text, UTF-8 text, PC .bin, XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), pictures (.png, normal or twice the size; C64 pages with their border) and a web page (.html). Typing a file ending picks the format. XBin and .c files open again.
+ANSI, plain text, UTF-8 text, PC .bin, XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border) and a web page (.html). Typing a file ending picks the format.
+OPENING
+Everything above that holds characters opens again: ANSI, text, .bin, XBin, .seq, .c, .petmate, and C64 programs saved by CharEdit. A .c or .petmate with several screens opens each screen in a tab of its own. Pictures and web pages do not open.
 The C64 character set is the C64's ROM and does not come with the program: the first run offers to download it from the VICE emulator project (checked by its SHA-1), and so does Settings. A chargen.bin of your own (4096 bytes) in ~/.local/share/charcoal/ works too.
 
 SETTINGS
