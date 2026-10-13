@@ -6,7 +6,7 @@ package main
 // sends, printed by the C64's screen editor.
 //
 // The character set is the C64's character ROM, which is not ours to pass on:
-// it is read from chargen.bin in ~/.local/share/charcoal/ (or the copies that
+// it is read from chargen.bin in appDataDir() (or the copies that
 // bbmp and VICE keep), see c64Paths. downloadChargen fetches it from the VICE
 // emulator's own repository, which distributes it.
 
@@ -43,7 +43,7 @@ type cbmROM struct {
 	vice         string // path under VICE's data folder
 	size         int
 	sha1         string
-	local        string // the file name in ~/.local/share/charcoal
+	local        string // the file name in appDataDir()
 	others       []string
 }
 
@@ -59,7 +59,7 @@ var cbmROMs = []cbmROM{
 }
 
 func (r cbmROM) paths() []string {
-	out := []string{filepath.Join(dataDir(), "charcoal", r.local)}
+	out := []string{filepath.Join(appDataDir(), r.local)}
 	for _, o := range r.others {
 		if !filepath.IsAbs(o) {
 			o = filepath.Join(dataDir(), o)
@@ -136,7 +136,7 @@ func addCBMFonts(r cbmROM, b []byte) {
 }
 
 // downloadChargen fetches the Commodore character ROMs from VICE, checks them and
-// keeps them in ~/.local/share/charcoal; ROMs already here (and right) are not
+// keeps them in appDataDir(); ROMs already here (and right) are not
 // fetched again. Whatever it gets is loaded; if any machine's ROM could not be
 // had, the error names those machines (the others work).
 func downloadChargen() error {

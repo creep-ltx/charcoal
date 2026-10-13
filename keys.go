@@ -1,7 +1,7 @@
 package main
 
 // The editor's shortcuts: one table of actions (keys.go) drives them, the help
-// lists them, and ~/.config/charcoal/keys changes them ("action = key, key").
+// lists them, and the keys file in configDir() changes them ("action = key, key").
 // Typing, the F-keys of the F-key set, the arrows and the other cursor keys,
 // Return, Tab, Backspace, Delete, Insert and Esc are fixed.
 
@@ -357,13 +357,7 @@ func applyKeyFile(text string) (map[string][]combo, []string) {
 	return k, problems
 }
 
-func keysPath() string {
-	d, err := os.UserConfigDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(d, "charcoal", "keys")
-}
+func keysPath() string { return filepath.Join(configDir(), "keys") }
 
 // keyFileText is the keys file with every action at its default keys.
 func keyFileText() string {
@@ -371,6 +365,7 @@ func keyFileText() string {
 	b.WriteString(`# CharEdit's keys. One action a line: action = key, key
 # Write keys like Ctrl+Z, Ctrl+Shift+Up, Alt+F, Ctrl+F1, Ctrl+Keypad +. Alt means the left Alt only (the
 # right one is AltGr, for typing characters). Nothing after = leaves the action without a key.
+# On a Mac, Ctrl here means Cmd or Ctrl, and Alt the left Option key (the right one types characters).
 # A line that is not understood is skipped and named in the status line. Delete this file to get the
 # defaults back (it is written again at the next start).
 # Fixed, not set here: typing, F1-F10 (the F-key set), the arrows, Home, End, PgUp, PgDn, Return, Tab,

@@ -1,0 +1,198 @@
+name: build
+
+# Tests and builds Charcoal for Linux, Windows and macOS on every push; a tag
+# v* also makes a GitHub release with one zip per system (a prerelease when the
+# tag holds a "b", as in v0.9b1). SDL2 is linked into the Windows and Mac
+# programs, so each is one file with no DLL or dylib beside it.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  SDL_VERSION: 2.32.10
+  GOFLAGS: -trimpath
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04 # the oldest glibc on offer: the program runs on more systems
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: SDL2
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev zip
+      - name: gofmt, vet, test
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+          go vet .
+          export XDG_CONFIG_HOME=$RUNNER_TEMP/cfg XDG_DATA_HOME=$RUNNER_TEMP/data
+          go test -count=1 .
+      - name: build
+        run: |
+          mkdir -p out
+          go build -ldflags '-s -w' -o out/charedit .
+      - name: screenshot (no screen)
+        run: |
+          export XDG_CONFIG_HOME=$RUNNER_TEMP/cfg2 XDG_DATA_HOME=$RUNNER_TEMP/data2 SDL_VIDEODRIVER=offscreen
+          CHARCOAL_SCRIPT="key Escape; shot shot-linux.png; quit" ./out/charedit testdata/alove/bs-alove.xb
+          test -s shot-linux.png
+      - name: package
+        run: |
+          v=${GITHUB_REF_NAME//\//-}
+          tools/release/package.sh linux out stage/charcoal-linux-x64 "$v"
+          (cd stage && zip -qry ../charcoal-linux-x64.zip charcoal-linux-x64)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: charcoal-linux-x64
+          path: charcoal-linux-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-linux
+          path: shot-*.png
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: SDL2 (the official MinGW build, static library)
+        run: |
+          curl -sSfL -o sdl.tar.gz "https://github.com/libsdl-org/SDL/releases/download/release-$SDL_VERSION/SDL2-devel-$SDL_VERSION-mingw.tar.gz"
+          mkdir -p "$RUNNER_TEMP/sdl" && tar xzf sdl.tar.gz -C "$RUNNER_TEMP/sdl"
+          S=$(cygpath -m "$RUNNER_TEMP/sdl/SDL2-$SDL_VERSION/x86_64-w64-mingw32")
+          echo "CGO_ENABLED=1" >> "$GITHUB_ENV"
+          echo "CGO_CFLAGS=-I$S/include" >> "$GITHUB_ENV"
+          echo "CGO_LDFLAGS=-L$S/lib -lSDL2 -lsetupapi -lwinmm -limm32 -lversion -lole32 -loleaut32 -luuid -lgdi32 -luser32 -lshell32 -lcfgmgr32" >> "$GITHUB_ENV"
+          gcc --version | head -1
+      - name: vet, test
+        run: |
+          go vet .
+          export XDG_CONFIG_HOME=$(cygpath -m "$RUNNER_TEMP/cfg") XDG_DATA_HOME=$(cygpath -m "$RUNNER_TEMP/data")
+          go test -count=1 -ldflags '-extldflags "-static"' .
+      - name: build
+        run: |
+          mkdir -p out
+          go build -ldflags '-s -w -H windowsgui -extldflags "-static"' -o out/charedit.exe .
+          objdump -p out/charedit.exe | grep 'DLL Name' || true
+      - name: screenshots (no screen)
+        run: |
+          export XDG_CONFIG_HOME=$(cygpath -m "$RUNNER_TEMP/cfg2") XDG_DATA_HOME=$(cygpath -m "$RUNNER_TEMP/data2") SDL_VIDEODRIVER=offscreen
+          CHARCOAL_SCRIPT="key Escape; shot shot-windows.png; key ctrl+O; shot shot-windows-open.png; quit" timeout 120 ./out/charedit.exe testdata/alove/bs-alove.xb
+          cp out/charedit.exe out/charview.exe
+          CHARCOAL_SCRIPT="shot shot-windows-charview.png; quit" timeout 120 ./out/charview.exe testdata/alove/bs-alove.xb
+          ls -la shot-*.png
+      - name: package
+        run: |
+          v=${GITHUB_REF_NAME//\//-}
+          tools/release/package.sh windows out stage/charcoal-windows-x64 "$v"
+          (cd stage && 7z a -tzip -bd ../charcoal-windows-x64.zip charcoal-windows-x64 > /dev/null)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: charcoal-windows-x64
+          path: charcoal-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-windows
+          path: shot-*.png
+
+  macos:
+    runs-on: macos-latest # Apple Silicon; the Intel half is cross-built
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/cache@v4
+        id: sdlcache
+        with:
+          path: ~/sdl2
+          key: sdl2-${{ env.SDL_VERSION }}-universal-static-11.0
+      - name: SDL2 (built from source: a static library for arm64 and x86_64)
+        if: steps.sdlcache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL -o sdl.tar.gz "https://github.com/libsdl-org/SDL/releases/download/release-$SDL_VERSION/SDL2-$SDL_VERSION.tar.gz"
+          tar xzf sdl.tar.gz
+          cmake -S "SDL2-$SDL_VERSION" -B sdlbuild -DCMAKE_BUILD_TYPE=Release -DSDL_SHARED=OFF -DSDL_STATIC=ON \
+            -DSDL_TEST=OFF -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_INSTALL_PREFIX="$HOME/sdl2"
+          cmake --build sdlbuild -j4
+          cmake --install sdlbuild
+      - name: link flags
+        run: |
+          brew list pkgconf >/dev/null 2>&1 || brew list pkg-config >/dev/null 2>&1 || brew install pkgconf
+          echo "PKG_CONFIG_PATH=$HOME/sdl2/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "CGO_ENABLED=1" >> "$GITHUB_ENV"
+          echo "CGO_LDFLAGS=$("$HOME/sdl2/bin/sdl2-config" --static-libs)" >> "$GITHUB_ENV"
+          "$HOME/sdl2/bin/sdl2-config" --static-libs
+          lipo -info "$HOME/sdl2/lib/libSDL2.a"
+      - name: vet, test
+        run: |
+          go vet .
+          export XDG_CONFIG_HOME=$RUNNER_TEMP/cfg XDG_DATA_HOME=$RUNNER_TEMP/data
+          go test -count=1 .
+      - name: build arm64 and amd64, one universal program
+        run: |
+          mkdir -p out
+          GOARCH=arm64 go build -ldflags '-s -w' -o out/charedit-arm64 .
+          GOARCH=amd64 CC="clang -arch x86_64" go build -ldflags '-s -w' -o out/charedit-amd64 .
+          lipo -create -output out/charedit out/charedit-arm64 out/charedit-amd64
+          lipo -info out/charedit
+          otool -L out/charedit
+      - name: Charcoal.app
+        run: |
+          v=${GITHUB_REF_NAME//\//-}
+          tools/release/package.sh macos out stage/charcoal-macos "$v"
+          codesign --force --deep --sign - stage/charcoal-macos/Charcoal.app
+          codesign --verify --verbose stage/charcoal-macos/Charcoal.app
+      - name: screenshots (no screen)
+        run: |
+          export XDG_CONFIG_HOME=$RUNNER_TEMP/cfg2 XDG_DATA_HOME=$RUNNER_TEMP/data2 SDL_VIDEODRIVER=offscreen
+          CHARCOAL_SCRIPT="key Escape; shot shot-macos.png; key ctrl+O; shot shot-macos-open.png; quit" \
+            stage/charcoal-macos/Charcoal.app/Contents/MacOS/charedit testdata/alove/bs-alove.xb
+          CHARCOAL_SCRIPT="shot shot-macos-charview.png; quit" \
+            stage/charcoal-macos/Charcoal.app/Contents/MacOS/charedit --view testdata/alove/bs-alove.xb
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            CHARCOAL_SCRIPT="shot shot-macos-intel.png; quit" arch -x86_64 out/charedit testdata/alove/bs-alove.xb
+          else
+            echo "no Rosetta here: the Intel half is not run"
+          fi
+          ls -la shot-*.png
+      - name: package
+        run: (cd stage && zip -qry ../charcoal-macos.zip charcoal-macos)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: charcoal-macos
+          path: charcoal-macos.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-macos
+          path: shot-*.png
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: charcoal-*
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ contains(github.ref_name, 'b') }}
+          files: charcoal-*.zip

@@ -13,9 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -23,7 +21,7 @@ const autosaveEvery = 2 * time.Minute
 
 var lastAutosave = time.Now()
 
-func autosaveDir() string { return filepath.Join(dataDir(), "charcoal", "autosave") }
+func autosaveDir() string { return filepath.Join(appDataDir(), "autosave") }
 
 // autosaveMeta is what an autosave says about its page, next to the cells.
 type autosaveMeta struct {
@@ -135,22 +133,10 @@ func (a *App) autosaveNow() {
 	}
 }
 
-// running tells whether the CharEdit with this process id still runs: then
-// its autosaves are its own business.
-func running(pid int) bool {
-	if pid <= 0 || pid == os.Getpid() {
-		return false
-	}
-	p, err := os.FindProcess(pid)
-	if err != nil || p.Signal(syscall.Signal(0)) != nil {
-		return false
-	}
-	// The number may have gone to another program since.
-	if comm, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/comm"); err == nil {
-		self, _ := os.ReadFile("/proc/self/comm")
-		return bytes.Equal(comm, self)
-	}
-	return true
+// sameProgram compares two programs' file names: case aside, .exe aside.
+func sameProgram(a, b string) bool {
+	trim := func(s string) string { return strings.TrimSuffix(strings.ToLower(s), ".exe") }
+	return trim(a) == trim(b)
 }
 
 // leftAutosaves are the autosaves of CharEdits that stopped without saving

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -25,6 +26,7 @@ var (
 	texW     int
 	texH     int
 	scale    = 1
+	pxScale  = 1 // screen pixels per frame buffer pixel: scale times 2 on a Retina screen
 )
 
 // maxUIScale is the biggest window scale (Settings offers 1x to this).
@@ -37,8 +39,21 @@ func getClipboard() string {
 }
 func shiftHeld() bool { return sdl.GetModState()&sdl.KMOD_SHIFT != 0 }
 
+// dropFinderArgs drops the -psn_ argument older macOS versions give a program
+// started from the Finder.
+func dropFinderArgs() {
+	out := os.Args[:1]
+	for _, s := range os.Args[1:] {
+		if !strings.HasPrefix(s, "-psn_") {
+			out = append(out, s)
+		}
+	}
+	os.Args = out
+}
+
 func main() {
 	runtime.LockOSThread()
+	dropFinderArgs()
 	if wantViewer() {
 		viewer = &Viewer{info: true}
 	}
@@ -73,6 +88,9 @@ func main() {
 		viewer.files = viewerFiles(os.Args[1:])
 		if len(viewer.files) == 0 {
 			fmt.Fprintln(os.Stderr, "usage: charview FILE|FOLDER...")
+			// Started by a double click there is no terminal to read that in.
+			sdl.ShowSimpleMessageBox(sdl.MESSAGEBOX_INFORMATION, "CharView",
+				"CharView shows art files one after the other. Drop files or a folder on it, or open art files with it.", nil)
 			os.Exit(1)
 		}
 		viewer.show(0)
@@ -105,6 +123,7 @@ func main() {
 		openC64Req(nil) // ask once, on the first run
 	}
 
+	beforeSDL() // Windows: draw in the screen's own pixels (no blurry stretching)
 	if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
 		fmt.Fprintln(os.Stderr, "charedit:", err)
 		os.Exit(1)
@@ -113,6 +132,9 @@ func main() {
 	sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "0")
 	sdl.SetHint(sdl.HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0")
 	scale = max(1, min(maxUIScale, prefs.UIScale))
+	if prefs.UIScale == 0 {
+		scale = firstScale()
+	}
 	w, h := 1400, 940
 	if prefs.Width > 200 && prefs.Height > 200 {
 		w, h = prefs.Width, prefs.Height
@@ -121,7 +143,7 @@ func main() {
 	}
 	var err error
 	window, err = sdl.CreateWindow("CharEdit", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, int32(w), int32(h),
-		sdl.WINDOW_RESIZABLE)
+		sdl.WINDOW_RESIZABLE|sdl.WINDOW_ALLOW_HIGHDPI)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "charedit:", err)
 		os.Exit(1)
@@ -197,8 +219,15 @@ func main() {
 
 // pass lays out and draws the whole window once, handing the pending click to whoever is under it.
 func pass() {
+	// On a Retina screen the renderer has twice the window's points: draw at
+	// twice the scale there, so it is sharp; the mouse stays in points / scale.
 	ww, wh := window.GetSize()
-	ui.fb.resize(int(ww)/scale, int(wh)/scale)
+	ow, oh, err := renderer.GetOutputSize()
+	if err != nil || ow <= 0 || ww <= 0 {
+		ow, oh = ww, wh
+	}
+	pxScale = scale * max(1, int((ow+ww/2)/ww))
+	ui.fb.resize(int(ow)/pxScale, int(oh)/pxScale)
 	ui.hint, ui.wheelTaken = "", false
 	ui.inert = a.dialog != nil
 	a.drawWindow(ui)
@@ -238,7 +267,7 @@ func present() {
 	texture.Update(nil, unsafe.Pointer(&fb.px[0]), fb.w*4)
 	renderer.SetDrawColor(0, 0, 0, 255)
 	renderer.Clear()
-	renderer.Copy(texture, nil, &sdl.Rect{X: 0, Y: 0, W: int32(fb.w * scale), H: int32(fb.h * scale)})
+	renderer.Copy(texture, nil, &sdl.Rect{X: 0, Y: 0, W: int32(fb.w * pxScale), H: int32(fb.h * pxScale)})
 	renderer.Present()
 }
 
@@ -303,7 +332,7 @@ func handleEvent(ev sdl.Event) bool {
 		ui.click = c
 		pass()
 	case *sdl.MouseWheelEvent:
-		if sdl.GetModState()&sdl.KMOD_CTRL != 0 && a.dialog == nil {
+		if ctrlMod(sdl.GetModState()) && a.dialog == nil {
 			a.zoomAt(a.zoom+int(e.Y), ui.mx, ui.my)
 			return true
 		}
@@ -339,10 +368,8 @@ func textInput(s string) {
 	if viewer != nil {
 		return
 	}
-	// Ctrl and left Alt are shortcuts; right Alt is AltGr, which Windows reports
-	// as left Ctrl + right Alt, and it types @ { [ \ $ | ~ on many keyboards.
-	mod := sdl.GetModState()
-	if a.dialog != nil || a.playing != nil || ui.popup != nil || (mod&sdl.KMOD_RALT == 0 && mod&(sdl.KMOD_CTRL|sdl.KMOD_LALT) != 0) {
+	// Ctrl and left Alt are shortcuts; right Alt is AltGr (see shortcutMod).
+	if a.dialog != nil || a.playing != nil || ui.popup != nil || shortcutMod(sdl.GetModState()) {
 		return
 	}
 	for _, r := range s {
@@ -362,7 +389,7 @@ func textInput(s string) {
 func keyDown(e *sdl.KeyboardEvent) {
 	k := sdl.GetKeyName(e.Keysym.Sym)
 	mod := sdl.Keymod(e.Keysym.Mod)
-	ctrl, shift := mod&sdl.KMOD_CTRL != 0 && mod&sdl.KMOD_RALT == 0, mod&sdl.KMOD_SHIFT != 0 // AltGr is no Ctrl
+	ctrl, shift := ctrlMod(mod), mod&sdl.KMOD_SHIFT != 0 // AltGr is no Ctrl
 	if ui.popup != nil {
 		if k == "Escape" {
 			ui.popup = nil

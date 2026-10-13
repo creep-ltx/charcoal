@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -101,11 +102,12 @@ type entry struct {
 	name string
 	dir  bool
 	size int64
+	full string // the drives list: the drive's own path
 }
 
 type FileReq struct {
 	save    bool
-	dir     string
+	dir     string // "" while the drives are listed
 	entries []entry
 	sel     int
 	top     int
@@ -123,11 +125,7 @@ var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "Atari ST V
 
 func openOpenRequester() {
 	d := &FileReq{sel: -1}
-	dir := a.lastDir
-	if dir == "" {
-		dir, _ = os.Getwd()
-	}
-	d.listFirst(dir)
+	d.listFirst(startDir(a.lastDir))
 	d.path.enter = d.enter
 	a.dialog = d
 	ui.focus = &d.path
@@ -139,10 +137,7 @@ func openSaveRequester() {
 	if a.path != "" {
 		dir = filepath.Dir(a.path)
 	}
-	if dir == "" {
-		dir, _ = os.Getwd()
-	}
-	d.listFirst(dir)
+	d.listFirst(startDir(dir))
 	d.path.set(filepath.Join(d.dir, a.name))
 	for i, f := range a.modeFormats() {
 		if f.id == a.saveFmt {
@@ -154,12 +149,25 @@ func openSaveRequester() {
 	ui.focus = &d.path
 }
 
-// listFirst lists the first of dir, the home folder and / that can be listed
+// startDir is where a requester opens: the given folder, else the current one;
+// a program started from the Mac's Finder runs in /, so the home folder then.
+func startDir(dir string) string {
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
+	if dir == "" || filepath.Dir(dir) == dir {
+		if h := homeDir(); h != "" {
+			return h
+		}
+	}
+	return dir
+}
+
+// listFirst lists the first of dir, the home folder and the first drive that can be listed
 // (a remembered folder may be gone, a NAS unmounted); why dir could not be is shown.
 func (d *FileReq) listFirst(dir string) {
-	home, _ := os.UserHomeDir()
 	why := ""
-	for _, p := range []string{dir, home, "/"} {
+	for _, p := range append([]string{dir, homeDir()}, fileRoots()...) {
 		if p == "" {
 			continue
 		}
@@ -200,7 +208,7 @@ func (d *FileReq) list(dir string) {
 				isDir = st.IsDir()
 			}
 		}
-		d.entries = append(d.entries, entry{e.Name(), isDir, info.Size()})
+		d.entries = append(d.entries, entry{name: e.Name(), dir: isDir, size: info.Size()})
 	}
 	rest := d.entries[1:]
 	sort.Slice(rest, func(i, j int) bool {
@@ -211,16 +219,49 @@ func (d *FileReq) list(dir string) {
 	})
 	d.sel, d.top, d.selPath = -1, 0, ""
 	if !d.save {
-		d.path.set(dir + string(filepath.Separator))
+		d.path.set(withPathEnd(dir))
 	} else {
 		d.path.set(filepath.Join(dir, filepath.Base(d.path.String())))
 	}
 }
 
+// listRoots lists the drives (Windows) or the disks: / and the mounted ones.
+func (d *FileReq) listRoots() {
+	d.err, d.dir, d.entries = "", "", nil
+	for _, r := range fileRoots() {
+		d.entries = append(d.entries, entry{name: r, dir: true, full: r})
+	}
+	d.sel, d.top, d.selPath = -1, 0, ""
+	if !d.save {
+		d.path.set("")
+	} else {
+		d.path.set(filepath.Base(d.path.String()))
+	}
+}
+
+// parent lists the folder above; above a drive's top, the drives.
+func (d *FileReq) parent() {
+	if d.dir == "" {
+		return
+	}
+	if up := filepath.Dir(d.dir); up != d.dir {
+		d.list(up)
+	} else {
+		d.listRoots()
+	}
+}
+
+// rootsLabel names the drives button.
+func rootsLabel() string {
+	if runtime.GOOS == "windows" {
+		return "Drives"
+	}
+	return "Disks"
+}
+
 func expandHome(p string) string {
-	if p == "~" || strings.HasPrefix(p, "~/") {
-		h, _ := os.UserHomeDir()
-		return h + p[1:]
+	if p == "~" || (len(p) > 1 && p[0] == '~' && os.IsPathSeparator(p[1])) {
+		return homeDir() + p[1:]
 	}
 	return p
 }
@@ -231,8 +272,10 @@ func (d *FileReq) activate(i int) {
 	}
 	e := d.entries[i]
 	if e.dir {
-		if e.name == ".." {
-			d.list(filepath.Dir(d.dir))
+		if e.full != "" {
+			d.list(e.full)
+		} else if e.name == ".." {
+			d.parent()
 		} else {
 			d.list(filepath.Join(d.dir, e.name))
 		}
@@ -264,7 +307,7 @@ func (d *FileReq) ok() {
 		d.list(p)
 		return
 	}
-	if strings.HasSuffix(d.path.String(), "/") {
+	if hasPathEnd(d.path.String()) {
 		d.err = "No such drawer: " + p
 		return
 	}
@@ -341,7 +384,11 @@ func (d *FileReq) draw(u *UI) {
 		title = "Save as"
 	}
 	in := u.window(centre(720, ui.fb.h*4/5), title)
-	fb.text(in.x, in.y, "Drawer: "+d.dir, cText)
+	if d.dir == "" {
+		fb.text(in.x, in.y, rootsLabel(), cText)
+	} else {
+		fb.text(in.x, in.y, "Drawer: "+d.dir, cText)
+	}
 	listR := Rect{in.x, in.y + lineH + 6, in.w - 18, in.h - 3*gadH - lineH - 36}
 	fb.fill(listR, cGrey)
 	fb.bevel(listR, true)
@@ -416,15 +463,16 @@ func (d *FileReq) draw(u *UI) {
 	if d.save {
 		label = "Save"
 	}
-	switch buttonRow(u, in, "Parent", "Home", label, "Cancel") {
+	switch buttonRow(u, in, "Parent", rootsLabel(), "Home", label, "Cancel") {
 	case 0:
-		d.list(filepath.Dir(d.dir))
+		d.parent()
 	case 1:
-		h, _ := os.UserHomeDir()
-		d.list(h)
+		d.listRoots()
 	case 2:
-		d.enter()
+		d.list(homeDir())
 	case 3:
+		d.enter()
+	case 4:
 		closeDialog()
 	}
 }
@@ -444,8 +492,10 @@ func (d *FileReq) key(k string, ctrl, shift bool) bool {
 		}
 		if e := d.entries[d.sel]; !e.dir {
 			d.path.set(filepath.Join(d.dir, e.name))
+		} else if e.full != "" && !d.save {
+			d.path.set(e.full)
 		} else if !d.save {
-			d.path.set(d.dir + string(filepath.Separator))
+			d.path.set(withPathEnd(d.dir))
 		}
 		d.selPath = d.path.String()
 	}
@@ -636,7 +686,7 @@ Tabs: click to show, x or middle click closes, + opens a new page. With two page
 KEYS
 The page has a height (H) as well as a width: it ends where the dark area starts, and every row is saved, empty rows at the bottom too. Enter or Down past the last row adds a row; H sets the height (fewer rows cuts, Undo brings them back).
 Typing writes at the cursor in the brush colours (any tool). Arrows, Home, End, PgUp, PgDn, Enter, Tab, Backspace, Delete (clears a selected block), Insert (insert / overwrite), Esc (lets go of a block). F1-F10 type the F-key set.
-Every key below can be changed in ~/.config/charcoal/keys (the file says how; delete it to get these back).
+Every key below can be changed in ` + shownDir(configDir()) + `keys (the file says how; delete it to get these back).` + macKeysNote() + `
 ` + keysHelp() + "\n" + `A selected block, or one being pasted, can be turned over with the buttons under the colours or the keys above: mirror (left-right), upside down, turn a quarter clockwise, invert (reversed characters on PETSCII and Atari pages, the two colours swapped elsewhere). Characters become their mirrored or turned twins: / and \, the box lines and corners, half blocks, arrows; on PETSCII pages Marq's PETSCII editor's tables. A selection that turns into another shape is lifted off the page to be put down. Copy a block, paste it, turn it, stamp it as often as you like.
 "Sync" scrolls two pages together. Dropping files on the window opens them. Keys in the W and H fields stay in the field until Enter, Esc or Tab.
 PAGE TYPES: AMIGA, PC, ATARI, ATARI ST, PETSCII, ZX SPECTRUM, TELETEXT
@@ -654,10 +704,10 @@ Everything above that holds characters opens again: ANSI, text, .bin, XBin, .pcb
 The Commodore character sets are the machines' ROMs and do not come with the program: the first run offers to download them from the VICE emulator project (each checked by its SHA-1), and so does Settings.
 
 SETTINGS
-Kept in ~/.config/charcoal/prefs.json (a broken one is put aside as prefs.json.bad); the keys in ~/.config/charcoal/keys. Settings: the window size (1x to 4x for big screens), keeping the old version of a file as name.bak when a save writes over it (on unless switched off), and the downloads, which run while you work on.
+Kept in ` + shownDir(configDir()) + `prefs.json (a broken one is put aside as prefs.json.bad); the keys in ` + shownDir(configDir()) + `keys. Settings: the window size (1x to 4x for big screens), keeping the old version of a file as name.bak when a save writes over it (on unless switched off), and the downloads, which run while you work on.
 
 SAFETY
-Every two minutes, pages with changes are kept aside (in ~/.local/share/charcoal/autosave/). If CharEdit stops without saving them (a crash, the power), the next start offers to open them again in tabs. Saving a page or closing it on purpose lets go of its copy. The Open requester's "Recent files" lists the last 10 files opened or saved.`
+Every two minutes, pages with changes are kept aside (in ` + shownDir(autosaveDir()) + `). If CharEdit stops without saving them (a crash, the power), the next start offers to open them again in tabs. Saving a page or closing it on purpose lets go of its copy. The Open requester's "Recent files" lists the last 10 files opened or saved.`
 }
 
 func (d *HelpReq) draw(u *UI) {
@@ -702,14 +752,18 @@ func (d *HelpReq) key(k string, ctrl, shift bool) bool {
 
 // ---------------------------------------------------------------- fonts to download
 
-const c64Why = "PETSCII pages need the Commodore character sets (PET, VIC-20, C64, C128). They are the machines' " +
-	"own ROMs, so they do not come with this program, but the VICE emulator project hands them out. Download them " +
-	"from VICE now? (18 KB, each checked before it is used, kept in ~/.local/share/charcoal/.) You can also do this " +
-	"later under Settings."
+func c64Why() string {
+	return "PETSCII pages need the Commodore character sets (PET, VIC-20, C64, C128). They are the machines' " +
+		"own ROMs, so they do not come with this program, but the VICE emulator project hands them out. Download them " +
+		"from VICE now? (18 KB, each checked before it is used, kept in " + shownDir(appDataDir()) + ".) You can also do this " +
+		"later under Settings."
+}
 
-const stWhy = "Atari ST pages need the ST's font. Atari's own is in the TOS ROM; EmuTOS, the free TOS (GPL), has " +
-	"its own version of it. Download it from EmuTOS now? (two small files, checked before they are used, kept in " +
-	"~/.local/share/charcoal/.) You can also do this later under Settings."
+func stWhy() string {
+	return "Atari ST pages need the ST's font. Atari's own is in the TOS ROM; EmuTOS, the free TOS (GPL), has " +
+		"its own version of it. Download it from EmuTOS now? (two small files, checked before they are used, kept in " +
+		shownDir(appDataDir()) + ".) You can also do this later under Settings."
+}
 
 // FontReq asks to download fonts that may not come with the program.
 type FontReq struct {
@@ -723,12 +777,12 @@ type FontReq struct {
 }
 
 func openC64Req(after func()) {
-	a.dialog = &FontReq{title: "Commodore character sets", why: c64Why, firstRun: true, after: after,
+	a.dialog = &FontReq{title: "Commodore character sets", why: c64Why(), firstRun: true, after: after,
 		what: "the Commodore character sets", fetch: fetchC64ROMs, load: loadC64Downloaded}
 }
 
 func openSTReq(after func()) {
-	a.dialog = &FontReq{title: "Atari ST font", why: stWhy, after: after,
+	a.dialog = &FontReq{title: "Atari ST font", why: stWhy(), after: after,
 		what: "the Atari ST font", fetch: fetchSTFonts, load: loadSTDownloaded}
 }
 

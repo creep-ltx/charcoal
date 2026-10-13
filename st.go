@@ -63,7 +63,7 @@ var stFontFiles = []struct{ id, name, file, sha1 string }{
 	{"st8x16", "Atari ST 8x16 (EmuTOS)", "fnt_st_8x16.c", "fc916a8a36639f4cfb45f4aad0cbc6baae95855c"},
 }
 
-func stFontPath(file string) string { return filepath.Join(dataDir(), "charcoal", "emutos-"+file) }
+func stFontPath(file string) string { return filepath.Join(appDataDir(), "emutos-"+file) }
 
 func hasSTFont() bool { return fontByID("st8x8") != nil && fontByID("st8x16") != nil }
 

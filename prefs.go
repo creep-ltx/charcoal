@@ -1,6 +1,6 @@
 package main
 
-// Settings kept between runs, in ~/.config/charcoal/prefs.json.
+// Settings kept between runs, in prefs.json in configDir().
 
 import (
 	"encoding/json"
@@ -38,13 +38,7 @@ type Prefs struct {
 
 var prefs Prefs
 
-func prefsPath() string {
-	d, err := os.UserConfigDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(d, "charcoal", "prefs.json")
-}
+func prefsPath() string { return filepath.Join(configDir(), "prefs.json") }
 
 // pageModes are the page types, as prefs.json names them.
 var pageModes = []string{"amiga", "pc", "c64", "atari", "st", "zx", "tt"}

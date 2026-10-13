@@ -170,7 +170,7 @@ func TestDownloadChargen(t *testing.T) {
 	}
 	// Only the good one again: it is on disk and right, so nothing is fetched.
 	fakeROMs(t, srv, []cbmROM{good})
-	if err := os.MkdirAll(filepath.Join(dataDir(), "charcoal"), 0o755); err != nil {
+	if err := os.MkdirAll(appDataDir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	os.WriteFile(good.paths()[0], goodBytes, 0o644)
@@ -187,6 +187,9 @@ func TestDownloadChargen(t *testing.T) {
 
 // dataDir ignores a relative XDG_DATA_HOME, as the XDG rules ask.
 func TestDataDir(t *testing.T) {
+	if ownFolderSystem {
+		t.Skip("the XDG fallback is for Linux")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "relative/dir")
