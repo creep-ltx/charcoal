@@ -351,9 +351,19 @@ func (a *App) msg(s string) {
 // ---------------------------------------------------------------- undo
 
 func (a *App) snapshot() Snap { return Snap{a.doc.clone(), a.cx, a.cy} }
+
+// undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
+// keeps fewer steps instead of eating the memory.
+const undoBudget = 16 << 20
+
 func (a *App) pushUndo() {
 	a.undo = append(a.undo, a.snapshot())
-	if len(a.undo) > 300 {
+	total := 0
+	for _, s := range a.undo {
+		total += len(s.doc.cells)
+	}
+	for len(a.undo) > 1 && (len(a.undo) > 300 || total > undoBudget) {
+		total -= len(a.undo[0].doc.cells)
 		a.undo = a.undo[1:]
 	}
 	a.redo = a.redo[:0]
@@ -1340,6 +1350,15 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	nl := "\r\n"
 	if !a.pc() {
 		nl = "\n"
+	}
+	if (fmtID == "ansi" || fmtID == "text") && d.cols != 80 && !info.writeSauce {
+		// Only the record tells other programs the width: without it the art falls apart.
+		info.writeSauce, a.info.writeSauce = true, true
+		a.msg(fmt.Sprintf("Saved with a SAUCE record: it is the only way to keep a width of %d", d.cols))
+	}
+	if limit := map[string]int{"seq": a.mach().cols, "ata": 40}[fmtID]; limit > 0 && d.cols > limit {
+		a.msg(fmt.Sprintf("Only the first %d columns fit this format; the rest is not saved", limit))
+		d = d.withCols(limit)
 	}
 	switch fmtID {
 	case "ansi":

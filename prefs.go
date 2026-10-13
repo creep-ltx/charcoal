@@ -12,22 +12,25 @@ import (
 )
 
 type Prefs struct {
-	Mode     string             `json:"mode"`
-	Font     map[string]string  `json:"font"`
-	Palette  map[string]string  `json:"palette"`
-	Zoom     int                `json:"zoom"`
-	Ch8      bool               `json:"ch8"`
-	Smear    bool               `json:"smear"`
-	Fkeys    map[string][][]int `json:"fkeys"`
-	Custom   []string           `json:"custom"`
-	Dir      string             `json:"dir"`
-	Baud     int                `json:"baud"`
-	UIScale  int                `json:"uiscale"`
-	Grid     bool               `json:"grid"`
-	Machine  string             `json:"machine"`
-	C64Asked bool               `json:"c64asked"` // the first-run question about the C64 character set
-	Width    int                `json:"width"`
-	Height   int                `json:"height"`
+	Mode      string             `json:"mode"`
+	Font      map[string]string  `json:"font"`
+	Palette   map[string]string  `json:"palette"`
+	Zoom      int                `json:"zoom"`
+	Ch8       bool               `json:"ch8"`
+	Smear     bool               `json:"smear"`
+	Fkeys     map[string][][]int `json:"fkeys"`
+	Custom    []string           `json:"custom"`
+	Dir       string             `json:"dir"`
+	Baud      int                `json:"baud"`
+	UIScale   int                `json:"uiscale"`
+	Grid      bool               `json:"grid"`
+	Machine   string             `json:"machine"`
+	ViewAuto  bool               `json:"view_auto_scroll"`
+	ViewStep  bool               `json:"view_step_scroll"`
+	ViewSpeed float64            `json:"view_scroll_speed"`
+	C64Asked  bool               `json:"c64asked"` // the first-run question about the C64 character set
+	Width     int                `json:"width"`
+	Height    int                `json:"height"`
 }
 
 var prefs Prefs

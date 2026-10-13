@@ -13,11 +13,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
 )
 
 var script []string
+var scriptWait time.Time // a "wait" step holds the script until then
 
 func init() {
 	for _, s := range strings.Split(os.Getenv("CHARCOAL_SCRIPT"), ";") {
@@ -47,6 +49,9 @@ var keyNames = map[string]sdl.Keycode{}
 func scriptStep() bool {
 	if len(script) == 0 {
 		return false
+	}
+	if time.Now().Before(scriptWait) {
+		return true
 	}
 	pass() // lay out first, as a person would see the window
 	step := strings.Fields(script[0])
@@ -110,6 +115,8 @@ func scriptStep() bool {
 		}
 		code := sdl.GetKeyFromName(k)
 		keyDown(&sdl.KeyboardEvent{Type: sdl.KEYDOWN, Keysym: sdl.Keysym{Sym: code, Mod: mod}})
+	case "wait": // milliseconds
+		scriptWait = time.Now().Add(time.Duration(n(1)) * time.Millisecond)
 	case "shot":
 		pass()
 		shot(step[1])

@@ -481,6 +481,9 @@ func (a *App) fitZoom() {
 func (a *App) contentSize() (int, int) {
 	z, H := a.zoom, a.cellH()
 	rows := max(a.doc.rows+25, (a.page.h+H*z-1)/(H*z))
+	if viewer != nil { // the viewer shows the art and no more
+		rows = max(a.doc.usedRows(), 1)
+	}
 	return a.doc.cols * 8 * z, rows * H * z
 }
 

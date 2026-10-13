@@ -57,6 +57,10 @@ func main() {
 	a.ch8Default, a.smearDefault = prefs.Ch8, prefs.Smear
 	a.focusTab(a.newTab(mode))
 	if viewer != nil {
+		viewer.auto, viewer.step, viewer.speed = prefs.ViewAuto, prefs.ViewStep, prefs.ViewSpeed
+		if viewer.speed <= 0 {
+			viewer.speed = 4
+		}
 		viewer.files = viewerFiles(os.Args[1:])
 		if len(viewer.files) == 0 {
 			fmt.Fprintln(os.Stderr, "usage: charview FILE|FOLDER...")
@@ -123,11 +127,12 @@ func main() {
 	sdl.EventState(sdl.DROPFILE, sdl.ENABLE)
 
 	nextBlink := time.Now().Add(500 * time.Millisecond)
+	lastTick := time.Now()
 	shownMsg := ""
 	redraw := true
 	for !a.quit {
 		wait := time.Until(nextBlink)
-		if a.playing != nil || len(script) > 0 {
+		if a.playing != nil || len(script) > 0 || (viewer != nil && viewer.auto) {
 			wait = 15 * time.Millisecond
 		}
 		ev := sdl.WaitEventTimeout(max(1, int(wait/time.Millisecond)))
@@ -144,6 +149,13 @@ func main() {
 		if a.playing != nil {
 			a.playStep()
 			redraw = true
+		}
+		if viewer != nil {
+			now := time.Now()
+			if viewer.tick(now.Sub(lastTick).Seconds()) {
+				redraw = true
+			}
+			lastTick = now
 		}
 		if a.message != "" && time.Since(a.messageAt) > 4*time.Second && shownMsg == a.message {
 			a.message = ""
@@ -347,7 +359,7 @@ func keyDown(e *sdl.KeyboardEvent) {
 
 func editorKey(k string, ctrl, shift, alt bool) {
 	if viewer != nil {
-		viewerKey(k, ctrl)
+		viewerKey(k, ctrl, shift)
 		return
 	}
 	if ctrl {
