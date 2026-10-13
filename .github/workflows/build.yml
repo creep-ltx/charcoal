@@ -68,8 +68,9 @@ jobs:
       - name: SDL2 (the official MinGW build, static library)
         run: |
           curl -sSfL -o sdl.tar.gz "https://github.com/libsdl-org/SDL/releases/download/release-$SDL_VERSION/SDL2-devel-$SDL_VERSION-mingw.tar.gz"
-          mkdir -p "$RUNNER_TEMP/sdl" && tar xzf sdl.tar.gz -C "$RUNNER_TEMP/sdl"
-          S=$(cygpath -m "$RUNNER_TEMP/sdl/SDL2-$SDL_VERSION/x86_64-w64-mingw32")
+          T=$(cygpath -u "$RUNNER_TEMP")/sdl
+          mkdir -p "$T" && tar xzf sdl.tar.gz -C "$T"
+          S=$(cygpath -m "$T/SDL2-$SDL_VERSION/x86_64-w64-mingw32")
           echo "CGO_ENABLED=1" >> "$GITHUB_ENV"
           echo "CGO_CFLAGS=-I$S/include" >> "$GITHUB_ENV"
           echo "CGO_LDFLAGS=-L$S/lib -lSDL2 -lsetupapi -lwinmm -limm32 -lversion -lole32 -loleaut32 -luuid -lgdi32 -luser32 -lshell32 -lcfgmgr32" >> "$GITHUB_ENV"
