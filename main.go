@@ -48,6 +48,7 @@ func main() {
 	}
 	a = &App{tool: "draw", fg: 7, brush: 0x2F, charHover: -1, layout: "one"}
 	a.hasC64 = loadC64Fonts()
+	loadSTFonts()
 	loadPrefs()
 	uiFont = fontByID("topaz2")
 	mode := prefs.Mode

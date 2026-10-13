@@ -66,10 +66,7 @@ func writePrg(d *Doc, lower bool) []byte {
 // writeMarq gives the C array Marq's PETSCII editor and Petmate read, at the page's own size
 // (a 40-column page at least 25 rows, a whole C64 screen).
 func writeMarq(d *Doc, lower bool) []byte {
-	w, h := d.cols, max(d.usedRows(), 1)
-	if w == 40 {
-		h = max(h, 25)
-	}
+	w, h := d.cols, max(d.rows, 1)
 	var b strings.Builder
 	b.WriteString("unsigned char frame0000[]={// border,bg,chars,colors\n")
 	fmt.Fprintf(&b, "%d,%d,\n", d.borderColour(), d.bg)
@@ -127,7 +124,6 @@ func parseMarq(b []byte) ([]PetScreen, error) {
 		for i := 0; i < w*h; i++ {
 			d.cells[i] = makeCell(nums[2+i]&255, nums[2+w*h+i]&15, 0, 0)
 		}
-		d.trim(1)
 		out = append(out, PetScreen{doc: d, lower: lower})
 	}
 	if len(out) == 0 {
@@ -140,14 +136,14 @@ func parseMarq(b []byte) ([]PetScreen, error) {
 
 // writeXBin gives an XBin with the palette and the font in it, so it looks the same anywhere.
 func writeXBin(d *Doc, pal [16]uint32, f *Font, cellH int, ice bool) []byte {
-	rows := max(d.usedRows(), 1)
+	rows := max(d.rows, 1)
 	out := []byte{'X', 'B', 'I', 'N', 0x1A, byte(d.cols), byte(d.cols >> 8), byte(rows), byte(rows >> 8), byte(cellH)}
 	flags := byte(1 | 2) // palette, font
 	if ice {
 		flags |= 8
 	}
 	out = append(out, flags)
-	for _, c := range pal {
+	for _, c := range biosPalette(pal) { // the file's palette is in BIOS order
 		out = append(out, byte(c>>16&255)>>2, byte(c>>8&255)>>2, byte(c&255)>>2)
 	}
 	skip := 16 / cellH
@@ -159,7 +155,7 @@ func writeXBin(d *Doc, pal [16]uint32, f *Font, cellH int, ice bool) []byte {
 	for y := 0; y < rows; y++ {
 		for x := 0; x < d.cols; x++ {
 			v := d.get(x, y)
-			out = append(out, byte(cellCh(v)), byte(cellFg(v)|cellBg(v)<<4))
+			out = append(out, byte(cellCh(v)), cellAttr(v))
 		}
 	}
 	return out
@@ -199,6 +195,7 @@ func parseXBin(b []byte) (*Doc, XBinInfo, error) {
 			pal[i] = 0xFF000000 | (r<<2|r>>4)<<16 | (g<<2|g>>4)<<8 | (bl<<2 | bl>>4)
 			p += 3
 		}
+		pal = biosPalette(pal)
 		info.pal = &pal
 	}
 	if flags&2 != 0 {
@@ -266,9 +263,8 @@ func parseXBin(b []byte) (*Doc, XBinInfo, error) {
 	}
 	d := newDoc(w, max(h, 1))
 	for i := 0; i+1 < len(cells) && i/2 < w*h; i += 2 {
-		d.cells[i/2] = makeCell(int(cells[i]), int(cells[i+1]&15), int(cells[i+1]>>4), 0)
+		d.cells[i/2] = attrCell(cells[i], cells[i+1])
 	}
-	d.trim(1)
 	return d, info, nil
 }
 
@@ -299,7 +295,7 @@ func (a *App) writeHTML() []byte {
 	fmt.Fprintf(&b, "<style>body{background:%s;margin:2em}pre{font:16px/1 \"Topaz a600a1200a400\",\"Px437 IBM VGA 8x16\",monospace;display:inline-block;background:%s;padding:0;margin:0}</style>\n",
 		hex(page), hex(a.pal[0]))
 	b.WriteString("</head><body><pre>")
-	rows := max(d.usedRows(), 1)
+	rows := max(d.rows, 1)
 	for y := 0; y < rows; y++ {
 		last := uint64(1<<63 - 1)
 		open := false
@@ -394,7 +390,6 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 				}
 			}
 		}
-		d.trim(1)
 		lower := 0
 		if s.Charset == "lower" {
 			lower = 1
@@ -409,7 +404,7 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 
 // writePetmate gives a Petmate workspace with this one page as its screen.
 func writePetmate(d *Doc, lower bool, name string) []byte {
-	rows := max(d.usedRows(), 25)
+	rows := max(d.rows, 1)
 	s := petmateScreen{Width: d.cols, Height: rows, BackgroundColor: d.bg, BorderColor: d.borderColour(),
 		Charset: "upper", Name: name}
 	if lower {
@@ -449,7 +444,6 @@ func parsePrg(b []byte) (*Doc, int, error) {
 	for i := 0; i < 1000; i++ {
 		d.cells[i] = makeCell(int(b[prgScreen+i]), int(b[prgScreen+1000+i]&15), 0, 0)
 	}
-	d.trim(1)
 	return d, lower, nil
 }
 

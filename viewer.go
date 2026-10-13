@@ -193,7 +193,7 @@ func (a *App) drawViewer(u *UI) {
 	fb.fill(r, cDark)
 	x := fb.text(8, r.y+4, fmt.Sprintf("%d/%d", viewer.i+1, len(viewer.files)), cHi) + 16
 	x = fb.text(x, r.y+4, a.name, cHi) + 16
-	x = fb.text(x, r.y+4, fmt.Sprintf("%s, %s, %dx%d", modeNames[a.mode], a.font().name, a.doc.cols, max(a.doc.usedRows(), 1)), cText) + 24
+	x = fb.text(x, r.y+4, fmt.Sprintf("%s, %s, %dx%d", modeNames[a.mode], a.font().name, a.doc.cols, a.doc.rows), cText) + 24
 	if st := viewer.scrollText(); st != "" {
 		x = fb.text(x, r.y+4, st, cHi) + 16
 	}
@@ -249,7 +249,7 @@ func viewerKey(k string, ctrl, shift bool) {
 	case "Home":
 		a.scrollY = 0
 	case "End":
-		a.scrollY = a.doc.usedRows() * rowPx
+		a.scrollY = a.doc.rows * rowPx
 	case "=", "+", "Keypad +":
 		v.zoomSet = true
 		if v.shrink > 1 {
@@ -324,7 +324,7 @@ func (v *Viewer) shrunk() ([]uint32, int, int) {
 		return c.px, c.w, c.h
 	}
 	s, H := v.shrink, a.cellH()
-	rows := max(a.doc.usedRows(), 1)
+	rows := max(a.doc.rows, 1)
 	full := &FB{}
 	full.resize(a.doc.cols*8, rows*H)
 	a.paintCells(full, 0, 0, 1, func(x, y int) uint32 { return a.doc.get(x, y) }, a.doc.cols, rows)

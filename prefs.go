@@ -25,6 +25,7 @@ type Prefs struct {
 	UIScale   int                `json:"uiscale"`
 	Grid      bool               `json:"grid"`
 	Machine   string             `json:"machine"`
+	STRes     string             `json:"st_resolution"`
 	ViewAuto  bool               `json:"view_auto_scroll"`
 	ViewStep  bool               `json:"view_step_scroll"`
 	ViewSpeed float64            `json:"view_scroll_speed"`
@@ -47,11 +48,11 @@ func loadPrefs() {
 	if b, err := os.ReadFile(prefsPath()); err == nil {
 		json.Unmarshal(b, &prefs)
 	}
-	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper", "atari": "atari"}
+	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper", "atari": "atari", "st": "st8x8"}
 	for k, v := range prefs.Font {
 		a.defFont[k] = v
 	}
-	a.defPalette = map[string]string{"amiga": "amiga", "pc": "vga", "c64": "c64", "atari": "atari"}
+	a.defPalette = map[string]string{"amiga": "amiga", "pc": "vga", "c64": "c64", "atari": "atari", "st": "st"}
 	for k, v := range prefs.Palette {
 		a.defPalette[k] = v
 	}
@@ -61,8 +62,9 @@ func loadPrefs() {
 	}
 	a.grid = prefs.Grid
 	a.defMachine = machineByID(prefs.Machine).id
+	a.defSTRes = stResByID(prefs.STRes).id
 	a.fkeys = defaultFkeys()
-	for _, m := range []string{"amiga", "pc", "c64", "atari"} {
+	for _, m := range []string{"amiga", "pc", "c64", "atari", "st"} {
 		if f := prefs.Fkeys[m]; len(f) > 0 {
 			a.fkeys[m] = f
 		}
@@ -104,6 +106,7 @@ func savePrefs() {
 	p.Mode, p.Font, p.Palette, p.Zoom, p.Ch8, p.Smear = a.mode, a.defFont, a.defPalette, a.zoom, a.ch8, a.smear
 	p.Grid = a.grid
 	p.Machine = a.defMachine
+	p.STRes = a.defSTRes
 	p.UIScale = scale
 	p.Fkeys, p.Dir, p.Baud = a.fkeys, a.lastDir, a.baud
 	p.Custom = nil

@@ -45,6 +45,8 @@ Press the **?** gadget for every key.
   line settles it, else the width where characters stack best. Checked on the Break Into Chat collection: all 203
   real files recognised, none of 853 ANSI/NFO files on this PC mistaken for ATASCII. The font is AltirraOS's
   (Altirra emulator, all-permissive licence, `fonts/AltirraOS-LICENSE.txt`), built in.
+- A page has a real height (H): a file opens as tall as it is, its empty lines at the end included; the page
+  ends where the dark area starts; every row is saved. Enter or Down past the last row adds a row.
 - Pages for a machine's screen keep its width: PETSCII the machine's, Atari 38 or 40; only Amiga and PC pages
   can be any width (W).
 - **PETSCII page** (the Machine gadget): PET 40/80 columns (green, amber or white screen), VIC-20 (22x23, 8 text
@@ -52,6 +54,13 @@ Press the **?** gadget for every key.
   machine's own character set, upper/graphics and lower/upper, from VICE (first run or Settings, 18 KB, SHA-1
   checked). Rendering checked against 125 pictures exported by Marq's PETSCII editor: all of the same version
   identical, cell by cell.
+- **Atari ST page**: the ST's VT52 terminal in low (40x25, 16 colours), medium (80x25, 4) or high resolution
+  (80x25, mono); each cell its own colours; `.vt` streams read and written, the resolution guessed from the pens
+  and columns used. Font: EmuTOS's, downloaded on first use (GPL, so not built in), SHA-1 checked.
+- **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save; iCEDraw (.idf), ArtWorx (.adf) and
+  TundraDraw (.tnd) open with their own fonts and colours. The same art in five formats (ansilove's test files,
+  `testdata/alove`) gives the same page in all of them. PC attribute bytes are in BIOS colour order and are
+  converted.
 - **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
   character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's
   ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its

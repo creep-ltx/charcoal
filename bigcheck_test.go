@@ -45,7 +45,7 @@ func cellsMatch(fmtID string, x, y *Doc) (bool, string) {
 				if a&255 == 32 { // a space carries no colour
 					a, b = a&255, b&255
 				}
-			case "ansi":
+			case "ansi", "pcb", "avt", "vt52":
 				if isBlank(a) && isBlank(b) {
 					continue
 				}
@@ -74,7 +74,7 @@ func expectedMode(path string, b []byte) string {
 			return "c64"
 		}
 		return "" // C source, not art
-	case ".xb":
+	case ".xb", ".pcb", ".avt", ".idf", ".adf", ".tnd":
 		return "pc"
 	}
 	if strings.Contains(path, "/ata/") {
@@ -148,7 +148,7 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 	lower, ice := a.lower(), a.ice
 	a.tabs, a.Tab = nil, nil
 	a.focusTab(a.newTab(mode))
-	name := "again" + map[string]string{"ansi": ".ans", "text": ".asc", "bin": ".bin", "xbin": ".xb", "seq": ".seq",
+	name := "again" + map[string]string{"pcb": ".pcb", "avt": ".avt", "ansi": ".ans", "text": ".asc", "bin": ".bin", "xbin": ".xb", "seq": ".seq",
 		"ata": ".ata", "marq": ".c", "petmate": ".petmate", "prg": ".prg"}[fmtID]
 	as := mode
 	if fmtID == "xbin" || fmtID == "marq" || fmtID == "petmate" || fmtID == "prg" {
@@ -160,6 +160,9 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 	} else if a.doc.cols != orig.cols { // a stream gets its width back from the page, as when shown again
 		a.forceCols = orig.cols
 		a.reparse()
+	}
+	if fmtID != "prg" && a.doc.rows != orig.rows {
+		res.problem = strings.TrimSpace(res.problem + fmt.Sprintf(" height %d became %d", orig.rows, a.doc.rows))
 	}
 	if ok, why := cellsMatch(fmtID, orig, a.doc); !ok {
 		res.problem = strings.TrimSpace(res.problem + " round trip (" + fmtID + "): " + why)

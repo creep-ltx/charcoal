@@ -166,8 +166,11 @@ func parseAta(b []byte, cols int) *Doc {
 	var f fullest
 	t.beforeClear = func() { f.look(t.doc) }
 	writeWatching(t, b, &f)
-	d = f.pick(t.doc)
-	d.trim(1)
+	if d = f.pick(t.doc); d == t.doc {
+		d.fit(cursorRows(t.x, t.y))
+	} else {
+		d.fit(0)
+	}
 	return d
 }
 
@@ -216,7 +219,7 @@ func writeAta(d *Doc, clear bool) []byte {
 	if clear {
 		out = append(out, 0x7D)
 	}
-	rows := d.usedRows()
+	rows := d.rows
 	for y := 0; y < rows; y++ {
 		last := d.lastCol(y)
 		for x := 0; x <= last; x++ {

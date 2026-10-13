@@ -25,6 +25,8 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	switch {
 	case a.screen():
 		bgc, it, ul = a.pal[a.doc.bg], false, false
+	case a.st():
+		bgc = a.pal[bg]
 	case a.ice:
 		bgc = a.pal[bg]
 	default:
@@ -99,8 +101,16 @@ func (a *App) paintCells(fb *FB, x0, y0, z int, get func(x, y int) uint32, w, h 
 const gadH = lineH + 6
 
 var fieldCols = &Field{max: 4}
+var fieldRows = &Field{max: 6}
 
 func init() {
+	fieldRows.enter = func() {
+		if n, err := strconv.Atoi(fieldRows.String()); err == nil {
+			a.setRows(n)
+		}
+		fieldRows.set(strconv.Itoa(a.doc.rows))
+		ui.focus = nil
+	}
 	fieldCols.enter = func() {
 		if n, err := strconv.Atoi(fieldCols.String()); err == nil {
 			a.setCols(n)
@@ -288,9 +298,13 @@ func (a *App) drawBar(u *UI) int {
 		a.save(true)
 	}
 	fl.gap()
-	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata files. PETSCII: PET, VIC-20, C64, C128, .seq files."
-	for _, m := range []string{"amiga", "pc", "atari", "c64"} {
-		if u.button(fl.place(buttonW(modeNames[m])), modeNames[m], a.mode == m, modeHint) != nil {
+	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata files. ST: Atari ST VT52. PETSCII: PET, VIC-20, C64, C128, .seq files."
+	for _, m := range []string{"amiga", "pc", "atari", "st", "c64"} {
+		label := modeNames[m]
+		if m == "st" {
+			label = "ST"
+		}
+		if u.button(fl.place(buttonW(label)), label, a.mode == m, modeHint) != nil {
 			a.setMode(m)
 		}
 	}
@@ -364,8 +378,20 @@ func (a *App) drawBar(u *UI) int {
 	})
 	fl.gap()
 	switch {
+	case a.st():
+		var names []string
+		cur := 0
+		for i, r := range stResolutions {
+			names = append(names, r.name)
+			if r.id == a.stres {
+				cur = i
+			}
+		}
+		u.choice("stres", fl.place(choiceW(names)), names, cur, "The ST's resolution: its width, colours and font", func(i int) {
+			a.setSTRes(stResolutions[i].id)
+		})
 	case a.c64(): // the machine's width, not to be changed
-		label := fmt.Sprintf("%d x %d", a.doc.cols, max(a.doc.usedRows(), a.mach().rows))
+		label := fmt.Sprintf("%d wide", a.doc.cols)
 		r := fl.place(textW(label) + 8)
 		fb.text(r.x+4, r.y+3, label, cText)
 		u.setHint(r, "The page is as wide as the machine's screen")
@@ -382,6 +408,12 @@ func (a *App) drawBar(u *UI) int {
 		}
 		u.field(Rect{r.x + 16, r.y, r.w - 16, r.h}, fieldCols, "Page width in columns (Enter sets it)")
 	}
+	rh := fl.place(textW("H") + 8 + 7*charW + 8)
+	fb.text(rh.x, rh.y+3, "H", cText)
+	if u.focus != fieldRows {
+		fieldRows.set(strconv.Itoa(a.doc.rows))
+	}
+	u.field(Rect{rh.x + 16, rh.y, rh.w - 16, rh.h}, fieldRows, "Page height in rows (Enter sets it). Enter or Down past the last row adds one")
 	zooms := []string{"1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "Fit"}
 	u.choice("zoom", fl.place(choiceW(zooms)), zooms, a.zoom-1, "Zoom (Ctrl+wheel, Ctrl+Plus/Minus; Ctrl+0 fits the width)", func(i int) {
 		if i == 8 {
@@ -493,9 +525,9 @@ func (a *App) fitZoom() {
 
 func (a *App) contentSize() (int, int) {
 	z, H := a.zoom, a.cellH()
-	rows := max(a.doc.rows+25, (a.page.h+H*z-1)/(H*z))
-	if viewer != nil { // the viewer shows the art and no more
-		rows = max(a.doc.usedRows(), 1)
+	rows := a.doc.rows + 3 // the page and a little of what is below it, to see where it ends
+	if viewer != nil {     // the viewer shows the art and no more
+		rows = max(a.doc.rows, 1)
 		if viewer.shrink > 1 {
 			return a.doc.cols * 8 / viewer.shrink, rows * H / viewer.shrink
 		}
@@ -538,11 +570,12 @@ func (a *App) drawPage(u *UI, id string) {
 		fb.clip = old
 		return
 	}
-	fb.fill(p, 0xFF141518) // beyond the page width
-	fb.fill(Rect{p.x, p.y, min(p.w, cw-a.scrollX), p.h}, cPaper)
+	fb.fill(p, 0xFF141518) // outside the page
 	ox, oy := p.x-a.scrollX, p.y-a.scrollY
 	rowPx, colPx := H*z, 8*z
-	y0, y1 := a.scrollY/rowPx, (a.scrollY+p.h)/rowPx+1
+	pageR := Rect{ox, oy, a.doc.cols * colPx, a.doc.rows * rowPx}
+	fb.fill(pageR.and(p), cPaper)
+	y0, y1 := a.scrollY/rowPx, min(a.doc.rows, (a.scrollY+p.h)/rowPx+1)
 	x0, x1 := a.scrollX/colPx, min(a.doc.cols, (a.scrollX+p.w)/colPx+1)
 	for y := y0; y < y1; y++ {
 		for x := x0; x < x1; x++ {
@@ -618,7 +651,7 @@ func (a *App) cellAt(mx, my int) (Hover, bool) {
 	if fy-float64(y) >= 0.5 {
 		half = 1
 	}
-	inside := fx >= 0 && x < a.doc.cols && fy >= 0
+	inside := fx >= 0 && x < a.doc.cols && fy >= 0 && y < a.doc.rows
 	return Hover{max(0, min(a.doc.cols-1, x)), max(0, y), half}, inside
 }
 
@@ -950,8 +983,8 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		}
 		x = fb.text(x+charW*2, y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 	}
-	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII"}[a.mode]
-	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, max(a.doc.usedRows(), 1)), cText) + 24
+	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52"}[a.mode]
+	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, a.doc.rows), cText) + 24
 	name := a.path
 	if name == "" {
 		name = a.name

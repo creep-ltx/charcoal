@@ -104,8 +104,8 @@ type FileReq struct {
 	lastSel int
 }
 
-var openAs = []string{"auto", "amiga", "pc", "atari", "c64"}
-var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "C64 PETSCII"}
+var openAs = []string{"auto", "amiga", "pc", "atari", "st", "c64"}
+var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "Atari ST VT52", "C64 PETSCII"}
 
 func openOpenRequester() {
 	d := &FileReq{sel: -1}
@@ -317,7 +317,7 @@ func (d *FileReq) draw(u *UI) {
 		fb.text(in.x, y+3, "Open as", cText)
 		names := openAsNames
 		if !a.hasC64 {
-			names = names[:4]
+			names = names[:5]
 		}
 		u.choice("as", Rect{in.x + 72, y, choiceW(names), gadH}, names, d.choice, "", func(i int) { d.choice = i })
 	}
@@ -544,6 +544,7 @@ Wheel scrolls the page, Shift+wheel sideways, Ctrl+wheel zooms around the mouse.
 Tabs: click to show, x or middle click closes, + opens a new page. With two pages on show, click a page to work on it.
 
 KEYS
+The page has a height (H) as well as a width: it ends where the dark area starts, and every row is saved, empty rows at the bottom too. Enter or Down past the last row adds a row; H sets the height (fewer rows cuts, Ctrl+Z brings them back).
 Typing writes at the cursor in the brush colours (any tool). Arrows, Home, End, PgUp, PgDn, Enter, Tab, Backspace, Delete, Insert.
 F1-F10 type the F-key set, Ctrl+Up/Down change set.
 Ctrl+Left/Right foreground -/+, Ctrl+Shift+Left/Right background -/+.
@@ -558,6 +559,8 @@ Dropping files on the window opens them.
 
 AMIGA, PC, ATARI AND C64
 Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. Atari pages are ATASCII, the Atari 8-bit computers' text screen: inverse characters (Rev), one background, one text colour for the whole screen (left click a colour) and a border (middle click); .ata files, with EOL line ends and ESC before control characters. Width 38 (the screen editor's margins) or 40 (terminals) is guessed from the file and can be switched; the page is never wider. The font is AltirraOS's, free to pass on. PETSCII pages are exactly as wide as the machine's screen (the Machine gadget sets it): PET 40 or 80 columns (one colour: green, amber or white screen), VIC-20 (22 x 23, 8 text colours), C64 (40 x 25), C128 (40 columns, or 80 on the VDC with its RGBI colours). Each has its two character sets (the Font gadget: upper case + graphics, or lower + upper case), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
+Atari ST pages are the ST's VT52 terminal in one of its resolutions (the Resolution gadget): low 40 x 25 in 16 colours, medium 80 x 25 in 4, high 80 x 25 in black and white with taller characters. Each cell has its own colour and background (ESC b, ESC c); files are the VT52 stream (.vt). The font is EmuTOS's, downloaded on first use.
+
 SAVE AS
 ANSI, plain text, UTF-8 text, PC .bin, ATASCII .ata, XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border) and a web page (.html). Typing a file ending picks the format.
 OPENING
@@ -607,45 +610,67 @@ func (d *HelpReq) key(k string, ctrl, shift bool) bool {
 	return true
 }
 
-// ---------------------------------------------------------------- the C64 character set
+// ---------------------------------------------------------------- fonts to download
 
 const c64Why = "PETSCII pages need the Commodore character sets (PET, VIC-20, C64, C128). They are the machines' " +
 	"own ROMs, so they do not come with this program, but the VICE emulator project hands them out. Download them " +
 	"from VICE now? (18 KB, each checked before it is used, kept in ~/.local/share/charcoal/.) You can also do this " +
 	"later under Settings."
 
-type C64Req struct {
-	after func() // what to do once the character set is here
-	err   string
+const stWhy = "Atari ST pages need the ST's font. Atari's own is in the TOS ROM; EmuTOS, the free TOS (GPL), has " +
+	"its own version of it. Download it from EmuTOS now? (two small files, checked before they are used, kept in " +
+	"~/.local/share/charcoal/.) You can also do this later under Settings."
+
+// FontReq asks to download fonts that may not come with the program.
+type FontReq struct {
+	title, why string
+	fetch      func() error
+	done       string // the message once they are here
+	firstRun   bool   // the C64 question asked on the first run
+	after      func() // what to do once they are here
+	err        string
 }
 
 func openC64Req(after func()) {
-	a.dialog = &C64Req{after: after}
+	a.dialog = &FontReq{title: "Commodore character sets", why: c64Why, firstRun: true, after: after,
+		fetch: func() error {
+			if err := downloadChargen(); err != nil {
+				return err
+			}
+			a.hasC64 = true
+			return nil
+		}, done: "The Commodore character sets are here: PETSCII pages work now"}
 }
 
-func (d *C64Req) answered() {
-	prefs.C64Asked = true
-	savePrefs()
+func openSTReq(after func()) {
+	a.dialog = &FontReq{title: "Atari ST font", why: stWhy, after: after, fetch: downloadSTFonts,
+		done: "The ST font is here: Atari ST pages work now"}
 }
 
-func (d *C64Req) download() {
-	if err := downloadChargen(); err != nil {
+func (d *FontReq) answered() {
+	if d.firstRun {
+		prefs.C64Asked = true
+		savePrefs()
+	}
+}
+
+func (d *FontReq) download() {
+	if err := d.fetch(); err != nil {
 		d.err = "Could not download: " + err.Error()
 		return
 	}
-	a.hasC64 = true
 	d.answered()
 	closeDialog()
-	a.msg("The Commodore character sets are here: PETSCII pages work now")
+	a.msg(d.done)
 	if d.after != nil {
 		d.after()
 	}
 }
 
-func (d *C64Req) draw(u *UI) {
-	in := u.window(centre(600, 260), "Commodore character sets")
+func (d *FontReq) draw(u *UI) {
+	in := u.window(centre(600, 260), d.title)
 	y := in.y
-	for _, l := range wrap(c64Why, in.w/charW) {
+	for _, l := range wrap(d.why, in.w/charW) {
 		u.fb.text(in.x, y, l, cText)
 		y += lineH
 	}
@@ -664,7 +689,7 @@ func (d *C64Req) draw(u *UI) {
 	}
 }
 
-func (d *C64Req) key(k string, ctrl, shift bool) bool {
+func (d *FontReq) key(k string, ctrl, shift bool) bool {
 	switch k {
 	case "Return", "Keypad Enter":
 		d.download()
@@ -685,7 +710,7 @@ func openSettings() { a.dialog = &SettingsReq{} }
 
 func (d *SettingsReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(640, 280), "Settings")
+	in := u.window(centre(660, 380), "Settings")
 	y := in.y
 	fb.text(in.x, y+3, "Window size", cText)
 	sizes := []string{"1x (normal)", "2x (big screens)", "3x"}
@@ -728,9 +753,27 @@ func (d *SettingsReq) draw(u *UI) {
 			a.msg("The Commodore character sets are here: PETSCII pages work now")
 		}
 	}
+	y += gadH + 18
+	fb.text(in.x, y, "Atari ST font (EmuTOS)", cHi)
+	y += lineH + 4
+	stLabel := "Download from EmuTOS"
+	if hasSTFont() {
+		fb.text(in.x, y, "Here.", cText)
+		stLabel = "Download again"
+	} else {
+		fb.text(in.x, y, "Not here yet: Atari ST pages need it.", cText)
+	}
+	if u.button(Rect{in.x, y + lineH + 4, buttonW(stLabel), gadH}, stLabel, false, "") != nil {
+		if err := downloadSTFonts(); err != nil {
+			d.err = "Could not download: " + err.Error()
+		} else {
+			d.err = ""
+			a.msg("The ST font is here: Atari ST pages work now")
+		}
+	}
 	if d.err != "" {
 		for i, l := range wrap(d.err, in.w/charW) {
-			fb.text(in.x, y+gadH+14+i*lineH, l, cOrange)
+			fb.text(in.x, y+lineH+gadH+12+i*lineH, l, cOrange)
 		}
 	}
 	if buttonRow(u, in, "OK") == 0 {

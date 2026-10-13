@@ -161,6 +161,25 @@ func (d *Doc) usedRows() int {
 	return 0
 }
 
+// fit makes the page as tall as its art or, if more, the rows a file's cursor
+// went down to: empty lines at the end of a file are part of the page.
+func (d *Doc) fit(cursorRows int) {
+	n := max(d.usedRows(), cursorRows, 1)
+	if n < d.rows {
+		d.rows = n
+	} else {
+		d.ensureRows(n)
+	}
+}
+
+// cursorRows: the rows a terminal's cursor has gone through.
+func cursorRows(x, y int) int {
+	if x > 0 {
+		return y + 1
+	}
+	return y
+}
+
 // trim drops blank rows at the bottom.
 func (d *Doc) trim(minRows int) {
 	n := max(d.usedRows(), minRows)
@@ -844,7 +863,7 @@ func parseArt(b []byte, o ParseOpts) (*Doc, *Sauce, int) {
 	if sauce != nil && sauce.dataType == 5 && sauce.fileType > 0 {
 		binary, cols = true, sauce.fileType*2
 	} else if binary && (sauce == nil || sauce.dataType != 1) {
-		cols = 160 // a .bin without its width: 160, as the scene's viewers take it
+		cols = binWidth(b[:end]) // a .bin without its width
 	}
 	if o.forceCols > 0 {
 		cols = o.forceCols
@@ -867,7 +886,7 @@ func parseArt(b []byte, o ParseOpts) (*Doc, *Sauce, int) {
 		d.ensureRows((cells + cols - 1) / cols)
 		for i := 0; i < cells; i++ {
 			a := int(art[i*2+1])
-			d.cells[i] = makeCell(int(art[i*2]), a&15, a>>4, 0)
+			d.cells[i] = attrCell(art[i*2], byte(a))
 		}
 	} else {
 		t := newTerm(d, o.amiga)
@@ -875,9 +894,12 @@ func parseArt(b []byte, o ParseOpts) (*Doc, *Sauce, int) {
 		t.beforeClear = func() { f.look(t.doc) }
 		writeWatching(t, art, &f)
 		fontRequest = t.fontRequest
-		d = f.pick(t.doc)
+		if d = f.pick(t.doc); d == t.doc {
+			d.fit(cursorRows(t.x, t.y))
+		} else {
+			d.fit(0)
+		}
 	}
-	d.trim(1)
 	return d, sauce, fontRequest
 }
 
@@ -912,7 +934,7 @@ func writeAnsi(d *Doc, amiga, colours, clear bool, keep1A ...bool) []byte {
 			out = append(out, "\x1b[2J\x1b[1;1H"...)
 		}
 	}
-	rows := d.usedRows()
+	rows := d.rows // the whole page, empty rows at the end too
 	for y := 0; y < rows; y++ {
 		last := d.lastCol(y)
 		for x := 0; x <= last; x++ {
@@ -975,12 +997,12 @@ func writeAnsi(d *Doc, amiga, colours, clear bool, keep1A ...bool) []byte {
 
 // writeBin gives a PC .BIN: two bytes per cell, every row in full.
 func writeBin(d *Doc) []byte {
-	rows := max(d.usedRows(), 1)
+	rows := max(d.rows, 1)
 	out := make([]byte, rows*d.cols*2)
 	for i := 0; i < rows*d.cols; i++ {
 		v := d.get(i%d.cols, i/d.cols)
 		out[i*2] = byte(cellCh(v))
-		out[i*2+1] = byte(cellFg(v) | cellBg(v)<<4)
+		out[i*2+1] = cellAttr(v)
 	}
 	return out
 }
@@ -1003,7 +1025,7 @@ func byteRune(c int, amiga bool) rune {
 // w == 0 means the whole page.
 func docText(d *Doc, runeOf func(int) rune, x0, y0, w, h int) []string {
 	if w == 0 {
-		w, h = d.cols, d.usedRows()
+		w, h = d.cols, d.rows
 	}
 	var lines []string
 	for y := y0; y < y0+h; y++ {
@@ -1060,4 +1082,54 @@ func docOf(e interface{ write([]byte) }) *Doc {
 		return t.doc
 	}
 	return nil
+}
+
+// PC attribute bytes number the colours as the BIOS does (1 blue, 4 red); cells
+// and ANSI number them the other way (1 red, 4 blue). The swap is its own inverse.
+var biosANSI = [16]int{0, 4, 2, 6, 1, 5, 3, 7, 8, 12, 10, 14, 9, 13, 11, 15}
+
+// attrCell makes a cell from a character and a PC attribute byte.
+func attrCell(ch, attr byte) uint32 {
+	return makeCell(int(ch), biosANSI[attr&15], biosANSI[attr>>4], 0)
+}
+
+// cellAttr is a cell's colours as a PC attribute byte.
+func cellAttr(v uint32) byte {
+	return byte(biosANSI[cellFg(v)] | biosANSI[cellBg(v)]<<4)
+}
+
+// biosPalette reorders a palette stored in BIOS order to the cells' order (and back: the same swap).
+func biosPalette(p [16]uint32) [16]uint32 {
+	var out [16]uint32
+	for i := range out {
+		out[i] = p[biosANSI[i]]
+	}
+	return out
+}
+
+// binWidth guesses a .bin's width: 160 (what the scene's viewers assume) or 80.
+// A width that does not divide the file into whole rows is out; if both do,
+// the one where the same character stacks over itself most wins.
+func binWidth(art []byte) int {
+	cells := len(art) / 2
+	fits := func(w int) bool { return cells%w == 0 }
+	switch {
+	case fits(160) && !fits(80):
+		return 160
+	case fits(80) && !fits(160):
+		return 80
+	}
+	score := func(w int) int {
+		n := 0
+		for i := 0; i+w < cells; i++ {
+			if c := art[i*2]; c != ' ' && c != 0 && c == art[(i+w)*2] {
+				n++
+			}
+		}
+		return n
+	}
+	if score(80) > score(160) {
+		return 80
+	}
+	return 160
 }
