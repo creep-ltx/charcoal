@@ -35,10 +35,11 @@ type Doc struct {
 	cols, rows int
 	cells      []uint32
 	bg         int // the screen colour of a C64 page
+	border     int // its border colour, -1 for the same as bg
 }
 
 func newDoc(cols, rows int) *Doc {
-	d := &Doc{cols: cols, rows: rows, cells: make([]uint32, cols*max(rows, 1))}
+	d := &Doc{cols: cols, rows: rows, cells: make([]uint32, cols*max(rows, 1)), border: -1}
 	fillCells(d.cells, blank)
 	return d
 }
@@ -81,7 +82,7 @@ func (d *Doc) ensureRows(n int) {
 }
 
 func (d *Doc) clone() *Doc {
-	c := &Doc{cols: d.cols, rows: d.rows, cells: make([]uint32, d.rows*d.cols), bg: d.bg}
+	c := &Doc{cols: d.cols, rows: d.rows, cells: make([]uint32, d.rows*d.cols), bg: d.bg, border: d.border}
 	copy(c.cells, d.cells[:d.rows*d.cols])
 	if d.rows == 0 {
 		c.cells = make([]uint32, d.cols)
@@ -126,7 +127,7 @@ func (d *Doc) trim(minRows int) {
 
 func (d *Doc) withCols(cols int) *Doc {
 	n := newDoc(cols, d.rows)
-	n.bg = d.bg
+	n.bg, n.border = d.bg, d.border
 	w := min(cols, d.cols)
 	for y := 0; y < d.rows; y++ {
 		copy(n.cells[y*cols:y*cols+w], d.cells[y*d.cols:y*d.cols+w])

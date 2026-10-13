@@ -118,6 +118,9 @@ type Tab struct {
 	scrollX, scrollY    int
 	page                Rect // where the page view was laid out
 	pal                 [16]uint32
+	srcKind             string      // "xbin" or "marq" for files that are not a stream of codes
+	ownFont             *Font       // a font that came in the file (XBin)
+	ownPal              *[16]uint32 // a palette that came in the file (XBin)
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -163,6 +166,9 @@ func (a *App) pc() bool    { return a.mode == "pc" }
 func (a *App) c64() bool   { return a.mode == "c64" }
 
 func (a *App) font() *Font {
+	if a.ownFont != nil && a.fontFor[a.mode] == "xbin" {
+		return a.ownFont
+	}
 	if f := fontByID(a.fontFor[a.mode]); f != nil && f.kind == a.mode {
 		return f
 	}
@@ -178,7 +184,7 @@ func (a *App) font() *Font {
 func (a *App) lower() bool { return a.font().id == "c64lower" }
 
 func (a *App) cellH() int {
-	if a.c64() || (a.ch8 && a.amiga()) {
+	if a.c64() || (a.ch8 && a.amiga()) || (a.font() == a.ownFont && a.ownFont != nil && a.ownFont.h8) {
 		return 8
 	}
 	return 16
@@ -228,6 +234,10 @@ func (a *App) previewFg() int {
 }
 
 func (a *App) setPalette() {
+	if a.ownPal != nil && a.paletteFor[a.mode] == "file" {
+		a.pal = *a.ownPal
+		return
+	}
 	p := paletteByID(a.paletteFor[a.mode])
 	if a.c64() && p.id != "custom" && p.id != "c64" {
 		p = c64Palette
@@ -637,6 +647,25 @@ func (a *App) textBlock(text string) *Block {
 // ---------------------------------------------------------------- loading
 
 func (a *App) reparse() {
+	switch a.srcKind {
+	case "xbin":
+		if d, _, err := parseXBin(a.source); err == nil {
+			a.doc = d
+		}
+		a.doc.ensureRows(max(a.doc.rows, 25))
+		a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
+		return
+	case "marq":
+		if d, lower, err := parseMarq(a.source); err == nil {
+			a.doc = d
+			if lower >= 0 {
+				a.fontFor["c64"] = map[bool]string{true: "c64lower", false: "c64upper"}[lower == 1]
+			}
+		}
+		a.doc.ensureRows(max(a.doc.rows, 25))
+		a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
+		return
+	}
 	if a.c64() {
 		d, lower := parseSeq(a.source, a.forceCols)
 		a.doc = d
@@ -665,6 +694,29 @@ var seqExt = regexp.MustCompile(`(?i)\.(seq|pet)$`)
 
 // loadBytes reads a file into the current tab; as is "auto", "amiga", "pc" or "c64".
 func (a *App) loadBytes(b []byte, name, path, as string) {
+	a.srcKind, a.ownFont, a.ownPal = "", nil, nil
+	if isXBin(b) && as == "auto" {
+		_, info, err := parseXBin(b)
+		if err != nil {
+			a.msg("Could not read the XBin: " + err.Error())
+			return
+		}
+		a.mode, a.srcKind, a.ice = "pc", "xbin", info.ice
+		if info.font != nil {
+			info.font.h8 = info.cellH == 8
+			a.ownFont, a.fontFor["pc"] = info.font, "xbin"
+		}
+		if info.pal != nil {
+			a.ownPal, a.paletteFor["pc"] = info.pal, "file"
+		}
+		a.finishLoad(b, name, path, nil, "xbin")
+		return
+	}
+	if isMarq(b) && as == "auto" && a.hasC64 {
+		a.mode, a.srcKind = "c64", "marq"
+		a.finishLoad(b, name, path, nil, "marq")
+		return
+	}
 	sauce, _ := readSauce(b)
 	binary := strings.HasSuffix(strings.ToLower(name), ".bin") || (sauce != nil && sauce.dataType == 5)
 	utf := sauce == nil && !binary && fromUtf8(b, true) != nil
@@ -731,6 +783,18 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	default:
 		a.saveFmt = "ansi"
 	}
+	a.undo, a.redo = nil, nil
+	a.reparse()
+	a.applyMode()
+	a.dirty = false
+	a.scrollX, a.scrollY = 0, 0
+}
+
+// finishLoad is the end of loading for files that are not streams of codes.
+func (a *App) finishLoad(b []byte, name, path string, sauce *Sauce, fmtID string) {
+	a.source, a.sourceBin, a.sauce, a.forceCols = b, false, sauce, 0
+	a.info = Info{}
+	a.path, a.name, a.saveFmt = path, name, fmtID
 	a.undo, a.redo = nil, nil
 	a.reparse()
 	a.applyMode()
@@ -994,7 +1058,12 @@ var formats = []Format{
 	{"seq", "PETSCII stream (.seq)", ".seq", "c64"},
 	{"utf8", "UTF-8 text, no colours (.txt)", ".txt", "amiga pc c64"},
 	{"bin", "PC binary (.bin)", ".bin", "pc"},
+	{"xbin", "XBin, font and palette inside (.xb)", ".xb", "amiga pc"},
+	{"prg", "C64 program that shows it (.prg)", ".prg", "c64"},
+	{"marq", "C array: PETSCII editor, Petmate (.c)", ".c", "c64"},
 	{"png", "Picture (.png)", ".png", "amiga pc c64"},
+	{"png2", "Picture, twice the size (.png)", ".png", "amiga pc c64"},
+	{"html", "Web page (.html)", ".html", "amiga pc c64"},
 }
 
 // modeFormats are the formats the current page can be saved in.
@@ -1036,12 +1105,37 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		return []byte(strings.Join(docText(d, a.runeOf, 0, 0, 0, 0), nl) + nl), nil
 	case "bin":
 		return writeBin(d), nil
-	case "png":
-		H := a.cellH()
-		rows := max(1, min(d.usedRows(), 32000/H))
+	case "xbin":
+		return writeXBin(d, a.pal, a.font(), a.cellH(), a.ice), nil
+	case "prg", "marq":
+		if d.cols != 40 || d.usedRows() > 25 {
+			a.msg("Only the first 40x25 cells fit a C64 screen")
+		}
+		if fmtID == "prg" {
+			return writePrg(d, a.lower()), nil
+		}
+		return writeMarq(d, a.lower()), nil
+	case "html":
+		return a.writeHTML(), nil
+	case "png", "png2":
+		H, z := a.cellH(), 1
+		if fmtID == "png2" {
+			z = 2
+		}
+		rows := max(1, min(d.usedRows(), 32000/(H*z)))
+		if a.c64() {
+			rows = max(rows, 25)
+		}
+		border := 0
 		fb := &FB{}
-		fb.resize(d.cols*8, rows*H)
-		a.paintCells(fb, 0, 0, 1, func(x, y int) uint32 { return d.get(x, y) }, d.cols, rows)
+		if a.c64() { // with the C64's border around it
+			border = 32 * z
+			fb.resize(d.cols*8*z+2*border, rows*H*z+2*border)
+			fb.fill(Rect{0, 0, fb.w, fb.h}, a.pal[d.borderColour()])
+		} else {
+			fb.resize(d.cols*8*z, rows*H*z)
+		}
+		a.paintCells(fb, border, border, z, func(x, y int) uint32 { return d.get(x, y) }, d.cols, rows)
 		img := image.NewRGBA(image.Rect(0, 0, fb.w, fb.h))
 		for i, p := range fb.px {
 			img.Pix[i*4], img.Pix[i*4+1], img.Pix[i*4+2], img.Pix[i*4+3] = byte(p>>16), byte(p>>8), byte(p), 255
@@ -1095,9 +1189,10 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	if fmtID == "ansi" || fmtID == "text" || fmtID == "bin" || fmtID == "seq" { // the page's own file; png and utf8 are exports
+	if strings.Contains(" ansi text bin seq xbin marq ", " "+fmtID+" ") { // the page's own file; the others are exports
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
+		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq"}[fmtID]
 		a.dirty = false
 	}
 	a.lastDir = filepath.Dir(path)

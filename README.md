@@ -50,7 +50,12 @@ Press the **?** gadget for every key.
 - Bottom strip: tools, all 256 characters (click = brush), 5 F-key sets (F1–F10), 16 colours (left fg, right bg,
   Shift+click edits the colour).
 - Tools: Type, Draw (Shift+click = line), Colour, Fill, Pick (or middle click), Select (copy/cut/paste/stamp), Half.
-- Undo/redo, play at modem speed, save as ANSI, plain text, UTF-8, `.bin` or PNG; dropping a file on the window opens it.
+- Undo/redo, play at modem speed; dropping a file on the window opens it.
+- **Save as**: ANSI, plain text, UTF-8, PC `.bin`, **XBin** (`.xb`, font and palette inside, so it looks the same in
+  any viewer; opens again too), PETSCII `.seq`, a **C64 program** (`.prg`: LOAD and RUN on a C64 or in VICE, a key
+  goes back to BASIC), the **C array** of Marq's PETSCII editor and Petmate (`.c`, opens again too), **PNG**
+  (normal or twice the size; C64 pages with their border) and a **web page** (`.html`). A typed file ending picks
+  the format.
 - Settings in `~/.config/charcoal/prefs.json` (`"uiscale": 2` doubles the window for big screens).
 
 ## Files
@@ -64,6 +69,7 @@ Press the **?** gadget for every key.
 | `ui.go`, `gfx.go` | the gadgets and the pixel drawing |
 | `fonts.go`, `fonts/` | the embedded fonts and their mirror tables; `cp437.go` the CP437 table |
 | `viewer.go` | CharView |
+| `export.go` | `.prg`, the `.c` array, XBin, HTML (`export_test.go` runs the `.prg` in a small 6502 emulator) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
 | `script.go` | `CHARCOAL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
 | `web/` | the first version, called amiansi, that ran in the browser (Python server + HTML/JS), kept for reference |

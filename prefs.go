@@ -86,10 +86,14 @@ func savePrefs() {
 	p := prefs
 	// The page being worked on sets what new tabs start with.
 	for k, v := range a.fontFor {
-		a.defFont[k] = v
+		if v != "xbin" { // a file's own font stays with the file
+			a.defFont[k] = v
+		}
 	}
 	for k, v := range a.paletteFor {
-		a.defPalette[k] = v
+		if v != "file" {
+			a.defPalette[k] = v
+		}
 	}
 	a.defZoom = a.zoom
 	p.Mode, p.Font, p.Palette, p.Zoom, p.Ch8, p.Smear = a.mode, a.defFont, a.defPalette, a.zoom, a.ch8, a.smear

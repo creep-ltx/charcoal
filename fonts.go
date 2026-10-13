@@ -17,6 +17,7 @@ type Font struct {
 	syncterm int    // SyncTERM font number, -1 if none
 	bits     []byte
 	mirror   [2][]int // the character that looks flipped left-right [0] and upside down [1]
+	h8       bool     // a font of 8 rows (kept doubled) from a file
 }
 
 var fonts = func() []*Font {

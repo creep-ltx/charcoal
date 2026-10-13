@@ -297,6 +297,13 @@ func (a *App) drawBar(u *UI) int {
 			fontIDs = append(fontIDs, f.id)
 		}
 	}
+	if a.ownFont != nil && a.ownFont.kind == a.mode {
+		if a.font() == a.ownFont {
+			cur = len(fontIDs)
+		}
+		fontNames = append(fontNames, a.ownFont.name)
+		fontIDs = append(fontIDs, "xbin")
+	}
 	allFonts := []string{}
 	for _, f := range fonts {
 		allFonts = append(allFonts, f.name)
@@ -305,16 +312,21 @@ func (a *App) drawBar(u *UI) int {
 		a.fontFor[a.mode] = fontIDs[i]
 		savePrefs()
 	})
-	var palNames []string
+	var palNames, palIDs []string
 	pcur := 0
-	for i, p := range palettes {
-		palNames = append(palNames, p.name)
-		if p.id == a.paletteFor[a.mode] {
+	for _, p := range palettes {
+		palNames, palIDs = append(palNames, p.name), append(palIDs, p.id)
+	}
+	if a.ownPal != nil {
+		palNames, palIDs = append(palNames, "The file's own"), append(palIDs, "file")
+	}
+	for i, id := range palIDs {
+		if id == a.paletteFor[a.mode] {
 			pcur = i
 		}
 	}
 	u.choice("palette", fl.place(choiceW(palNames)), palNames, pcur, "Palette (Shift+click a colour below to change it)", func(i int) {
-		a.paletteFor[a.mode] = palettes[i].id
+		a.paletteFor[a.mode] = palIDs[i]
 		a.setPalette()
 		savePrefs()
 	})
@@ -794,10 +806,13 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		bgNow := a.bg
 		bgName := "background"
 		if a.c64() {
-			bgNow, bgName = a.doc.bg, "the screen colour"
+			bgNow, bgName = a.doc.bg, "the screen colour, middle: the border"
 		}
 		if i == bgNow {
 			fb.dashed(r.inset(-2), cOrange)
+		}
+		if a.c64() && i == a.doc.borderColour() { // the border: a mark under the swatch
+			fb.fill(Rect{r.x + 4, r.y + r.h + 3, r.w - 8, 2}, cHi)
 		}
 		u.setHint(r, fmt.Sprintf("Colour %d: #%06X. Left: foreground, right: %s, Shift+click: change it", i, a.pal[i]&0xFFFFFF, bgName))
 		if c := u.take(r); c != nil {
@@ -806,6 +821,11 @@ func (a *App) drawPane(u *UI, pane Rect) {
 				openColour(i)
 			case c.button == 3:
 				a.setBg(i)
+			case c.button == 2 && a.c64():
+				if a.doc.border != i {
+					a.pushUndo()
+					a.doc.border = i
+				}
 			default:
 				a.fg = i
 			}
