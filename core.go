@@ -55,6 +55,16 @@ func fillCells(c []uint32, v uint32) {
 	}
 }
 
+// The largest page: rows, and cells in all (64 MB). Files and emulators never grow a page past these,
+// so a hostile file cannot take all the memory.
+const (
+	maxPageRows  = 100000
+	maxPageCells = 16 << 20
+)
+
+// maxRowsFor is the most rows a page this wide may have.
+func maxRowsFor(cols int) int { return min(maxPageRows, maxPageCells/max(1, cols)) }
+
 func (d *Doc) get(x, y int) uint32 {
 	if x < 0 || y < 0 || x >= d.cols || y >= d.rows {
 		return blank
