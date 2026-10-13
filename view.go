@@ -791,6 +791,9 @@ func (a *App) pagePress(c *Click) {
 		return
 	}
 	a.hover = &p
+	if a.moving {
+		return // a block being moved goes down where the held button is let go
+	}
 	if a.float != nil {
 		if c.button == 1 {
 			x0, y0 := a.floatAt(p.x, p.y)

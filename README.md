@@ -81,7 +81,7 @@ Press the **?** gadget for every key.
   and an installed VICE's copies are used if present.
 - **Tabs and two pages at once**: every file opens in a tab; show one page, two side by side or one over the other
   (Ctrl+L), optionally scrolling together.
-- **Grid** (Ctrl+G, brighter every 10 columns and every 25 rows), **zoom** 1x-8x, fit to width (Ctrl+0),
+- **Grid** (Ctrl+G, brighter every 10 columns and every 25 rows), **zoom** 1x-8x, fit to width (Ctrl+9),
   Ctrl+wheel zooms around the mouse.
 - **Flip** a block left-right (Alt+H) or upside down (Alt+V): characters become their mirror images (known
   pairs first, then by comparing the glyphs' pixels, so it works in every font).
@@ -89,6 +89,8 @@ Press the **?** gadget for every key.
   Shift+click edits the colour).
 - Tools: Type, Draw (Shift+click = line), Colour, Fill, Pick (or middle click), Select (copy/cut/paste/stamp), Half.
 - Undo/redo, play at modem speed; dropping a file on the window opens it.
+- **Safety**: pages with changes are kept aside every two minutes and offered back after a crash; saving over a
+  file keeps the old one as `name.bak` (Settings); the Open requester lists the last 10 files.
 - **Save as**: ANSI, plain text, UTF-8, PC `.bin`, **XBin** (`.xb`, font and palette inside, so it looks the same in
   any viewer; opens again too), PETSCII `.seq`, a **C64 program** (`.prg`: LOAD and RUN on a C64 or in VICE, a key
   in Petmate's form, so Petmate and Marq's PETSCII editor open it too; any .prg in that form opens), the **C array** of Marq's PETSCII editor and Petmate (`.c`), a
@@ -97,6 +99,36 @@ Press the **?** gadget for every key.
   the format. Everything that holds characters opens too; a `.c` or `.petmate` with several screens opens each
   screen in its own tab. (Pictures and web pages do not open.)
 - Settings in `~/.config/charcoal/prefs.json` (`"uiscale": 2` doubles the window for big screens).
+
+## Keys
+
+Every shortcut can be changed in `~/.config/charcoal/keys` (`action = key, key`; written with the defaults and
+comments on the first start; a line it cannot read is skipped and named in the status line). Alt is the left Alt
+only (the right one is AltGr). Fixed: typing, F1-F10 (the F-key set), the cursor keys, Return, Tab, Backspace,
+Delete, Insert, Esc. The defaults, the PC ANSI editors' (Moebius, PabloDraw, TheDraw) where they agree:
+
+| Keys | Action |
+|---|---|
+| Ctrl+O, Ctrl+Shift+O | open, open the most recent file again |
+| Ctrl+S, Ctrl+Shift+S, Ctrl+I | save, save as, info (SAUCE) |
+| Ctrl+T / Ctrl+N, Ctrl+W, Ctrl+Tab / Ctrl+Shift+Tab (Ctrl+PgDn / PgUp) | new page, close page, next / previous page |
+| Ctrl+L, Ctrl+Q | one page / side by side / top and bottom, quit |
+| Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z | undo, redo |
+| Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V | select all, copy, cut, paste |
+| Shift+arrows / Home / End / PgUp / PgDn | select from the cursor (any tool); Esc lets go |
+| Alt+H, Alt+V, Alt+R, Alt+I | mirror, upside down, turn, invert the block (nothing selected: H/V/R turn the brush character) |
+| Alt+F, Ctrl+K | fill the selection with the brush (nothing selected: Fill tool), crop to the selection (Amiga, PC) |
+| Ctrl+Home, Ctrl+End | top, bottom of the page |
+| Alt+Up / Alt+Down, Alt+Left / Alt+Right | delete / insert a row, delete / insert a column |
+| Alt+T, D, K, L, P, S, B | tools: Type, Draw, Colour, Fill, Pick, Select, Half (PC) / Sixel (teletext) |
+| Ctrl+Up / Ctrl+Down, Ctrl+Left / Ctrl+Right | foreground -/+, background -/+ |
+| Ctrl+0-7, Alt+0-7 | foreground, background colour (again: the bright one) |
+| Alt+U, Ctrl+D, Ctrl+Shift+X, Ctrl+E | take the colours under the cursor, default colours, swap, iCE on/off |
+| Ctrl+F1-F10, Ctrl+Shift+Up / Down | F-key set 1-10, next / previous set |
+| Ctrl+= / Ctrl++, Ctrl+-, Ctrl+9 | zoom in, out, fit the width |
+| Ctrl+G, Ctrl+R, Ctrl+H | grid, reverse (PETSCII, Atari), hide the gadgets |
+
+Dragging inside a selection with the Select tool moves it (one undo step).
 
 ## Tested
 
@@ -119,6 +151,9 @@ come back cell for cell after saving in their own format.
 | `export.go` | `.prg`, the `.c` array, XBin, HTML (`export_test.go` runs the `.prg` in a small 6502 emulator) |
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
+| `keys.go` | the table of actions and their default keys, the keys file, the help's key list |
+| `rowscols.go`, `blockjobs.go` | insert/delete rows and columns; fill, move and crop a block |
+| `autosave.go` | autosave and offering it back, `.bak` on save, recent files |
 | `script.go` | `CHARCOAL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
 | `web/` | the first version, called amiansi, that ran in the browser (Python server + HTML/JS), kept for reference |
 

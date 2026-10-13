@@ -625,7 +625,7 @@ Draw: left paints the brush (character + colours), right erases, Shift+click dra
 Colour: left sets the foreground, right the background (on a C64 page: the foreground only).
 Fill: left fills equal cells with the brush.
 Half (PC): left paints half-cell pixels in the foreground, right in the background colour. Sixel (teletext): left sets, right clears a graphics pixel.
-Select: drag a block. While pasting, the block follows the mouse: left click stamps it, Shift+click stamps it without its blank cells, right click or Esc stops.
+Select: drag a block; drag inside a selected block to move it (Esc while moving puts it back). While pasting, the block follows the mouse: left click stamps it, Shift+click stamps it without its blank cells, right click or Esc stops.
 Middle click or Pick: take a cell's character and colours.
 Characters strip: click = brush (types it with Type). Right click = put on the active F-key.
 Colours: left = foreground, right = background (PETSCII and Atari: the screen colour; middle click: the border), Shift+click = change the colour.
@@ -654,7 +654,10 @@ Everything above that holds characters opens again: ANSI, text, .bin, XBin, .pcb
 The Commodore character sets are the machines' ROMs and do not come with the program: the first run offers to download them from the VICE emulator project (each checked by its SHA-1), and so does Settings.
 
 SETTINGS
-Kept in ~/.config/charcoal/prefs.json (a broken one is put aside as prefs.json.bad). Settings: the window size (1x to 4x for big screens) and the downloads, which run while you work on.`
+Kept in ~/.config/charcoal/prefs.json (a broken one is put aside as prefs.json.bad); the keys in ~/.config/charcoal/keys. Settings: the window size (1x to 4x for big screens), keeping the old version of a file as name.bak when a save writes over it (on unless switched off), and the downloads, which run while you work on.
+
+SAFETY
+Every two minutes, pages with changes are kept aside (in ~/.local/share/charcoal/autosave/). If CharEdit stops without saving them (a crash, the power), the next start offers to open them again in tabs. Saving a page or closing it on purpose lets go of its copy. The Open requester's "Recent files" lists the last 10 files opened or saved.`
 }
 
 func (d *HelpReq) draw(u *UI) {

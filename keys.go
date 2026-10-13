@@ -156,6 +156,20 @@ func init() {
 		}},
 		{"quit", "Ctrl+Q", "Quit", requestQuit},
 
+		{"undo", "Ctrl+Z", "Undo", func() { a.doUndo() }},
+		{"redo", "Ctrl+Y, Ctrl+Shift+Z", "Redo", func() { a.doRedo() }},
+		{"select_all", "Ctrl+A", "Select all", func() { a.sel = &Sel{0, 0, a.doc.cols - 1, max(0, a.doc.usedRows()-1)} }},
+		{"copy", "Ctrl+C", "Copy the block", func() { a.copySel(false) }},
+		{"cut", "Ctrl+X", "Cut the block", func() { a.copySel(true) }},
+		{"paste", "Ctrl+V", "Paste (text from other programs too)", func() { a.paste() }},
+		{"mirror", "Alt+H", "Mirror the block left-right (nothing selected: the brush character)", func() { a.blockOp(flipH) }},
+		{"upside_down", "Alt+V", "Turn the block upside down (nothing selected: the brush character)", func() { a.blockOp(flipV) }},
+		{"turn", "Alt+R", "Turn the block a quarter clockwise (nothing selected: the brush character)", func() { a.blockOp(turnCW) }},
+		{"invert", "Alt+I", "Invert the block (reversed characters, or the two colours swapped)", func() { a.blockOp(invertBlock) }},
+
+		{"fill_block", "Alt+F", "Fill the selection with the brush (nothing selected: the Fill tool)", func() { a.fillSel() }},
+		{"crop", "Ctrl+K", "Crop the page to the selection (Amiga and PC pages)", func() { a.cropToSel() }},
+
 		{"select_left", "Shift+Left", "Select with the keyboard: from the cursor, growing as it moves (Esc lets go)", func() { a.selectKey("Left") }},
 		{"select_right", "Shift+Right", "", func() { a.selectKey("Right") }},
 		{"select_up", "Shift+Up", "", func() { a.selectKey("Up") }},
@@ -177,19 +191,6 @@ func init() {
 		{"tool_pick", "Alt+P", "Pick tool", func() { a.toolKey("pick") }},
 		{"tool_select", "Alt+S", "Select tool", func() { a.toolKey("select") }},
 		{"tool_half", "Alt+B", "Half tool (PC pages), Sixel tool (teletext)", func() { a.toolKey("half") }},
-		{"undo", "Ctrl+Z", "Undo", func() { a.doUndo() }},
-		{"redo", "Ctrl+Y, Ctrl+Shift+Z", "Redo", func() { a.doRedo() }},
-		{"select_all", "Ctrl+A", "Select all", func() { a.sel = &Sel{0, 0, a.doc.cols - 1, max(0, a.doc.usedRows()-1)} }},
-		{"copy", "Ctrl+C", "Copy the block", func() { a.copySel(false) }},
-		{"cut", "Ctrl+X", "Cut the block", func() { a.copySel(true) }},
-		{"paste", "Ctrl+V", "Paste (text from other programs too)", func() { a.paste() }},
-		{"mirror", "Alt+H", "Mirror the block left-right (nothing selected: the brush character)", func() { a.blockOp(flipH) }},
-		{"upside_down", "Alt+V", "Turn the block upside down (nothing selected: the brush character)", func() { a.blockOp(flipV) }},
-		{"turn", "Alt+R", "Turn the block a quarter clockwise (nothing selected: the brush character)", func() { a.blockOp(turnCW) }},
-		{"invert", "Alt+I", "Invert the block (reversed characters, or the two colours swapped)", func() { a.blockOp(invertBlock) }},
-
-		{"fill_block", "Alt+F", "Fill the selection with the brush (nothing selected: the Fill tool)", func() { a.fillSel() }},
-		{"crop", "Ctrl+K", "Crop the page to the selection (Amiga and PC pages)", func() { a.cropToSel() }},
 
 		{"fg_previous", "Ctrl+Up", "Foreground colour -1", func() { a.stepFg(-1) }},
 		{"fg_next", "Ctrl+Down", "Foreground colour +1", func() { a.stepFg(1) }},
@@ -421,7 +422,9 @@ func keysHelp() string {
 		for j < len(actions) && actions[j].help == "" {
 			j++
 		}
-		lines = append(lines, groupKeys(actions[i:j])+": "+actions[i].help)
+		if keys := groupKeys(actions[i:j]); keys != "(no key)" { // the keys file can give it one
+			lines = append(lines, keys+": "+actions[i].help)
+		}
 		i = j
 	}
 	return strings.Join(lines, "\n")
@@ -461,10 +464,21 @@ func groupKeys(g []*Action) string {
 		}
 	}
 	var names []string
+	same := len(g) > 1
 	for _, ac := range g {
-		for _, c := range keysNow[ac.id] {
+		ks := keysNow[ac.id]
+		same = same && len(ks) == 1 && ks[0].mods == keysNow[g[0].id][0].mods
+		for _, c := range ks {
 			names = append(names, c.String())
 		}
+	}
+	if same { // Shift+Left/Right/Up/Down
+		first := keysNow[g[0].id][0]
+		for i := 1; i < len(g); i++ {
+			names[i] = keysNow[g[i].id][0].key
+		}
+		names[0] = first.String()
+		return strings.Join(names, "/")
 	}
 	if len(names) == 0 {
 		return "(no key)"

@@ -29,9 +29,25 @@ renamed by the user on 2026-10-13. Local git only, no remote yet.
 
 CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide art shrunk to fit, m plays.
 
+## Keys and safety (2026-10-13, evening)
+
+- `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's
+  KEYS list (`keysHelp`) and `~/.config/charcoal/keys` (written with the defaults the first time; bad lines are
+  skipped with a status-line message; a key the file gives an action is taken from the others' defaults). Status
+  hints name keys with `keyName(id)` so they follow the file. Only the left Alt is Alt (AltGr types).
+- Defaults follow Moebius/PabloDraw/TheDraw (survey: ~/Projects/Knowledge/bbs/text-art-editor-keys.md): Ctrl+arrows
+  colours, Ctrl/Alt+0-7, Ctrl+F1-F10 sets, Alt+arrows rows/columns, Alt+U, Ctrl+D, Ctrl+Shift+X, Ctrl+K, Ctrl+I;
+  tools Alt+T/D/K/L/P/S/B. Fit width moved to Ctrl+9. Alt+F fills the selection (no selection: Fill tool).
+- Autosave (`autosave.go`): every 2 minutes, dirty tabs to `<data dir>/charcoal/autosave/<id>.cells` (raw cells,
+  lossless) + `<id>.json` (path, mode, machine, font, info, pid). Dropped on save, on closing a tab, on a clean
+  quit. At start, autosaves of CharEdits no longer running are offered back. An XBin's own font is not kept (the
+  page falls back to the mode's font). Not tested on Windows: `running(pid)` uses Signal(0) and /proc.
+- `.bak` on saving over a file (`prefs.no_backup` switches it off; Settings). Recent files: `prefs.recent`.
+
 ## Testing
 
-- `go test ./...` (unit tests; `testdata/alove` = the same art in five PC formats, must give the same page).
+- `go test ./...` (unit tests; `testApp` (editor_fixes_test.go) gives temp XDG_CONFIG_HOME and XDG_DATA_HOME and
+  the default keys; `testdata/alove` = the same art in five PC formats, must give the same page).
   **Tests that reach savePrefs (writeOut, save) must set XDG_CONFIG_HOME to a temp folder**: on 2026-10-13
   one such test overwrote the user's real ~/.config/charcoal/prefs.json.
 - `FuzzParsers` (fuzz_test.go): every reader, any length; fails on a page over maxPageCells or a slow input.
@@ -70,4 +86,4 @@ Plan agreed in chat (2026-10-13), nothing built yet:
 - ~/Projects/Knowledge/bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
 - ~/Projects/Knowledge/go/sdl2-desktop-gui.md: the GUI approach and headless testing.
 
-Last updated 2026-10-13 (after the audit fixes).
+Last updated 2026-10-13 (keys, block jobs, autosave).
