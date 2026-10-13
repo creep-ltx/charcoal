@@ -37,6 +37,7 @@ var palettes = []*Palette{
 	pal("wb", "Workbench 2/3", 0x000000, 0xbb0000, 0x00bb00, 0xeeaa00, 0x6688bb, 0xbb66bb, 0x55aaaa, 0xaaaaaa,
 		0x666666, 0xff6666, 0x66ff66, 0xffee55, 0x88aaff, 0xff88ff, 0x88ffff, 0xffffff),
 	c64Palette,
+	atariPalette,
 	{id: "custom", name: "Custom"},
 }
 
@@ -66,7 +67,8 @@ func defaultFkeys() map[string][][]int {
 			{0xC5, 0xCE, 0xD5, 0xB8, 0xD4, 0xBE, 0xD6, 0xB7, 0xD3, 0xBD},
 			{0xF9, 0xF8, 0xFD, 0xF7, 0xFB, 0xEF, 0xA9, 0xAA, 0x10, 0x11},
 		},
-		"c64": c64Fkeys,
+		"c64":   c64Fkeys,
+		"atari": atariFkeys,
 	}
 }
 
@@ -165,6 +167,11 @@ var a *App
 func (a *App) amiga() bool { return a.mode == "amiga" }
 func (a *App) pc() bool    { return a.mode == "pc" }
 func (a *App) c64() bool   { return a.mode == "c64" }
+func (a *App) atari() bool { return a.mode == "atari" }
+
+// screen: a machine's text screen (C64, Atari): 8x8 characters, one background
+// colour for the whole screen, a border, inverse characters in the top half.
+func (a *App) screen() bool { return a.c64() || a.atari() }
 
 func (a *App) font() *Font {
 	if a.ownFont != nil && a.fontFor[a.mode] == "xbin" {
@@ -185,7 +192,7 @@ func (a *App) font() *Font {
 func (a *App) lower() bool { return a.font().id == "c64lower" }
 
 func (a *App) cellH() int {
-	if a.c64() || (a.ch8 && a.amiga()) || (a.font() == a.ownFont && a.ownFont != nil && a.ownFont.h8) {
+	if a.screen() || (a.ch8 && a.amiga()) || (a.font() == a.ownFont && a.ownFont != nil && a.ownFont.h8) {
 		return 8
 	}
 	return 16
@@ -207,9 +214,12 @@ func (a *App) styleFlags() uint32 {
 
 // cell makes a cell of the page in the brush's colours.
 func (a *App) cell(ch int) uint32 {
-	if a.c64() {
+	if a.screen() {
 		if a.rev {
 			ch |= 0x80
+		}
+		if a.atari() {
+			return makeCell(ch, 0, 0, 0) // one text colour for the whole screen
 		}
 		return makeCell(ch, a.fg, 0, 0)
 	}
@@ -217,6 +227,9 @@ func (a *App) cell(ch int) uint32 {
 }
 
 func (a *App) brushCell() uint32 {
+	if a.atari() {
+		return makeCell(a.brush, 0, 0, 0)
+	}
 	if a.c64() {
 		return makeCell(a.brush, a.fg, 0, 0)
 	}
@@ -225,6 +238,9 @@ func (a *App) brushCell() uint32 {
 
 // previewFg is a colour that shows on the page's background, for the character table.
 func (a *App) previewFg() int {
+	if a.atari() {
+		return a.doc.ink
+	}
 	if !a.c64() {
 		return 7
 	}
@@ -243,6 +259,9 @@ func (a *App) setPalette() {
 	if a.c64() && p.id != "custom" && p.id != "c64" {
 		p = c64Palette
 	}
+	if a.atari() && p.id != "custom" && p.id != "atari" {
+		p = atariPalette
+	}
 	if p.id == "custom" {
 		a.pal = a.custom
 	} else {
@@ -252,7 +271,7 @@ func (a *App) setPalette() {
 
 // printable: is this byte a glyph on the current page?
 func (a *App) printable(c int) bool {
-	if a.c64() {
+	if a.screen() {
 		return true
 	}
 	if a.amiga() {
@@ -264,6 +283,9 @@ func (a *App) printable(c int) bool {
 func (a *App) charToByte(r rune) int {
 	if a.c64() {
 		return petFromRune(r, a.lower())
+	}
+	if a.atari() {
+		return atariFromRune(r)
 	}
 	if a.amiga() {
 		if r <= 0xFF && a.printable(int(r)) {
@@ -284,6 +306,9 @@ func (a *App) charToByte(r rune) int {
 func (a *App) runeOf(c int) rune {
 	if a.c64() {
 		return petRune(c, a.lower())
+	}
+	if a.atari() {
+		return atariRune(c)
 	}
 	return byteRune(c, a.amiga())
 }
@@ -432,8 +457,8 @@ func (a *App) paintAt(x, y, button int) {
 			a.setCell(x, y, a.brushCell())
 		}
 	case "colour":
-		if button == 3 && a.c64() {
-			return // a C64 cell has no background of its own
+		if (button == 3 && a.c64()) || a.atari() {
+			return // a C64 cell has no background of its own, an Atari cell no colour at all
 		}
 		if button == 3 {
 			a.setCell(x, y, old&^0xF000|uint32(a.bg)<<12)
@@ -505,8 +530,11 @@ func (a *App) floodFill(x, y int) {
 
 func (a *App) pick(x, y int) {
 	v := a.doc.get(x, y)
-	a.brush, a.fg = cellCh(v), cellFg(v)
-	if !a.c64() {
+	a.brush = cellCh(v)
+	if !a.atari() {
+		a.fg = cellFg(v)
+	}
+	if !a.screen() {
 		a.bg = cellBg(v)
 	}
 	a.ital, a.under = v&italic != 0, v&underline != 0
@@ -522,8 +550,28 @@ func (a *App) setTool(t string) {
 	}
 }
 
+// setFg sets the brush's colour; on an Atari page, the text colour of the whole screen.
+func (a *App) setFg(i int) {
+	if a.atari() {
+		if a.doc.ink != i {
+			a.pushUndo()
+			a.doc.ink = i
+		}
+		return
+	}
+	a.fg = i
+}
+
+// fgNow is the colour typing gives: the brush's, or an Atari screen's text colour.
+func (a *App) fgNow() int {
+	if a.atari() {
+		return a.doc.ink
+	}
+	return a.fg
+}
+
 func (a *App) setBg(i int) {
-	if a.c64() { // one background for the whole C64 screen
+	if a.screen() { // one background for the whole screen
 		if a.doc.bg != i {
 			a.pushUndo()
 			a.doc.bg = i
@@ -667,7 +715,9 @@ func (a *App) reparse() {
 		a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
 		return
 	}
-	if a.c64() {
+	if a.atari() {
+		a.doc = parseAta(a.source, a.forceCols)
+	} else if a.c64() {
 		d, lower := parseSeq(a.source, a.forceCols)
 		a.doc = d
 		if lower == 1 {
@@ -770,6 +820,10 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		mode = as
 	case seqExt.MatchString(name) && sauce == nil:
 		mode = "c64"
+	case strings.HasSuffix(strings.ToLower(name), ".ata") && sauce == nil:
+		mode = "atari"
+	case sauce == nil && !utf && looksAtascii(b):
+		mode = "atari"
 	case strings.HasPrefix(sfont, "amiga"):
 		mode = "amiga"
 	case sauce != nil && regexp.MustCompile(`^(ibm|cp437|vga|ega|mda)`).MatchString(sfont):
@@ -793,7 +847,7 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	}
 	a.mode = mode
 	src := b
-	if utf && mode != "c64" {
+	if utf && mode != "c64" && mode != "atari" {
 		src = fromUtf8(b, mode == "amiga")
 		a.msg("Read as UTF-8 text")
 	}
@@ -816,6 +870,8 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	switch {
 	case mode == "c64":
 		a.saveFmt = "seq"
+	case mode == "atari":
+		a.saveFmt = "ata"
 	case binary:
 		a.saveFmt = "bin"
 	case textExt.MatchString(name) && !bytes.ContainsAny(head, "\x1b\x9b"):
@@ -867,7 +923,7 @@ func (a *App) applyMode() {
 	a.setPalette()
 }
 
-var modeNames = map[string]string{"amiga": "Amiga", "pc": "PC", "c64": "C64"}
+var modeNames = map[string]string{"amiga": "Amiga", "pc": "PC", "c64": "C64", "atari": "Atari"}
 
 func (a *App) setMode(m string) {
 	if m == a.mode {
@@ -883,15 +939,23 @@ func (a *App) setMode(m string) {
 	case a.source != nil && !a.dirty:
 		a.reparse()
 	case a.source == nil && !a.dirty && a.doc.usedRows() == 0:
-		// An empty page takes the new machine's width.
-		if m == "c64" {
+		// An empty page takes the new machine's width and colours.
+		switch {
+		case m == "c64":
 			a.doc = newDoc(40, 25)
-		} else if was == "c64" {
+		case m == "atari":
+			a.doc = newAtariDoc()
+		case was == "c64" || was == "atari":
 			a.doc = newDoc(80, 25)
 		}
-		a.saveFmt = map[bool]string{true: "seq", false: "ansi"}[m == "c64"]
+		fmtID, ext := map[string]string{"c64": "seq", "atari": "ata"}[m], ""
+		if fmtID == "" {
+			fmtID = "ansi"
+		}
+		ext = "." + map[string]string{"ansi": "ans", "seq": "seq", "ata": "ata"}[fmtID]
+		a.saveFmt = fmtID
 		if a.path == "" {
-			a.name = "untitled" + map[bool]string{true: ".seq", false: ".ans"}[m == "c64"]
+			a.name = "untitled" + ext
 		}
 	case a.dirty:
 		a.msg("Shown with the " + modeNames[m] + " font and colours; the bytes are unchanged")
@@ -915,6 +979,13 @@ func (a *App) setCols(n int) {
 	a.cx = min(a.cx, n-1)
 }
 
+// newAtariDoc is an empty Atari screen in the Atari's own start-up colours.
+func newAtariDoc() *Doc {
+	d := newDoc(40, 24)
+	d.bg, d.ink, d.border = atariBg, atariInk, 0
+	return d
+}
+
 // ---------------------------------------------------------------- tabs
 
 func (a *App) newTab(mode string) *Tab {
@@ -934,6 +1005,10 @@ func (a *App) newTab(mode string) *Tab {
 	if mode == "c64" {
 		t.doc = newDoc(40, 25)
 		t.saveFmt, t.name = "seq", "untitled.seq"
+	}
+	if mode == "atari" {
+		t.doc = newAtariDoc()
+		t.saveFmt, t.name = "ata", "untitled.ata"
 	}
 	a.tabs = append(a.tabs, t)
 	return t
@@ -1111,15 +1186,16 @@ var formats = []Format{
 	{"ansi", "ANSI (.ans)", ".ans", "amiga pc"},
 	{"text", "Plain text, no colours (.asc)", ".asc", "amiga pc"},
 	{"seq", "PETSCII stream (.seq)", ".seq", "c64"},
-	{"utf8", "UTF-8 text, no colours (.txt)", ".txt", "amiga pc c64"},
+	{"ata", "ATASCII (.ata)", ".ata", "atari"},
+	{"utf8", "UTF-8 text, no colours (.txt)", ".txt", "amiga pc c64 atari"},
 	{"bin", "PC binary (.bin)", ".bin", "pc"},
 	{"xbin", "XBin, font and palette inside (.xb)", ".xb", "amiga pc"},
 	{"prg", "C64 program that shows it (.prg)", ".prg", "c64"},
 	{"marq", "C array: PETSCII editor, Petmate (.c)", ".c", "c64"},
 	{"petmate", "Petmate workspace (.petmate)", ".petmate", "c64"},
-	{"png", "Picture (.png)", ".png", "amiga pc c64"},
-	{"png2", "Picture, twice the size (.png)", ".png", "amiga pc c64"},
-	{"html", "Web page (.html)", ".html", "amiga pc c64"},
+	{"png", "Picture (.png)", ".png", "amiga pc c64 atari"},
+	{"png2", "Picture, twice the size (.png)", ".png", "amiga pc c64 atari"},
+	{"html", "Web page (.html)", ".html", "amiga pc c64 atari"},
 }
 
 // modeFormats are the formats the current page can be saved in.
@@ -1157,6 +1233,8 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		return withSauce(writeAnsi(d, am, false, false), 0), nil
 	case "seq":
 		return writeSeq(d, a.lower(), info.clear), nil
+	case "ata":
+		return writeAta(d, info.clear), nil
 	case "utf8":
 		return []byte(strings.Join(docText(d, a.runeOf, 0, 0, 0, 0), nl) + nl), nil
 	case "bin":
@@ -1181,12 +1259,12 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 			z = 2
 		}
 		rows := max(1, min(d.usedRows(), 32000/(H*z)))
-		if a.c64() {
-			rows = max(rows, 25)
+		if a.screen() {
+			rows = max(rows, map[bool]int{true: 25, false: 24}[a.c64()])
 		}
 		border := 0
 		fb := &FB{}
-		if a.c64() { // with the C64's border around it
+		if a.screen() { // with the machine's border around it
 			border = 32 * z
 			fb.resize(d.cols*8*z+2*border, rows*H*z+2*border)
 			fb.fill(Rect{0, 0, fb.w, fb.h}, a.pal[d.borderColour()])
@@ -1247,7 +1325,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	if strings.Contains(" ansi text bin seq xbin marq petmate prg ", " "+fmtID+" ") { // the page's own file; the others are exports
+	if strings.Contains(" ansi text bin seq ata xbin marq petmate prg ", " "+fmtID+" ") { // the page's own file; the others are exports
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
 		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg"}[fmtID]
@@ -1288,6 +1366,8 @@ func (a *App) play() {
 	if b == nil || a.dirty {
 		if a.c64() {
 			b = writeSeq(a.doc, a.lower(), false)
+		} else if a.atari() {
+			b = writeAta(a.doc, false)
 		} else {
 			b = writeAnsi(a.doc, a.amiga(), true, false)
 		}
@@ -1295,10 +1375,13 @@ func (a *App) play() {
 	_, end := readSauce(b)
 	b = b[:end]
 	d := newDoc(a.doc.cols, 25)
-	d.bg = a.doc.bg
+	d.bg, d.ink, d.border = a.doc.bg, a.doc.ink, a.doc.border
 	var em emulator = newTerm(d, a.amiga())
 	if a.c64() {
 		em = newPetTerm(d)
+	}
+	if a.atari() {
+		em = newAtariTerm(d)
 	}
 	a.playing = &Play{bytes: b, term: em, saved: a.snapshot(), last: time.Now()}
 	a.doc, a.sel, a.float = d, nil, nil

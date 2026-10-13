@@ -43,11 +43,11 @@ func loadPrefs() {
 	if b, err := os.ReadFile(prefsPath()); err == nil {
 		json.Unmarshal(b, &prefs)
 	}
-	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper"}
+	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper", "atari": "atari"}
 	for k, v := range prefs.Font {
 		a.defFont[k] = v
 	}
-	a.defPalette = map[string]string{"amiga": "amiga", "pc": "vga", "c64": "c64"}
+	a.defPalette = map[string]string{"amiga": "amiga", "pc": "vga", "c64": "c64", "atari": "atari"}
 	for k, v := range prefs.Palette {
 		a.defPalette[k] = v
 	}
@@ -57,7 +57,7 @@ func loadPrefs() {
 	}
 	a.grid = prefs.Grid
 	a.fkeys = defaultFkeys()
-	for _, m := range []string{"amiga", "pc", "c64"} {
+	for _, m := range []string{"amiga", "pc", "c64", "atari"} {
 		if f := prefs.Fkeys[m]; len(f) > 0 {
 			a.fkeys[m] = f
 		}

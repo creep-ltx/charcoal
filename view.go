@@ -22,7 +22,7 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	var fgc, bgc uint32
 	smear := false
 	switch {
-	case a.c64():
+	case a.screen():
 		bgc, it, ul = a.pal[a.doc.bg], false, false
 	case a.ice:
 		bgc = a.pal[bg]
@@ -32,9 +32,12 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 			ch = 32 // blinking text, off phase
 		}
 	}
-	if a.amiga() && a.smear && fg > 7 {
+	switch {
+	case a.atari():
+		fgc = a.pal[a.doc.ink]
+	case a.amiga() && a.smear && fg > 7:
 		fgc, smear = a.pal[fg&7], true
-	} else {
+	default:
 		fgc = a.pal[fg]
 	}
 	if !a.printable(ch) {
@@ -280,8 +283,8 @@ func (a *App) drawBar(u *UI) int {
 		a.save(true)
 	}
 	fl.gap()
-	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. C64: PETSCII, 40 columns, .seq files."
-	for _, m := range []string{"amiga", "pc", "c64"} {
+	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata files. C64: PETSCII, .seq files."
+	for _, m := range []string{"amiga", "pc", "atari", "c64"} {
 		if u.button(fl.place(buttonW(modeNames[m])), modeNames[m], a.mode == m, modeHint) != nil {
 			a.setMode(m)
 		}
@@ -372,7 +375,7 @@ func (a *App) drawBar(u *UI) int {
 			savePrefs()
 		}
 	}
-	if !a.c64() {
+	if !a.screen() {
 		r = fl.place(checkW("iCE"))
 		a.ice, _ = u.check(r.x, r.y, "iCE", a.ice, "Background colours 8-15 instead of blink (iCE colours)")
 	}
@@ -721,7 +724,7 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		a.ital = toggle("I", a.ital, "Italic (Amiga console SGR 3)")
 		a.under = toggle("U", a.under, "Underline (Amiga console SGR 4)")
 	}
-	if a.c64() {
+	if a.screen() {
 		a.rev = toggle("Rev", a.rev, "Reverse: typing gives reversed characters, like RVS ON (Ctrl+R)")
 	}
 	a.insert = toggle("Ins", a.insert, "Insert mode for typing (Insert key)")
@@ -800,34 +803,38 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		r := Rect{x + i*20, cy, 18, 18}
 		fb.fill(r, a.pal[i])
 		fb.frame(r, cEdgeDk)
-		if i == a.fg {
+		fgNow, fgName := a.fg, "foreground"
+		if a.atari() {
+			fgNow, fgName = a.doc.ink, "the text colour"
+		}
+		if i == fgNow {
 			fb.frame(r.inset(-2), cHi)
 		}
 		bgNow := a.bg
 		bgName := "background"
-		if a.c64() {
+		if a.screen() {
 			bgNow, bgName = a.doc.bg, "the screen colour, middle: the border"
 		}
 		if i == bgNow {
 			fb.dashed(r.inset(-2), cOrange)
 		}
-		if a.c64() && i == a.doc.borderColour() { // the border: a mark under the swatch
+		if a.screen() && i == a.doc.borderColour() { // the border: a mark under the swatch
 			fb.fill(Rect{r.x + 4, r.y + r.h + 3, r.w - 8, 2}, cHi)
 		}
-		u.setHint(r, fmt.Sprintf("Colour %d: #%06X. Left: foreground, right: %s, Shift+click: change it", i, a.pal[i]&0xFFFFFF, bgName))
+		u.setHint(r, fmt.Sprintf("Colour %d: #%06X. Left: %s, right: %s, Shift+click: change it", i, a.pal[i]&0xFFFFFF, fgName, bgName))
 		if c := u.take(r); c != nil {
 			switch {
 			case c.shift:
 				openColour(i)
 			case c.button == 3:
 				a.setBg(i)
-			case c.button == 2 && a.c64():
+			case c.button == 2 && a.screen():
 				if a.doc.border != i {
 					a.pushUndo()
 					a.doc.border = i
 				}
 			default:
-				a.fg = i
+				a.setFg(i)
 			}
 		}
 	}
@@ -840,11 +847,14 @@ func (a *App) drawPane(u *UI, pane Rect) {
 	if u.button(Rect{br.x + br.w + 8, by, buttonW("Swap"), smallH}, "Swap", false, "Swap foreground and background") != nil {
 		a.fg, a.bg = a.bg, a.fg
 	}
-	bgShown := a.bg
-	if a.c64() {
+	fgShown, bgShown := a.fg, a.bg
+	if a.screen() {
 		bgShown = a.doc.bg
 	}
-	fb.text(br.x+br.w+8+buttonW("Swap")+10, by+2, fmt.Sprintf("char %d  fg %d  bg %d", a.brush, a.fg, bgShown), cText)
+	if a.atari() {
+		fgShown = a.doc.ink
+	}
+	fb.text(br.x+br.w+8+buttonW("Swap")+10, by+2, fmt.Sprintf("char %d  fg %d  bg %d", a.brush, fgShown, bgShown), cText)
 	fb.clip = old
 }
 
@@ -879,7 +889,7 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		}
 		x = fb.text(x+charW*2, y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 	}
-	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": "C64 PETSCII"}[a.mode]
+	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": "C64 PETSCII", "atari": "Atari ATASCII"}[a.mode]
 	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, max(a.doc.usedRows(), 1)), cText) + 24
 	name := a.path
 	if name == "" {

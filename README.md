@@ -2,7 +2,7 @@
 
 Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer.
 
-An art viewer and editor for Amiga ANSI, PC ANSI and C64 PETSCII, drawn with the real bitmap fonts: Topaz
+An art viewer and editor for Amiga ANSI, PC ANSI, Atari ATASCII and C64 PETSCII, drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA on a PC page
 (CP437), the C64's two character sets on a C64 page.
 
@@ -36,6 +36,12 @@ Press the **?** gadget for every key.
 - Both: cursor movement, erase, insert/delete lines and characters, save/restore cursor, SyncTERM's font switch
   (`CSI 0;n SP D`), SAUCE read and written (width, font name, title, author, group, iCE flag). Amiga or PC is guessed
   from SAUCE and the bytes; "Open as" overrides. UTF-8 text files are read too.
+- **Atari page**: ATASCII (`.ata`, and `.txt` files recognised by their bytes): inverse characters, one
+  background and one text colour for the screen, border; EOL line ends, ESC before control characters, cursor
+  moves for animations. Width 38 (the screen editor's margins) or 40 (terminals) is guessed: a 39-40 character
+  line settles it, else the width where characters stack best. Checked on the Break Into Chat collection: all 203
+  real files recognised, none of 853 ANSI/NFO files on this PC mistaken for ATASCII. The font is AltirraOS's
+  (Altirra emulator, all-permissive licence, `fonts/AltirraOS-LICENSE.txt`), built in.
 - **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
   character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's
   ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its
@@ -72,6 +78,7 @@ Press the **?** gadget for every key.
 | `fonts.go`, `fonts/` | the embedded fonts and their mirror tables; `cp437.go` the CP437 table |
 | `viewer.go` | CharView |
 | `export.go` | `.prg`, the `.c` array, XBin, HTML (`export_test.go` runs the `.prg` in a small 6502 emulator) |
+| `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
 | `script.go` | `CHARCOAL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
 | `web/` | the first version, called amiansi, that ran in the browser (Python server + HTML/JS), kept for reference |

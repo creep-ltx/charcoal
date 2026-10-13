@@ -410,13 +410,13 @@ func editorKey(k string, ctrl, shift, alt bool) {
 			if shift {
 				a.setBg((a.bg + 15) % 16)
 			} else {
-				a.fg = (a.fg + 15) % 16
+				a.setFg((a.fgNow() + 15) % 16)
 			}
 		case "Right":
 			if shift {
 				a.setBg((a.bg + 1) % 16)
 			} else {
-				a.fg = (a.fg + 1) % 16
+				a.setFg((a.fgNow() + 1) % 16)
 			}
 		case "=", "+", "Keypad +":
 			a.zoom = min(8, a.zoom+1)

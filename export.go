@@ -282,7 +282,7 @@ func (a *App) writeHTML() []byte {
 	hex := func(c uint32) string { return fmt.Sprintf("#%06x", c&0xFFFFFF) }
 	bgOf := func(v uint32) uint32 {
 		switch {
-		case a.c64():
+		case a.screen():
 			return a.pal[d.bg]
 		case a.ice:
 			return a.pal[cellBg(v)]
@@ -295,7 +295,7 @@ func (a *App) writeHTML() []byte {
 		title = a.name
 	}
 	page := a.pal[0]
-	if a.c64() {
+	if a.screen() {
 		page = a.pal[d.borderColour()]
 	}
 	fmt.Fprintf(&b, "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>%s</title>\n", html.EscapeString(title))
@@ -309,6 +309,9 @@ func (a *App) writeHTML() []byte {
 		for x := 0; x < d.cols; x++ {
 			v := d.get(x, y)
 			fg, bg := a.pal[cellFg(v)], bgOf(v)
+			if a.atari() {
+				fg = a.pal[d.ink]
+			}
 			key := uint64(fg)<<32 | uint64(bg)
 			if v&italic != 0 {
 				key ^= 1 << 62
