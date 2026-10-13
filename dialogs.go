@@ -553,7 +553,7 @@ Dropping files on the window opens them.
 
 AMIGA, PC AND C64
 Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. C64 pages are PETSCII: 40 columns, the C64's two character sets (the Font gadget), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
-The C64 character set is the C64's ROM and does not come with the program: put chargen.bin (4096 bytes, from VICE or your own C64) in ~/.local/share/amiansi/.
+The C64 character set is the C64's ROM and does not come with the program: the first run offers to download it from the VICE emulator project (checked by its SHA-1), and so does Settings. A chargen.bin of your own (4096 bytes) in ~/.local/share/amiansi/ works too.
 
 SETTINGS
 Kept in ~/.config/amiansi/prefs.json. "uiscale": 2 there doubles the whole window for big screens.`
@@ -592,6 +592,142 @@ func (d *HelpReq) key(k string, ctrl, shift bool) bool {
 		d.top += 20
 	case "PageUp":
 		d.top = max(0, d.top-20)
+	default:
+		return false
+	}
+	return true
+}
+
+// ---------------------------------------------------------------- the C64 character set
+
+const c64Why = "C64 pages (PETSCII) need the C64's character set. It is the C64's own ROM, so it does not come " +
+	"with this program, but the VICE emulator project hands it out. Download it from VICE now? (4 KB, checked " +
+	"before it is used, kept in ~/.local/share/amiansi/.) You can also do this later under Settings."
+
+type C64Req struct {
+	after func() // what to do once the character set is here
+	err   string
+}
+
+func openC64Req(after func()) {
+	a.dialog = &C64Req{after: after}
+}
+
+func (d *C64Req) answered() {
+	prefs.C64Asked = true
+	savePrefs()
+}
+
+func (d *C64Req) download() {
+	if err := downloadChargen(); err != nil {
+		d.err = "Could not download: " + err.Error()
+		return
+	}
+	a.hasC64 = true
+	d.answered()
+	closeDialog()
+	a.msg("The C64 character set is here: C64 pages work now")
+	if d.after != nil {
+		d.after()
+	}
+}
+
+func (d *C64Req) draw(u *UI) {
+	in := u.window(centre(560, 240), "C64 character set")
+	y := in.y
+	for _, l := range wrap(c64Why, in.w/charW) {
+		u.fb.text(in.x, y, l, cText)
+		y += lineH
+	}
+	if d.err != "" {
+		for _, l := range wrap(d.err, in.w/charW) {
+			u.fb.text(in.x, y+6, l, cOrange)
+			y += lineH
+		}
+	}
+	switch buttonRow(u, in, "Download", "Not now") {
+	case 0:
+		d.download()
+	case 1:
+		d.answered()
+		closeDialog()
+	}
+}
+
+func (d *C64Req) key(k string, ctrl, shift bool) bool {
+	switch k {
+	case "Return", "Keypad Enter":
+		d.download()
+	case "Escape":
+		d.answered()
+		closeDialog()
+	default:
+		return false
+	}
+	return true
+}
+
+// ---------------------------------------------------------------- settings
+
+type SettingsReq struct{ err string }
+
+func openSettings() { a.dialog = &SettingsReq{} }
+
+func (d *SettingsReq) draw(u *UI) {
+	fb := u.fb
+	in := u.window(centre(600, 260), "Settings")
+	y := in.y
+	fb.text(in.x, y+3, "Window size", cText)
+	sizes := []string{"1x (normal)", "2x (big screens)", "3x"}
+	u.choice("uiscale", Rect{in.x + 120, y, choiceW(sizes), gadH}, sizes, scale-1, "", func(i int) {
+		scale = i + 1
+		savePrefs()
+	})
+	y += gadH + 16
+	fb.text(in.x, y, "C64 character set", cHi)
+	y += lineH + 4
+	status := "Not here yet: C64 pages need it."
+	if a.hasC64 {
+		status = "Here. C64 pages work."
+		for _, p := range c64Paths() {
+			if st, err := os.Stat(p); err == nil && st.Size() == 4096 {
+				status = "Here: " + p
+				break
+			}
+		}
+	}
+	for _, l := range wrap(status, in.w/charW) {
+		fb.text(in.x, y, l, cText)
+		y += lineH
+	}
+	label := "Download from VICE"
+	if a.hasC64 {
+		label = "Download again"
+	}
+	if u.button(Rect{in.x, y + 6, buttonW(label), gadH}, label, false, "") != nil {
+		if err := downloadChargen(); err != nil {
+			d.err = "Could not download: " + err.Error()
+		} else {
+			a.hasC64, d.err = true, ""
+			prefs.C64Asked = true
+			savePrefs()
+			a.msg("The C64 character set is here: C64 pages work now")
+		}
+	}
+	if d.err != "" {
+		for i, l := range wrap(d.err, in.w/charW) {
+			fb.text(in.x, y+gadH+14+i*lineH, l, cOrange)
+		}
+	}
+	if buttonRow(u, in, "OK") == 0 {
+		closeDialog()
+	}
+}
+
+func (d *SettingsReq) key(k string, ctrl, shift bool) bool {
+	switch k {
+	case "Escape", "Return", "Keypad Enter":
+		closeDialog()
 	default:
 		return false
 	}

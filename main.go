@@ -66,6 +66,9 @@ func main() {
 	if len(a.tabs) > 0 {
 		a.focusTab(a.tabs[0])
 	}
+	if !a.hasC64 && !prefs.C64Asked && a.dialog == nil {
+		openC64Req(nil) // ask once, on the first run
+	}
 
 	if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
 		fmt.Fprintln(os.Stderr, "amiansi:", err)

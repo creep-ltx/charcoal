@@ -12,20 +12,21 @@ import (
 )
 
 type Prefs struct {
-	Mode    string             `json:"mode"`
-	Font    map[string]string  `json:"font"`
-	Palette map[string]string  `json:"palette"`
-	Zoom    int                `json:"zoom"`
-	Ch8     bool               `json:"ch8"`
-	Smear   bool               `json:"smear"`
-	Fkeys   map[string][][]int `json:"fkeys"`
-	Custom  []string           `json:"custom"`
-	Dir     string             `json:"dir"`
-	Baud    int                `json:"baud"`
-	UIScale int                `json:"uiscale"`
-	Grid    bool               `json:"grid"`
-	Width   int                `json:"width"`
-	Height  int                `json:"height"`
+	Mode     string             `json:"mode"`
+	Font     map[string]string  `json:"font"`
+	Palette  map[string]string  `json:"palette"`
+	Zoom     int                `json:"zoom"`
+	Ch8      bool               `json:"ch8"`
+	Smear    bool               `json:"smear"`
+	Fkeys    map[string][][]int `json:"fkeys"`
+	Custom   []string           `json:"custom"`
+	Dir      string             `json:"dir"`
+	Baud     int                `json:"baud"`
+	UIScale  int                `json:"uiscale"`
+	Grid     bool               `json:"grid"`
+	C64Asked bool               `json:"c64asked"` // the first-run question about the C64 character set
+	Width    int                `json:"width"`
+	Height   int                `json:"height"`
 }
 
 var prefs Prefs
@@ -90,6 +91,7 @@ func savePrefs() {
 	a.defZoom = a.zoom
 	p.Mode, p.Font, p.Palette, p.Zoom, p.Ch8, p.Smear = a.mode, a.defFont, a.defPalette, a.zoom, a.ch8, a.smear
 	p.Grid = a.grid
+	p.UIScale = scale
 	p.Fkeys, p.Dir, p.Baud = a.fkeys, a.lastDir, a.baud
 	p.Custom = nil
 	for _, c := range a.custom {

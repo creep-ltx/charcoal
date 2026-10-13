@@ -7,11 +7,18 @@ package main
 //
 // The character set is the C64's character ROM, which is not ours to pass on:
 // it is read from chargen.bin in ~/.local/share/amiansi/ (or the copies that
-// bbmp and VICE keep), see c64Paths.
+// bbmp and VICE keep), see c64Paths. downloadChargen fetches it from the VICE
+// emulator's own repository, which distributes it.
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func c64Paths() []string {
@@ -32,6 +39,9 @@ func c64Paths() []string {
 // loadC64Fonts adds the two C64 character sets to fonts, if the ROM is found.
 // Rows are doubled to the 16-row form the other fonts use.
 func loadC64Fonts() bool {
+	if fontByID("c64upper") != nil {
+		return true
+	}
 	for _, p := range c64Paths() {
 		b, err := os.ReadFile(p)
 		if err != nil || len(b) != 4096 {
@@ -50,6 +60,51 @@ func loadC64Fonts() bool {
 		return true
 	}
 	return false
+}
+
+// The VICE project's copies of the C64 character ROM (901225-01) and its SHA-1.
+var chargenURLs = []string{
+	"https://sourceforge.net/p/vice-emu/code/HEAD/tree/trunk/vice/data/C64/chargen-901225-01.bin?format=raw",
+	"https://raw.githubusercontent.com/VICE-Team/svn-mirror/main/vice/data/C64/chargen-901225-01.bin",
+}
+
+const chargenSHA1 = "adc7c31e18c7c7413d54802ef2f4193da14711aa"
+
+// downloadChargen fetches the character ROM from VICE, checks it and keeps it
+// as the first of c64Paths.
+func downloadChargen() error {
+	client := &http.Client{Timeout: 20 * time.Second}
+	var last error
+	for _, u := range chargenURLs {
+		resp, err := client.Get(u)
+		if err != nil {
+			last = err
+			continue
+		}
+		b, err := io.ReadAll(io.LimitReader(resp.Body, 65536))
+		resp.Body.Close()
+		if err != nil || resp.StatusCode != 200 {
+			last = fmt.Errorf("%s: %s", u, resp.Status)
+			continue
+		}
+		sum := sha1.Sum(b)
+		if len(b) != 4096 || hex.EncodeToString(sum[:]) != chargenSHA1 {
+			last = fmt.Errorf("the file from %s is not the C64 character ROM", u)
+			continue
+		}
+		dst := c64Paths()[0]
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		if err := writeAtomic(dst, b); err != nil {
+			return err
+		}
+		if !loadC64Fonts() {
+			return fmt.Errorf("saved %s but could not read it back", dst)
+		}
+		return nil
+	}
+	return last
 }
 
 // The colour codes of PETSCII, by C64 colour number.

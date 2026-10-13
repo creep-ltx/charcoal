@@ -278,9 +278,6 @@ func (a *App) drawBar(u *UI) int {
 	fl.gap()
 	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. C64: PETSCII, 40 columns, .seq files."
 	for _, m := range []string{"amiga", "pc", "c64"} {
-		if m == "c64" && !a.hasC64 {
-			continue
-		}
 		if u.button(fl.place(buttonW(modeNames[m])), modeNames[m], a.mode == m, modeHint) != nil {
 			a.setMode(m)
 		}
@@ -392,6 +389,9 @@ func (a *App) drawBar(u *UI) int {
 	}
 	if u.button(fl.place(buttonW("Info")), "Info", false, "SAUCE info (title, author, group) and save options") != nil {
 		openInfo()
+	}
+	if u.button(fl.place(buttonW("Settings")), "Settings", false, "Settings: window size, the C64 character set") != nil {
+		openSettings()
 	}
 	if u.button(fl.place(buttonW("?")), "?", false, "Keys and mouse") != nil {
 		openHelp()

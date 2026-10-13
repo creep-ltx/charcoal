@@ -690,7 +690,13 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		mode = map[bool]string{true: "amiga", false: "pc"}[guessAmiga(b)]
 	}
 	if mode == "c64" && !a.hasC64 {
-		a.msg("PETSCII needs the C64 character ROM: put chargen.bin (4096 bytes) in ~/.local/share/amiansi/")
+		// Shown as PC for now; with the character set it is read again as PETSCII.
+		t := a.Tab
+		openC64Req(func() {
+			a.focusTab(t)
+			a.forceCols = 0
+			a.setMode("c64")
+		})
 		mode = "pc"
 	}
 	a.mode = mode
@@ -749,7 +755,7 @@ func (a *App) setMode(m string) {
 		return
 	}
 	if m == "c64" && !a.hasC64 {
-		a.msg("PETSCII needs the C64 character ROM: put chargen.bin (4096 bytes) in ~/.local/share/amiansi/")
+		openC64Req(func() { a.setMode("c64") })
 		return
 	}
 	was := a.mode

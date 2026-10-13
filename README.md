@@ -28,7 +28,9 @@ Press the **?** gadget for every key.
   from SAUCE and the bytes; "Open as" overrides. UTF-8 text files are read too.
 - **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
   character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's
-  ROM, not shipped: `chargen.bin` (4096 bytes) is read from `~/.local/share/amiansi/` or bbmp's and VICE's copies.
+  ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its
+  GitHub mirror), checked by SHA-1, into `~/.local/share/amiansi/chargen.bin`; Settings can do it too. bbmp's
+  and an installed VICE's copies are used if present.
 - **Tabs and two pages at once**: every file opens in a tab; show one page, two side by side or one over the other
   (Ctrl+L), optionally scrolling together.
 - **Grid** (Ctrl+G, brighter every 10 columns and every 25 rows), **zoom** 1x-8x, fit to width (Ctrl+0),
