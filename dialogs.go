@@ -302,6 +302,28 @@ func (d *FileReq) ok() {
 	a.openPath(p, openAs[d.choice])
 }
 
+// recentPopup lists the recent files under r; picking one opens it.
+func (d *FileReq) recentPopup(u *UI, r Rect) {
+	recent := append([]string(nil), prefs.Recent...)
+	items := make([]string, len(recent))
+	w := r.w
+	for i, p := range recent {
+		items[i] = shortPath(p)
+		w = max(w, textW(items[i])+40)
+	}
+	h := len(items)*(lineH+2) + 4
+	py := r.y + r.h
+	if py+h > u.fb.h {
+		py = max(0, r.y-h)
+	}
+	px := min(r.x, max(0, u.fb.w-w))
+	u.popup = &Popup{id: "recent", r: Rect{px, py, w, h}, items: items, cur: -1, pick: func(i int) {
+		as := openAs[d.choice]
+		closeDialog()
+		a.openPath(recent[i], as)
+	}}
+}
+
 func (d *FileReq) setFormat(i int) {
 	d.choice = i
 	p := d.path.String()
@@ -380,6 +402,12 @@ func (d *FileReq) draw(u *UI) {
 			names = names[:7]
 		}
 		u.choice("as", Rect{in.x + 72, y, choiceW(names), gadH}, names, d.choice, "", func(i int) { d.choice = i })
+		if len(prefs.Recent) > 0 {
+			r := Rect{in.x + 72 + choiceW(names) + 16, y, buttonW("Recent files"), gadH}
+			if u.button(r, "Recent files", false, "The last files opened or saved ("+keyName("open_recent")+" opens the newest again)") != nil {
+				d.recentPopup(u, r)
+			}
+		}
 	}
 	if d.err != "" {
 		fb.text(in.x, in.y+in.h-gadH-lineH-6, d.err, cHi)
@@ -856,7 +884,7 @@ func openSettings() { a.dialog = &SettingsReq{} }
 
 func (d *SettingsReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(660, 380), "Settings")
+	in := u.window(centre(660, 410), "Settings")
 	y := in.y
 	fb.text(in.x, y+3, "Window size", cText)
 	sizes := []string{"1x (normal)", "2x (big screens)", "3x", "4x"} // as many as main allows (maxUIScale)
@@ -864,6 +892,11 @@ func (d *SettingsReq) draw(u *UI) {
 		scale = i + 1
 		savePrefs()
 	})
+	y += gadH + 8
+	if v, _ := u.check(in.x, y, "Keep the old version as name.bak when saving over a file", !prefs.NoBackup, ""); v == prefs.NoBackup {
+		prefs.NoBackup = !v
+		savePrefs()
+	}
 	y += gadH + 16
 	fb.text(in.x, y, "Commodore character sets (PETSCII)", cHi)
 	y += lineH + 4

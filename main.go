@@ -98,6 +98,9 @@ func main() {
 	if len(a.tabs) > 0 {
 		a.focusTab(a.tabs[0])
 	}
+	if viewer == nil && a.dialog == nil {
+		offerAutosaves() // pages a CharEdit left unsaved when it stopped
+	}
 	if !a.hasC64 && !prefs.C64Asked && a.dialog == nil && viewer == nil {
 		openC64Req(nil) // ask once, on the first run
 	}
@@ -179,11 +182,15 @@ func main() {
 		if scriptStep() {
 			redraw = true
 		}
+		a.autosaveTick(time.Now())
 		if redraw {
 			pass()
 			present()
 			redraw = false
 		}
+	}
+	for _, t := range a.tabs { // a clean quit: nothing is left to offer back
+		dropAutosave(t)
 	}
 	savePrefs()
 }

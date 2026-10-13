@@ -153,6 +153,8 @@ type Tab struct {
 	ownPal              *[16]uint32 // a palette that came in the file (XBin)
 	machine             string      // the Commodore machine of a PETSCII page
 	stres               string      // the resolution of an Atari ST page
+	autoID              string      // its autosave's name, "" when it has none
+	autoGen             int         // the generation the autosave holds
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -1753,6 +1755,7 @@ func (a *App) closeTab(t *Tab) {
 		return
 	}
 	a.tabs = append(a.tabs[:i], a.tabs[i+1:]...)
+	dropAutosave(t) // closed on purpose: saved, or its changes thrown away
 	if len(a.tabs) == 0 {
 		a.newTab(t.mode)
 	}
@@ -1828,6 +1831,7 @@ func (a *App) openPath(path, as string) {
 	for _, t := range a.tabs { // already open: go there
 		if t.path == path && as == "auto" {
 			a.focusTab(t)
+			addRecent(path)
 			return
 		}
 	}
@@ -1837,6 +1841,7 @@ func (a *App) openPath(path, as string) {
 	}
 	a.loadBytes(b, filepath.Base(path), path, as)
 	a.lastDir = filepath.Dir(path)
+	addRecent(path)
 	savePrefs()
 	if a.message == "" || time.Since(a.messageAt) > time.Second {
 		a.msg("Opened " + path)
@@ -2244,6 +2249,10 @@ func (a *App) writeOut(path, fmtID string) bool {
 		return false
 	}
 	data, err := a.encode(fmtID)
+	bakErr := error(nil)
+	if err == nil && !prefs.NoBackup {
+		bakErr = keepBackup(path, data)
+	}
 	if err == nil {
 		err = writeAtomic(path, data)
 	}
@@ -2257,9 +2266,15 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg", "pcb": "pcb", "avt": "avt"}[fmtID]
 		a.srcIndex = 0
 		a.markSaved()
+		dropAutosave(a.Tab)
+		addRecent(path)
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
+	if bakErr != nil {
+		a.msg(fmt.Sprintf("Saved %s, but the old version could not be kept as .bak: %v", path, bakErr))
+		return true
+	}
 	if fmtID == "vt52" {
 		if n := stUnprintable(a.doc); n > 0 {
 			a.msg(fmt.Sprintf("Saved %s; %d characters below 32 became spaces (an ST cannot print them)", path, n))

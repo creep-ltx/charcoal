@@ -29,7 +29,9 @@ type Prefs struct {
 	ViewAuto  bool               `json:"view_auto_scroll"`
 	ViewStep  bool               `json:"view_step_scroll"`
 	ViewSpeed float64            `json:"view_scroll_speed"`
-	C64Asked  bool               `json:"c64asked"` // the first-run question about the C64 character set
+	C64Asked  bool               `json:"c64asked"`  // the first-run question about the C64 character set
+	NoBackup  bool               `json:"no_backup"` // saving over a file does not keep the old one as .bak
+	Recent    []string           `json:"recent"`    // the last files opened or saved, newest first
 	Width     int                `json:"width"`
 	Height    int                `json:"height"`
 }

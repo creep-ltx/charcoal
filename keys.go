@@ -143,6 +143,7 @@ func init() {
 	actions = []*Action{
 		{"help", "", "Open this help", openHelp},
 		{"open", "Ctrl+O", "Open a file", openOpenRequester},
+		{"open_recent", "Ctrl+Shift+O", "Open the most recent file again (the Open requester lists the last 10)", func() { a.reopenRecent() }},
 		{"save", "Ctrl+S", "Save", func() { a.save(false) }},
 		{"save_as", "Ctrl+Shift+S", "Save as (another name or format)", func() { a.save(true) }},
 		{"new_page", "Ctrl+T, Ctrl+N", "New page (tab)", func() { a.addTab() }},
