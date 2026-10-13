@@ -712,7 +712,7 @@ Every two minutes, pages with changes are kept aside (in ` + shownDir(autosaveDi
 
 func (d *HelpReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(900, ui.fb.h*5/6), "CharEdit - keys and mouse")
+	in := u.window(centre(900, ui.fb.h*5/6), "CharEdit "+version+" - keys and mouse")
 	lines := wrap(helpText(), in.w/charW-3)
 	textR := Rect{in.x, in.y, in.w - 20, in.h - gadH - 10}
 	rows := textR.h / lineH

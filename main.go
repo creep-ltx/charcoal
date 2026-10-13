@@ -51,6 +51,9 @@ func dropFinderArgs() {
 	os.Args = out
 }
 
+// version is Charcoal's version: X.YbN is a beta, X.Y a release. Tag releases as vX.YbN.
+const version = "0.1b1"
+
 func main() {
 	runtime.LockOSThread()
 	dropFinderArgs()
@@ -59,6 +62,10 @@ func main() {
 	}
 	if viewer != nil && len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
 		fmt.Println("usage: charview FILE|FOLDER...\nShows Amiga and PC ANSI, Atari, Atari ST, PETSCII (PET, VIC-20, C64, C128), ZX Spectrum and teletext art.\nn / Right / Space next, p / Left previous, a auto-scroll, m play, e edit, q / Esc quit.")
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		fmt.Println("Charcoal " + version)
 		return
 	}
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
@@ -142,7 +149,7 @@ func main() {
 		w, h = min(w, int(dm.W)-40), min(h, int(dm.H)-80)
 	}
 	var err error
-	window, err = sdl.CreateWindow("CharEdit", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, int32(w), int32(h),
+	window, err = sdl.CreateWindow("CharEdit "+version, sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, int32(w), int32(h),
 		sdl.WINDOW_RESIZABLE|sdl.WINDOW_ALLOW_HIGHDPI)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "charedit:", err)
