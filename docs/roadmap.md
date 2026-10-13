@@ -18,7 +18,7 @@ against each platform's best editor. Each step says what it wins.
 - **Our edge to keep and show**: exact round trips (8196 real files), the most formats in one small
   program, teletext and Spectrum, Amiga as a first-class page, Marq's smart flips for every font,
   configurable keys, crash autosave, a quiet interface, a fast viewer.
-- **The one blocker for everybody**: Linux only, no release, no website.
+- **The one blocker for everybody**: no release yet (Windows and Mac builds exist since 2026-10-14), no website.
 
 ## Step 0: data loss, now (done 2026-10-14)
 
@@ -30,7 +30,9 @@ against each platform's best editor. Each step says what it wins.
 
 ## Step 1: everyone can get it (wins: every artist not on Linux - most of them)
 
-- Windows and Mac builds (plan in HANDOFF.md), one file each, a public release page.
+- [x] Windows and Mac builds, one file each (2026-10-14): GitHub Actions builds and tests Linux, Windows and
+  macOS (Charcoal.app, Apple Silicon + Intel) on every push; a v* tag makes the release page. Details in HANDOFF.md.
+- [ ] The first release (a tag), tried by a Windows and a Mac user.
 - A start screen: "New page for ..." with each machine's picture, recent files, an example to open.
   Today a PC artist lands on an Amiga page and must know to press PC.
 - A short manual with screenshots, and "coming from Moebius / Petmate / edit.tf" pages (their keys

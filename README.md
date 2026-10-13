@@ -20,6 +20,32 @@ and file formats.
 The art belongs to its artists and is shown here with their names; if you are one of them and want your
 piece taken down, open an issue.
 
+## Download
+
+Get the newest version from the [releases page](https://github.com/creep-ltx/charcoal/releases): open
+"Assets" under the top release and pick the zip for your computer. Unpack it (double-click the zip). Each
+holds the program, this README, the licence and the font and library licences (`licences/`).
+
+- **Windows** (10 or 11, 64-bit): `charcoal-windows-x64.zip`. Double-click `charedit.exe` to draw;
+  `charview.exe` is the viewer (drop files or a folder on it). The first time, Windows may say
+  *"Windows protected your PC"*, because the program is not signed: click **More info**, then **Run anyway**.
+- **Mac** (macOS 11 or newer, Apple Silicon and Intel): `charcoal-macos.zip` holds **Charcoal.app**. Drag it to
+  Applications. It is not signed by Apple, so the first double-click says it *"cannot be opened"* or that
+  Apple *"could not verify"* it: click **Done**, open **System Settings > Privacy & Security**, scroll down and
+  click **Open Anyway** next to Charcoal, then **Open**. (If it says the app *"is damaged"*, or there is no Open
+  Anyway, type this in Terminal instead: `xattr -dr com.apple.quarantine /Applications/Charcoal.app`.) After that it opens like any program. Drop art files on its icon to open them.
+  On a Mac, **Cmd** works wherever this README says Ctrl, Alt is the **left** Option key, and the **right**
+  Option key types characters such as @ { [ | \. The viewer: `Charcoal.app/Contents/MacOS/charedit --view FILE`
+  in Terminal.
+- **Linux** (64-bit PC): `charcoal-linux-x64.zip`. It needs SDL2, which most desktops already have (if not:
+  `sudo apt install libsdl2-2.0-0`, `sudo pacman -S sdl2` or `sudo dnf install SDL2`). Run `./charedit`;
+  `charview` is a link to it.
+
+Settings, keys and autosaves are kept in `%AppData%\Charcoal` on Windows,
+`~/Library/Application Support/Charcoal` on a Mac and `~/.config/charcoal` + `~/.local/share/charcoal` on Linux.
+
+## What it is
+
 An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw),
 Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens and teletext
 (BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
@@ -52,6 +78,18 @@ Working on Charcoal: start with [docs/HANDOFF.md](docs/HANDOFF.md) (state, wishe
     go test ./...             # the core: parser, writer, SAUCE
 
 `~/.local/bin/charedit` and `~/.local/bin/charview` link to the binary here.
+
+Windows and Mac programs are built by GitHub Actions (`.github/workflows/build.yml`) on every push, with SDL2
+linked in so each is one file: Windows with the official SDL2 MinGW build, the Mac from SDL2's source as one
+program for Apple Silicon and Intel, packed as `Charcoal.app` by `tools/release/package.sh`. Each run tests on
+all three systems and keeps headless screenshots as artifacts. A tag `v*` makes a release (a prerelease if the
+tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinGW package:
+
+    CGO_ENABLED=1 GOOS=windows CC=x86_64-w64-mingw32-gcc CGO_CFLAGS=-I$SDL/include \
+      CGO_LDFLAGS="-L$SDL/lib -lSDL2 -lsetupapi -lwinmm -limm32 -lversion -lole32 -loleaut32 -luuid -lgdi32 -luser32 -lshell32 -lcfgmgr32" \
+      go build -ldflags '-s -w -H windowsgui -extldflags "-static"' -o charedit.exe .
+
+(`$SDL` = `SDL2-x.y.z/x86_64-w64-mingw32` from `SDL2-devel-x.y.z-mingw.tar.gz`; Wine runs it.)
 
 ## What it does
 
@@ -173,6 +211,7 @@ come back cell for cell after saving in their own format.
 | `keys.go` | the table of actions and their default keys, the keys file, the help's key list |
 | `rowscols.go`, `blockjobs.go` | insert/delete rows and columns; fill, move and crop a block |
 | `autosave.go` | autosave and offering it back, `.bak` on save, recent files |
+| `paths.go`, `keymods.go`, `platform_*.go` | per system: the settings and data folders, Cmd and AltGr, drives, is a CharEdit still running |
 | `script.go` | `CHARCOAL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
 | `web/` | the first version, called amiansi, that ran in the browser (Python server + HTML/JS), kept for reference |
 
@@ -189,6 +228,8 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |
 | PETSCII flip and turn tables (`cbmturn.go`) | Marq's PETSCII editor, Marq / Fit^L!T, tables by Dr. TerrorZ | WTFPL, `third_party/marq-petscii-LICENSE.txt` |
 | Petmate's file formats | Petmate, C. T. Lin | MIT, `third_party/petmate-LICENSE.txt` |
+| SDL2 (linked into the Windows and Mac programs) | libsdl.org, Sam Lantinga | zlib, `third_party/SDL2-LICENSE.txt` |
+| go-sdl2, the Go binding to SDL2 | github.com/veandco/go-sdl2 | BSD 3-clause, `third_party/go-sdl2-LICENSE.txt` |
 | Test art in `testdata/alove` | ansilove's tests | BSD 2-clause, `testdata/alove/LICENSE-ansilove.txt` |
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE
