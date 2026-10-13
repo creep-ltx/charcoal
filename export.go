@@ -63,14 +63,39 @@ func writePrg(d *Doc, lower bool) []byte {
 	return append(out, cols...)
 }
 
+// marqMachines are the machines Marq's PETSCII editor names in its META line,
+// and the Commodore machine page each opens as (Plus/4 and the C64 modes as a C64).
+var marqMachines = map[string]string{"C64": "c64", "C64FLICKER": "c64", "DIRART": "c64", "PET": "pet",
+	"PETHI": "pet80", "PLUS4": "c64", "VIC20": "vic20"}
+
+// marqName is the META name for a machine page; PETs have no colours in the file.
+func marqName(machine string) (name string, colours bool) {
+	switch machine {
+	case "pet":
+		return "PET", false
+	case "pet80":
+		return "PETHI", false
+	case "vic20":
+		return "VIC20", true
+	}
+	return "C64", true
+}
+
 // writeMarq gives the C array Marq's PETSCII editor and Petmate read, at the page's own size
-// (a 40-column page at least 25 rows, a whole C64 screen).
-func writeMarq(d *Doc, lower bool) []byte {
+// (a 40-column page at least 25 rows, a whole C64 screen), for the page's machine.
+func writeMarq(d *Doc, lower bool, machine string) []byte {
 	w, h := d.cols, max(d.rows, 1)
+	name, colours := marqName(machine)
 	var b strings.Builder
-	b.WriteString("unsigned char frame0000[]={// border,bg,chars,colors\n")
-	fmt.Fprintf(&b, "%d,%d,\n", d.borderColour(), d.bg)
-	for part := 0; part < 2; part++ {
+	parts := 1
+	if colours {
+		parts = 2
+		b.WriteString("unsigned char frame0000[]={// border,bg,chars,colors\n")
+		fmt.Fprintf(&b, "%d,%d,\n", d.borderColour(), d.bg)
+	} else {
+		b.WriteString("unsigned char frame0000[]={\n")
+	}
+	for part := 0; part < parts; part++ {
 		for y := 0; y < h; y++ {
 			for x := 0; x < w; x++ {
 				v := d.get(x, y)
@@ -88,13 +113,13 @@ func writeMarq(d *Doc, lower bool) []byte {
 	if lower {
 		set = "lower"
 	}
-	fmt.Fprintf(&b, "// META: %d %d C64 %s\n", w, h, set)
+	fmt.Fprintf(&b, "// META: %d %d %s %s\n", w, h, name, set)
 	return []byte(b.String())
 }
 
 var (
 	marqNumbers  = regexp.MustCompile(`\d+`)
-	marqMeta     = regexp.MustCompile(`// META:\s*(\d+) (\d+) .* (upper|lower)`)
+	marqMeta     = regexp.MustCompile(`// META:\s*(\d+) (\d+) (\S+) (upper|lower)`)
 	marqArrays   = regexp.MustCompile(`(?s)\{(.*?)\}`)
 	marqComments = regexp.MustCompile(`//[^\n]*`)
 )
@@ -106,11 +131,12 @@ func isMarq(b []byte) bool {
 // parseMarq reads the frames of a PETSCII editor / Petmate C array.
 func parseMarq(b []byte) ([]PetScreen, error) {
 	s := string(b)
-	lower, w, h := -1, 40, 25
+	lower, w, h, machine := -1, 40, 25, ""
 	if m := marqMeta.FindStringSubmatch(s); m != nil {
 		w, _ = strconv.Atoi(m[1])
 		h, _ = strconv.Atoi(m[2])
-		lower = map[string]int{"upper": 0, "lower": 1}[m[3]]
+		machine = marqMachines[strings.ToUpper(m[3])]
+		lower = map[string]int{"upper": 0, "lower": 1}[m[4]]
 		w, h = max(1, min(w, 1000)), max(1, min(h, 10000))
 	}
 	var out []PetScreen
@@ -121,15 +147,22 @@ func parseMarq(b []byte) ([]PetScreen, error) {
 			v, _ := strconv.Atoi(n)
 			nums = append(nums, v)
 		}
-		if len(nums) < 2+2*w*h {
+		d := newDoc(w, h)
+		switch {
+		case len(nums) >= 2+2*w*h: // border, background, characters, colours
+			d.border, d.bg = nums[0]&15, nums[1]&15
+			for i := 0; i < w*h; i++ {
+				d.cells[i] = makeCell(nums[2+i]&255, nums[2+w*h+i]&15, 0, 0)
+			}
+		case len(nums) >= w*h: // a PET's: the characters only
+			d.border, d.bg = 0, 0
+			for i := 0; i < w*h; i++ {
+				d.cells[i] = makeCell(nums[i]&255, 1, 0, 0)
+			}
+		default:
 			continue
 		}
-		d := newDoc(w, h)
-		d.border, d.bg = nums[0]&15, nums[1]&15
-		for i := 0; i < w*h; i++ {
-			d.cells[i] = makeCell(nums[2+i]&255, nums[2+w*h+i]&15, 0, 0)
-		}
-		out = append(out, PetScreen{doc: d, lower: lower})
+		out = append(out, PetScreen{doc: d, lower: lower, machine: machine})
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("no %dx%d screen in the array", w, h)
@@ -398,9 +431,10 @@ func isPetmate(b []byte) bool {
 
 // PetScreen is one screen of a file that holds several (.petmate, a .c with frames).
 type PetScreen struct {
-	doc   *Doc
-	lower int // -1 not said, 0 upper, 1 lower
-	name  string
+	doc     *Doc
+	lower   int // -1 not said, 0 upper, 1 lower
+	name    string
+	machine string // the machine the file says it is for ("" not said), see machines
 }
 
 func parsePetmate(b []byte) ([]PetScreen, error) {

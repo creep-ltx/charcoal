@@ -1222,12 +1222,14 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		}
 		a.mode, a.srcKind, a.srcIndex = "c64", kind, 0
 		own := map[string]string{"petmate": "petmate", "marq": "marq", "prg": "prg"}[kind]
+		a.screenMachine(scr[0].machine)
 		a.finishLoad(b, name, path, nil, own)
 		first := a.Tab
 		for i := 1; i < len(scr); i++ { // every further screen in a tab of its own
 			t := a.newTab("c64")
 			a.Tab = t
 			a.mode, a.srcKind, a.srcIndex = "c64", kind, i
+			a.screenMachine(scr[i].machine)
 			label := scr[i].name
 			if label == "" {
 				label = fmt.Sprintf("screen %d", i+1)
@@ -1418,11 +1420,20 @@ var screensCache struct {
 }
 
 // screens reads a file that holds whole C64 screens.
+// screenMachine puts a PETSCII page on the machine its file names (when its
+// character set is here).
+func (a *App) screenMachine(id string) {
+	if id != "" && hasROM(machineByID(id).family) {
+		a.machine = id
+		a.paletteFor["c64"] = machineByID(id).palette // a PET is green, a VIC-20 has its own colours
+	}
+}
+
 func (a *App) screens(b []byte, kind string) ([]PetScreen, error) {
 	if len(b) > 0 && screensCache.data == &b[0] && screensCache.n == len(b) && screensCache.kind == kind {
 		out := make([]PetScreen, len(screensCache.scr))
 		for i, s := range screensCache.scr { // each tab gets a page of its own
-			out[i] = PetScreen{doc: s.doc.clone(), lower: s.lower, name: s.name}
+			out[i] = PetScreen{doc: s.doc.clone(), lower: s.lower, name: s.name, machine: s.machine}
 		}
 		return out, nil
 	}
@@ -1431,7 +1442,7 @@ func (a *App) screens(b []byte, kind string) ([]PetScreen, error) {
 		screensCache.data, screensCache.n, screensCache.kind, screensCache.scr = &b[0], len(b), kind, scr
 		out := make([]PetScreen, len(scr))
 		for i, s := range scr {
-			out[i] = PetScreen{doc: s.doc.clone(), lower: s.lower, name: s.name}
+			out[i] = PetScreen{doc: s.doc.clone(), lower: s.lower, name: s.name, machine: s.machine}
 		}
 		return out, nil
 	}
@@ -2187,7 +2198,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		if fmtID == "prg" {
 			return writePrg(d, a.lower()), nil
 		}
-		return writeMarq(d, a.lower()), nil
+		return writeMarq(d, a.lower(), a.machine), nil
 	case "petmate":
 		return writePetmate(d, a.lower(), strings.TrimSuffix(a.name, filepath.Ext(a.name))), nil
 	case "html":

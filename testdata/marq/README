@@ -1,0 +1,3 @@
+pet-ukkeli.c and vic20-iso.c are example pictures from Marq's PETSCII editor
+(http://www.kameli.net/marq/?page_id=2717, petscii.zip examples/), WTFPL like the editor
+(see third_party/marq-petscii-LICENSE.txt). A PET picture is saved with its characters only.

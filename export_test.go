@@ -95,12 +95,12 @@ func TestMarq(t *testing.T) {
 	d := newDoc(40, 25)
 	d.bg, d.border = 0, 11
 	d.set(3, 2, makeCell(0xA0, 7, 0, 0))
-	scr, err := parseMarq(writeMarq(d, false))
+	scr, err := parseMarq(writeMarq(d, false, "c64"))
 	if err != nil || scr[0].lower != 0 || scr[0].doc.get(3, 2) != d.get(3, 2) || scr[0].doc.border != 11 {
 		t.Fatalf("marq: %v", err)
 	}
 	// Two frames, as Petmate writes several screens.
-	two := append(writeMarq(d, true), writeMarq(newDoc(40, 25), true)...)
+	two := append(writeMarq(d, true, "c64"), writeMarq(newDoc(40, 25), true, "c64")...)
 	if scr, err := parseMarq(two); err != nil || len(scr) != 2 || scr[0].lower != 1 {
 		t.Fatalf("two frames: %v %d", err, len(scr))
 	}
