@@ -902,7 +902,7 @@ func (a *App) pageRelease() {
 	if a.selecting {
 		a.selecting = false
 		r := a.selRect()
-		a.msg(fmt.Sprintf("%dx%d selected: Ctrl+C copy, Ctrl+X cut, Del clear, Alt+H / Alt+V flip", r.w, r.h))
+		a.msg(fmt.Sprintf("%dx%d selected: Ctrl+C copy, Ctrl+X cut, Del clear; Mirror, Upside down, Turn, Invert under the colours", r.w, r.h))
 	}
 	a.button = 0
 }
@@ -1128,6 +1128,30 @@ func (a *App) drawPane(u *UI, pane Rect) {
 		fgShown = a.doc.ink
 	}
 	fb.text(br.x+br.w+8+buttonW("Swap")+10, by+2, fmt.Sprintf("char %d  fg %d  bg %d", a.brush, fgShown, bgShown), cText)
+
+	// While a block is selected or being pasted: turn it over.
+	if a.sel != nil || a.float != nil {
+		bx, bly := br.x+br.w+8, by+smallH+6
+		what := "the selection"
+		if a.float != nil {
+			what = "the block being pasted"
+		}
+		for _, b := range []struct {
+			label, hint string
+			op          int
+		}{
+			{"Mirror", "Flip " + what + " left-right (Alt+H)", flipH},
+			{"Upside down", "Flip " + what + " upside down (Alt+V)", flipV},
+			{"Turn", "Turn " + what + " a quarter clockwise (Alt+R)", turnCW},
+			{"Invert", "Invert " + what + ": reversed characters, or the colours swapped (Alt+I)", invertBlock},
+		} {
+			r := Rect{bx, bly, buttonW(b.label), smallH}
+			if u.button(r, b.label, false, b.hint) != nil {
+				a.blockOp(b.op)
+			}
+			bx += r.w + 4
+		}
+	}
 	fb.clip = old
 }
 

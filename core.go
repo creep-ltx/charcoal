@@ -214,8 +214,9 @@ func (d *Doc) withCols(cols int) *Doc {
 }
 
 type Block struct {
-	w, h  int
-	cells []uint32
+	w, h   int
+	cells  []uint32
+	mosaic []bool // teletext: which cells show sixels (nil: not known, letters)
 }
 
 func (d *Doc) copyRect(x0, y0, w, h int) *Block {

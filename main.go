@@ -476,9 +476,13 @@ func editorKey(k string, ctrl, shift, alt bool) {
 	if alt {
 		switch k {
 		case "H":
-			a.flip(false)
+			a.blockOp(flipH)
 		case "V":
-			a.flip(true)
+			a.blockOp(flipV)
+		case "R":
+			a.blockOp(turnCW)
+		case "I":
+			a.blockOp(invertBlock)
 		}
 		return
 	}

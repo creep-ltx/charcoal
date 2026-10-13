@@ -612,7 +612,7 @@ Ctrl+Z undo, Ctrl+Y redo, Ctrl+S save, Ctrl+Shift+S save as, Ctrl+O open, Ctrl+Q
 Ctrl+T (or Ctrl+N) new page, Ctrl+W close page, Ctrl+Tab / Ctrl+PgDn next page, Ctrl+Shift+Tab / Ctrl+PgUp previous.
 Ctrl+L one page / side by side / top and bottom. "Sync" scrolls both together.
 Ctrl+A select all, Ctrl+C / X / V copy, cut, paste (text from other programs too), Del clears the block, Esc lets go.
-Alt+H flips the block (or the pasted block) left-right, Alt+V upside down; characters turn into their mirror images.
+A selected block, or one being pasted, can be turned over with the buttons under the colours or the keys: Alt+H mirror (left-right), Alt+V upside down, Alt+R turn a quarter clockwise, Alt+I invert (reversed characters on PETSCII and Atari pages, the two colours swapped elsewhere). Characters become their mirrored or turned twins: / and \\, the box lines and corners, half blocks, arrows; on PETSCII pages Marq's PETSCII editor's tables. A selection that turns into another shape is lifted off the page to be put down. Copy a block, paste it, turn it, stamp it as often as you like.
 Ctrl+G grid. Ctrl+Plus / Ctrl+Minus zoom, Ctrl+0 fits the page's width. Ctrl+R reverse (PETSCII, Atari).
 Ctrl+H hides all gadgets (only the art and the status line), Ctrl+H again brings them back.
 Dropping files on the window opens them. Keys in the W and H fields stay in the field until Enter, Esc or Tab.

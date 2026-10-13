@@ -1700,43 +1700,175 @@ func (a *App) anyDirty() int {
 
 // ---------------------------------------------------------------- flipping
 
-// flip mirrors the floating block, or else the selection, left-right or upside down;
-// the characters are swapped for their mirror images where the font has one.
-func (a *App) flip(vertical bool) {
-	f := a.font()
-	mirror := func(b *Block) {
-		out := make([]uint32, len(b.cells))
-		for y := 0; y < b.h; y++ {
-			for x := 0; x < b.w; x++ {
-				sx, sy := b.w-1-x, y
-				if vertical {
-					sx, sy = x, b.h-1-y
-				}
-				v := b.cells[sy*b.w+sx]
-				c := f.flipped(cellCh(v), vertical)
-				out[y*b.w+x] = v&^255 | uint32(c)
-			}
-		}
-		b.cells = out
-	}
+// The block operations: flipH, flipV and turnCW (fonts.go), and invert.
+const invertBlock = 3
+
+var blockOpNames = [4]string{"Flipped left-right", "Flipped upside down", "Turned a quarter clockwise", "Inverted"}
+
+// blockOp flips, turns or inverts the floating block (what is being pasted), or else
+// the selection on the page. Characters become their mirrored or turned twins where
+// the font has one (Commodore sets: Marq's tables).
+func (a *App) blockOp(op int) {
+	var b *Block
+	var r Rect
 	switch {
 	case a.float != nil:
-		mirror(a.float)
+		b = a.float
 	case a.sel != nil:
-		r := a.selRect()
-		b := a.doc.copyRect(r.x, r.y, r.w, r.h)
-		mirror(b)
-		a.pushUndo()
-		for y := 0; y < min(b.h, a.doc.rows-r.y); y++ {
-			for x := 0; x < b.w; x++ {
-				a.doc.set(r.x+x, r.y+y, b.cells[y*b.w+x])
-			}
+		r = a.selRect()
+		r.h = min(r.h, a.doc.rows-r.y)
+		b = a.doc.copyRect(r.x, r.y, r.w, r.h)
+		if a.tt() {
+			b.mosaic = a.ttMosaic(r)
 		}
 	default:
-		a.msg("Select a block (Select tool) or paste one first, then flip it")
+		a.msg("Select a block (Select tool) or copy and paste one first, then flip, turn or invert it")
 		return
 	}
-	a.msg(map[bool]string{false: "Flipped left-right", true: "Flipped upside down"}[vertical])
+	if a.tt() {
+		if msg := ttBlockOpRefused(b, op); msg != "" {
+			a.msg(msg)
+			return
+		}
+	}
+	out := a.transformBlock(b, op)
+	if a.float != nil {
+		*a.float = *out
+		a.msg(blockOpNames[op] + ": click to stamp it")
+		return
+	}
+	a.pushUndo()
+	if out.w == b.w && out.h == b.h {
+		for y := 0; y < out.h; y++ {
+			for x := 0; x < out.w; x++ {
+				a.doc.set(r.x+x, r.y+y, out.cells[y*out.w+x])
+			}
+		}
+		a.msg(blockOpNames[op])
+		return
+	}
+	// Turned into another shape: lift it off the page and let it be put down.
+	for y := r.y; y < r.y+r.h; y++ {
+		for x := r.x; x < r.x+r.w; x++ {
+			a.doc.set(x, y, blank)
+		}
+	}
+	a.startPaste(out)
+	a.hover = &Hover{x: r.x, y: r.y}
+	a.msg(blockOpNames[op] + ": it has a new shape, so it is lifted off the page - click to put it down, Esc to drop it")
+}
+
+// transformBlock gives b flipped, turned or inverted.
+func (a *App) transformBlock(b *Block, op int) *Block {
+	f := a.font()
+	out := &Block{w: b.w, h: b.h, cells: make([]uint32, len(b.cells))}
+	if op == turnCW {
+		out.w, out.h = b.h, b.w
+	}
+	if b.mosaic != nil {
+		out.mosaic = make([]bool, len(b.mosaic))
+	}
+	for y := 0; y < b.h; y++ {
+		for x := 0; x < b.w; x++ {
+			i := y*b.w + x
+			v := b.cells[i]
+			mosaic := b.mosaic != nil && b.mosaic[i]
+			var o int
+			switch op {
+			case flipH:
+				o = y*out.w + (b.w - 1 - x)
+			case flipV:
+				o = (b.h-1-y)*out.w + x
+			case turnCW:
+				o = x*out.w + (b.h - 1 - y)
+			default:
+				o = i
+			}
+			c := cellCh(v)
+			switch {
+			case op == invertBlock:
+				v = a.invertCell(v)
+			case mosaic && (c < 0x40 || c >= 0x60):
+				v = v&^255 | uint32(ttSixelFlip(c, op == flipV))
+			case a.tt():
+				if c >= 0x20 { // letters: only the known pairs; codes stay
+					v = v&^255 | uint32(f.mapped(c, op))
+				}
+			default:
+				v = v&^255 | uint32(f.mapped(c, op))
+			}
+			out.cells[o] = v
+			if out.mosaic != nil {
+				out.mosaic[o] = mosaic
+			}
+		}
+	}
+	return out
+}
+
+// invertCell: reversed on Commodore and Atari pages, ink and paper swapped on a
+// Spectrum, foreground and background swapped elsewhere (without iCE colours a
+// background can only be 0-7, so a bright foreground loses its brightness there).
+func (a *App) invertCell(v uint32) uint32 {
+	switch {
+	case a.screen():
+		return v ^ 0x80
+	}
+	fg, bg := cellFg(v), cellBg(v)
+	if (a.pc() || a.amiga()) && !a.ice {
+		fg &= 7
+	}
+	return v&^0xFF00 | uint32(bg)<<8 | uint32(fg)<<12
+}
+
+// ttMosaic tells which cells of r on a teletext page show sixels.
+func (a *App) ttMosaic(r Rect) []bool {
+	m := make([]bool, r.w*r.h)
+	for y := 0; y < r.h; y++ {
+		row := ttDecode(a.doc, r.y+y, a.ttBlack())
+		for x := 0; x < r.w; x++ {
+			if r.x+x < len(row) {
+				m[y*r.w+x] = row[r.x+x].mosaic
+			}
+		}
+	}
+	return m
+}
+
+// ttBlockOpRefused says why a teletext block cannot be turned over this way, or "".
+func ttBlockOpRefused(b *Block, op int) string {
+	switch op {
+	case turnCW:
+		return "Teletext blocks cannot be turned: a cell's sixels are 2 wide and 3 high"
+	case invertBlock:
+		return "Teletext has no reversed characters to invert to"
+	case flipH:
+		for _, v := range b.cells {
+			if cellCh(v) < 0x20 {
+				return "This block holds teletext codes, which act on the cells to their right: it cannot be flipped left-right (upside down works)"
+			}
+		}
+	}
+	return ""
+}
+
+// ttSixelFlip mirrors a sixel cell's 2x3 pixels left-right, or upside down.
+func ttSixelFlip(c int, vertical bool) int {
+	p := c&0x1F | (c&0x40)>>1 // bit row*2+col
+	q := 0
+	for row := 0; row < 3; row++ {
+		for col := 0; col < 2; col++ {
+			if p&(1<<(row*2+col)) == 0 {
+				continue
+			}
+			nr, nc := row, 1-col
+			if vertical {
+				nr, nc = 2-row, col
+			}
+			q |= 1 << (nr*2 + nc)
+		}
+	}
+	return 0x20 | q&0x1F | (q&0x20)<<1
 }
 
 // ---------------------------------------------------------------- saving
