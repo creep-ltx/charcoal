@@ -15,7 +15,8 @@ fills the window, fitted to its width, with one line at the bottom (i hides it).
 and the wheel scroll (Shift+Left/Right sideways), +/- zoom (0 fits again), g grid, m plays the file at modem
 speed, e opens it in CharEdit. **a** scrolls by itself (tall art down, wide art sideways; at the end it waits two
 seconds and goes to the next file), **s** switches smooth / a text row at a time, **[ ]** set the speed (0.5-48
-rows a second); these are remembered. A folder gives every art file in it (.ans .asc .nfo .diz .txt .bin .seq
+rows a second); these are remembered. Art wider than the window is shown smaller (1/2, 1/3 ...; - and + step it), drawn once so scrolling stays
+smooth. A folder gives every art file in it (.ans .asc .nfo .diz .txt .bin .seq
 .pet .ice ...). It never changes the editor's other settings.
 
 A native program (Go + SDL2, one binary; needs only the SDL2 library that every Linux desktop has). The whole
@@ -66,7 +67,7 @@ Press the **?** gadget for every key.
 - Undo/redo, play at modem speed; dropping a file on the window opens it.
 - **Save as**: ANSI, plain text, UTF-8, PC `.bin`, **XBin** (`.xb`, font and palette inside, so it looks the same in
   any viewer; opens again too), PETSCII `.seq`, a **C64 program** (`.prg`: LOAD and RUN on a C64 or in VICE, a key
-  goes back to BASIC; CharEdit's own open again), the **C array** of Marq's PETSCII editor and Petmate (`.c`), a
+  in Petmate's form, so Petmate and Marq's PETSCII editor open it too; any .prg in that form opens), the **C array** of Marq's PETSCII editor and Petmate (`.c`), a
   **Petmate workspace** (`.petmate`), **PNG**
   (normal or twice the size; C64 pages with their border) and a **web page** (`.html`). A typed file ending picks
   the format. Everything that holds characters opens too; a `.c` or `.petmate` with several screens opens each

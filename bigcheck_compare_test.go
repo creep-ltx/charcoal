@@ -54,7 +54,7 @@ func TestBigCheckCompare(t *testing.T) {
 				src = "/tmp/bigcheck/files/nas-petscii/" + base + ext
 			}
 		}
-		if src == "" || !strings.HasSuffix(src, ".c") {
+		if src == "" || strings.HasSuffix(src, ".seq") {
 			continue
 		}
 		f, _ := os.Open(pp)

@@ -35,45 +35,30 @@ func (d *Doc) borderColour() int {
 	return d.border
 }
 
-// writePrg gives a C64 program: a BASIC line "10 SYS 2061" and machine code that
-// puts the screen up, waits for a key and goes back to BASIC.
+// petmatePrg is the start of Petmate's executable .prg template (assets/template.prg,
+// github.com/nurpax/petmate, MIT licence: third_party/petmate-LICENSE.txt): a BASIC
+// line "SYS2061" and code that puts up the screen and stays there. Marq's PETSCII
+// editor and Petmate open .prg files of exactly this form, so CharEdit writes it too.
+// The border, background and character set are the values before STA $D020,
+// STA $D021 and STA $D018; 1000 screen codes follow at 0x62, then 1000 colours.
+var petmatePrg = []byte{0x01, 0x08, 0x0B, 0x08, 0xEF, 0x00, 0x9E, 0x32, 0x30, 0x36, 0x31, 0x00, 0x00, 0x00, 0xA9, 0x0B, 0x8D, 0x11, 0xD0, 0xA9, 0x14, 0x8D, 0x18, 0xD0, 0xA9, 0x00, 0x8D, 0x20, 0xD0, 0xA9, 0x00, 0x8D, 0x21, 0xD0, 0xA2, 0x00, 0xA0, 0xFA, 0xBD, 0x61, 0x08, 0x9D, 0x00, 0x04, 0xBD, 0x5B, 0x09, 0x9D, 0xFA, 0x04, 0xBD, 0x55, 0x0A, 0x9D, 0xF4, 0x05, 0xBD, 0x4F, 0x0B, 0x9D, 0xEE, 0x06, 0xBD, 0x49, 0x0C, 0x9D, 0x00, 0xD8, 0xBD, 0x43, 0x0D, 0x9D, 0xFA, 0xD8, 0xBD, 0x3D, 0x0E, 0x9D, 0xF4, 0xD9, 0xBD, 0x37, 0x0F, 0x9D, 0xEE, 0xDA, 0xE8, 0x88, 0xD0, 0xCC, 0xA9, 0x1B, 0x8D, 0x11, 0xD0, 0x4C, 0x5E, 0x08}
+
+const (
+	prgCharset = 20 // offsets in the file
+	prgBorder  = 25
+	prgBg      = 30
+	prgScreen  = 0x62
+)
+
+// writePrg gives a C64 program that shows the first 40x25 cells, in Petmate's form.
 func writePrg(d *Doc, lower bool) []byte {
 	chars, cols := c64Screen(d)
-	code := func(data int) []byte {
-		lo, hi := func(a int) byte { return byte(a) }, func(a int) byte { return byte(a >> 8) }
-		charset := byte(0x15)
-		if lower {
-			charset = 0x17
-		}
-		c := []byte{
-			0xA9, byte(d.borderColour()), 0x8D, 0x20, 0xD0, // LDA #border, STA $D020
-			0xA9, byte(d.bg), 0x8D, 0x21, 0xD0, // LDA #bg, STA $D021
-			0xA9, charset, 0x8D, 0x18, 0xD0, // the character set: STA $D018
-			0xA9, 0x80, 0x8D, 0x91, 0x02, // no Shift+C= switching: STA $0291
-			0xA2, 0x00, // LDX #0
-		}
-		for _, part := range []struct{ src, dst int }{
-			{data, 0x0400}, {data + 250, 0x04FA}, {data + 500, 0x05F4}, {data + 750, 0x06EE},
-			{data + 1000, 0xD800}, {data + 1250, 0xD8FA}, {data + 1500, 0xD9F4}, {data + 1750, 0xDAEE},
-		} {
-			c = append(c, 0xBD, lo(part.src), hi(part.src), 0x9D, lo(part.dst), hi(part.dst)) // LDA src,X  STA dst,X
-		}
-		c = append(c, 0xE8, 0xE0, 250, 0xD0, byte(256-(48+5))) // INX, CPX #250, BNE loop
-		c = append(c,
-			0x20, 0xE4, 0xFF, 0xF0, 0xFB, // wait: JSR GETIN, BEQ wait
-			0xA9, 0x0E, 0x8D, 0x20, 0xD0, // the usual colours back
-			0xA9, 0x06, 0x8D, 0x21, 0xD0,
-			0xA9, 0x00, 0x8D, 0x91, 0x02,
-			0xA9, 0x93, 0x20, 0xD2, 0xFF, // clear the screen
-			0x60) // RTS: READY.
-		return c
+	out := append([]byte{}, petmatePrg...)
+	out[prgBorder], out[prgBg] = byte(d.borderColour()), byte(d.bg)
+	out[prgCharset] = 0x14
+	if lower {
+		out[prgCharset] = 0x17
 	}
-	const start = 0x080D
-	n := len(code(0))
-	out := []byte{0x01, 0x08, // load address $0801
-		0x0B, 0x08, 0x0A, 0x00, 0x9E, '2', '0', '6', '1', 0x00, // 10 SYS2061
-		0x00, 0x00} // end of BASIC
-	out = append(out, code(start+n)...)
 	out = append(out, chars...)
 	return append(out, cols...)
 }
@@ -444,22 +429,25 @@ func writePetmate(d *Doc, lower bool, name string) []byte {
 
 // ---------------------------------------------------------------- CharEdit's own .prg
 
-// parsePrg reads back a .prg that writePrg made (it does not take other programs apart).
+// parsePrg reads a .prg in Petmate's form (made by Petmate, Marq's PETSCII editor or
+// CharEdit). Other C64 programs are not taken apart.
 func parsePrg(b []byte) (*Doc, int, error) {
-	probe := writePrg(newDoc(40, 25), false)
-	n := len(probe)
-	if len(b) != n || !bytes.Equal(b[:14], probe[:14]) || b[14] != 0xA9 || b[16] != 0x8D || b[17] != 0x20 || b[18] != 0xD0 {
-		return nil, -1, fmt.Errorf("only C64 programs saved by CharEdit can be opened")
+	if len(b) != prgScreen+2000 {
+		return nil, -1, fmt.Errorf("only C64 programs in Petmate's form can be opened")
+	}
+	for i, c := range petmatePrg {
+		if i != prgCharset && i != prgBorder && i != prgBg && b[i] != c {
+			return nil, -1, fmt.Errorf("only C64 programs in Petmate's form can be opened")
+		}
 	}
 	d := newDoc(40, 25)
-	d.border, d.bg = int(b[15]&15), int(b[20]&15)
+	d.border, d.bg, d.glyph0 = int(b[prgBorder]&15), int(b[prgBg]&15), true
 	lower := 0
-	if b[25] == 0x17 {
+	if b[prgCharset]&2 != 0 { // $17 / $16: the lower case set
 		lower = 1
 	}
-	data := n - 2000
 	for i := 0; i < 1000; i++ {
-		d.cells[i] = makeCell(int(b[data+i]), int(b[data+1000+i]&15), 0, 0)
+		d.cells[i] = makeCell(int(b[prgScreen+i]), int(b[prgScreen+1000+i]&15), 0, 0)
 	}
 	d.trim(1)
 	return d, lower, nil

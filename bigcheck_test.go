@@ -80,6 +80,7 @@ func expectedMode(path string, b []byte) string {
 	if strings.Contains(path, "/ata/") {
 		return "atari"
 	}
+	amigaOnly := strings.Contains(path, "/asciiarena/") || strings.Contains(path, "/bbsstyle/")
 	if s, _ := readSauce(b); s != nil {
 		f := strings.ToLower(s.font)
 		switch {
@@ -88,6 +89,9 @@ func expectedMode(path string, b []byte) string {
 		case strings.HasPrefix(f, "ibm"):
 			return "pc"
 		}
+	}
+	if amigaOnly { // asciiarena.se and the BBS styles are Amiga art
+		return "amiga"
 	}
 	return "" // not known
 }
@@ -119,7 +123,7 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 		res.problem = "load: " + a.message
 		return
 	}
-	if strings.HasPrefix(a.message, "Only C64 programs saved by CharEdit") {
+	if strings.HasPrefix(a.message, "Only C64 programs in Petmate") {
 		res.mode = "refused"
 		return // a C64 program of someone else's: rightly not opened
 	}

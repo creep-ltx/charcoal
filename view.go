@@ -483,6 +483,9 @@ func (a *App) contentSize() (int, int) {
 	rows := max(a.doc.rows+25, (a.page.h+H*z-1)/(H*z))
 	if viewer != nil { // the viewer shows the art and no more
 		rows = max(a.doc.usedRows(), 1)
+		if viewer.shrink > 1 {
+			return a.doc.cols * 8 / viewer.shrink, rows * H / viewer.shrink
+		}
 	}
 	return a.doc.cols * 8 * z, rows * H * z
 }
@@ -509,6 +512,19 @@ func (a *App) drawPage(u *UI, id string) {
 
 	old := fb.clip
 	fb.clip = p.and(old)
+	if viewer != nil && viewer.shrink > 1 { // art wider than the window, shown smaller
+		fb.fill(p, 0xFF141518)
+		px, w, h := viewer.shrunk()
+		for y := 0; y < p.h && a.scrollY+y < h; y++ {
+			src := (a.scrollY+y)*w + a.scrollX
+			n := min(p.w, w-a.scrollX)
+			if n > 0 {
+				copy(fb.px[(p.y+y)*fb.w+p.x:(p.y+y)*fb.w+p.x+n], px[src:src+n])
+			}
+		}
+		fb.clip = old
+		return
+	}
 	fb.fill(p, 0xFF141518) // beyond the page width
 	fb.fill(Rect{p.x, p.y, min(p.w, cw-a.scrollX), p.h}, cPaper)
 	ox, oy := p.x-a.scrollX, p.y-a.scrollY

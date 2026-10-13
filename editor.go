@@ -818,7 +818,7 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	case strings.HasSuffix(strings.ToLower(name), ".prg") && isOurPrg(b):
 		kind = "prg"
 	case strings.HasSuffix(strings.ToLower(name), ".prg"):
-		a.msg("Only C64 programs saved by CharEdit can be opened")
+		a.msg("Only C64 programs in Petmate's form (Petmate, PETSCII editor, CharEdit) can be opened")
 		return
 	}
 	if kind != "" && (as == "auto" || as == "c64") {

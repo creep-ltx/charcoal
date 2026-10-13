@@ -2,8 +2,8 @@ package main
 
 import "testing"
 
-// run6502 runs the few instructions writePrg uses until the program calls
-// GETIN ($FFE4), and returns the memory.
+// run6502 runs the few instructions writePrg uses until the program jumps to
+// itself (the screen is up), and returns the memory.
 func run6502(t *testing.T, prg []byte) *[65536]byte {
 	var m [65536]byte
 	load := int(prg[0]) | int(prg[1])<<8
@@ -12,7 +12,7 @@ func run6502(t *testing.T, prg []byte) *[65536]byte {
 	if string(m[0x0806:0x080A]) != "2061" || m[0x0805] != 0x9E {
 		t.Fatalf("BASIC line: % x", m[0x0801:0x080D])
 	}
-	pc, x, a := 2061, 0, 0
+	pc, x, y, a := 2061, 0, 0, 0
 	var z bool
 	abs := func() int { return int(m[pc+1]) | int(m[pc+2])<<8 }
 	for steps := 0; steps < 100000; steps++ {
@@ -23,6 +23,18 @@ func run6502(t *testing.T, prg []byte) *[65536]byte {
 		case 0xA2:
 			x, z = int(m[pc+1]), m[pc+1] == 0
 			pc += 2
+		case 0xA0:
+			y, z = int(m[pc+1]), m[pc+1] == 0
+			pc += 2
+		case 0x88:
+			y = (y - 1) & 255
+			z = y == 0
+			pc++
+		case 0x4C:
+			if abs() == pc { // JMP to itself: the screen is up, the program stays
+				return &m
+			}
+			pc = abs()
 		case 0x8D:
 			m[abs()] = byte(a)
 			pc += 3
@@ -55,7 +67,7 @@ func run6502(t *testing.T, prg []byte) *[65536]byte {
 			t.Fatalf("unexpected opcode %02X at %04X", op, pc)
 		}
 	}
-	t.Fatal("the program never waits for a key")
+	t.Fatal("the program never settles")
 	return nil
 }
 
@@ -71,7 +83,7 @@ func TestPrg(t *testing.T) {
 			t.Fatalf("cell %d: screen %d colour %d", i, m[0x0400+i], m[0xD800+i])
 		}
 	}
-	if m[0xD020] != 14 || m[0xD021] != 6 || m[0xD018] != 0x17 {
+	if m[0xD020] != 14 || m[0xD021] != 6 || m[0xD018] != 0x17 || len(writePrg(d, true)) != 2098 {
 		t.Fatalf("border %d bg %d charset %02X", m[0xD020], m[0xD021], m[0xD018])
 	}
 }

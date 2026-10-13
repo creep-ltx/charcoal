@@ -17,15 +17,23 @@ import (
 type Viewer struct {
 	files   []string
 	i       int
-	zoomSet bool    // the zoom was chosen by hand: keep it from file to file
-	fit     bool    // fit the next file to the window once it is laid out
-	info    bool    // the line at the bottom
-	auto    bool    // scrolling by itself
-	step    bool    // a text row at a time (as a terminal does) instead of smoothly
-	speed   float64 // rows a second
-	pos     float64 // where the smooth scroll is, in pixels
-	acc     float64 // part of a row waiting to be stepped
-	endWait float64 // seconds spent at the end of the art
+	zoomSet bool     // the zoom was chosen by hand: keep it from file to file
+	fit     bool     // fit the next file to the window once it is laid out
+	info    bool     // the line at the bottom
+	auto    bool     // scrolling by itself
+	step    bool     // a text row at a time (as a terminal does) instead of smoothly
+	speed   float64  // rows a second
+	pos     float64  // where the smooth scroll is, in pixels
+	acc     float64  // part of a row waiting to be stepped
+	endWait float64  // seconds spent at the end of the art
+	shrink  int      // art wider than the window is shown 1/shrink of its size
+	cache   struct { // the shrunk art, drawn once
+		doc    *Doc
+		shrink int
+		key    string
+		px     []uint32
+		w, h   int
+	}
 }
 
 // The scroll speeds the [ and ] keys step through, in rows a second.
@@ -102,10 +110,10 @@ func (v *Viewer) tick(dt float64) bool {
 	}
 	cw, ch := a.contentSize()
 	horiz := ch <= a.page.h && cw > a.page.w
-	unit := a.cellH() * a.zoom // a text row
+	unit := v.rowPx() // a text row
 	cur, end := a.scrollY, ch-a.page.h
 	if horiz {
-		unit, cur, end = 8*a.zoom, a.scrollX, cw-a.page.w
+		unit, cur, end = max(1, 8*a.zoom/max(1, v.shrink)), a.scrollX, cw-a.page.w
 	}
 	if end <= 0 || cur >= end {
 		v.endWait += dt
@@ -171,6 +179,10 @@ func (a *App) drawViewer(u *UI) {
 	if viewer.fit {
 		viewer.fit = false
 		a.zoom = max(1, min(8, a.page.w/(a.doc.cols*8)))
+		viewer.shrink = 1
+		if w := a.doc.cols * 8; w > a.page.w { // wider than the window: shown smaller
+			viewer.shrink = min(8, (w+a.page.w-1)/a.page.w)
+		}
 		a.scrollX, a.scrollY = 0, 0
 	}
 	a.drawPage(u, "0")
@@ -192,9 +204,17 @@ func (a *App) drawViewer(u *UI) {
 	fb.text(x, r.y+4, text, col)
 }
 
+// rowPx is the height of a text row on the screen.
+func (v *Viewer) rowPx() int {
+	if v.shrink > 1 {
+		return max(1, a.cellH()/v.shrink)
+	}
+	return a.cellH() * a.zoom
+}
+
 func viewerKey(k string, ctrl, shift bool) {
 	v := viewer
-	rowPx := a.cellH() * a.zoom
+	rowPx := v.rowPx()
 	switch {
 	case shift && k == "Right": // wide art: sideways by hand
 		a.scrollX += 8 * a.zoom * 4
@@ -232,10 +252,18 @@ func viewerKey(k string, ctrl, shift bool) {
 		a.scrollY = a.doc.usedRows() * rowPx
 	case "=", "+", "Keypad +":
 		v.zoomSet = true
-		a.zoomAt(a.zoom+1, a.page.x+a.page.w/2, a.page.y)
+		if v.shrink > 1 {
+			v.setShrink(v.shrink - 1)
+		} else {
+			a.zoomAt(a.zoom+1, a.page.x+a.page.w/2, a.page.y)
+		}
 	case "-", "Keypad -":
 		v.zoomSet = true
-		a.zoomAt(a.zoom-1, a.page.x+a.page.w/2, a.page.y)
+		if a.zoom > 1 {
+			a.zoomAt(a.zoom-1, a.page.x+a.page.w/2, a.page.y)
+		} else {
+			v.setShrink(v.shrink + 1)
+		}
 	case "0", "F":
 		v.zoomSet, v.fit = false, true
 	case "G":
@@ -274,4 +302,48 @@ func saveViewerPrefs() {
 	if b, err := json.MarshalIndent(p, "", "  "); err == nil {
 		writeAtomic(path, append(b, '\n'))
 	}
+}
+
+// setShrink changes how much smaller the art is shown, keeping the top in place.
+func (v *Viewer) setShrink(n int) {
+	n = max(1, min(8, n))
+	if v.shrink < 1 {
+		v.shrink = 1
+	}
+	a.scrollY = a.scrollY * v.shrink / n
+	a.scrollX = a.scrollX * v.shrink / n
+	v.shrink = n
+}
+
+// shrunk gives the art drawn at full size and then averaged down by v.shrink,
+// made once and kept until the art, the font or the colours change.
+func (v *Viewer) shrunk() ([]uint32, int, int) {
+	c := &v.cache
+	key := fmt.Sprintf("%s %v %v %d", a.font().id, a.pal, a.ice, a.cellH())
+	if c.doc == a.doc && c.shrink == v.shrink && c.key == key && a.playing == nil {
+		return c.px, c.w, c.h
+	}
+	s, H := v.shrink, a.cellH()
+	rows := max(a.doc.usedRows(), 1)
+	full := &FB{}
+	full.resize(a.doc.cols*8, rows*H)
+	a.paintCells(full, 0, 0, 1, func(x, y int) uint32 { return a.doc.get(x, y) }, a.doc.cols, rows)
+	w, h := full.w/s, full.h/s
+	px := make([]uint32, w*h)
+	n := uint32(s * s)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			var r, g, b uint32
+			for dy := 0; dy < s; dy++ {
+				row := full.px[(y*s+dy)*full.w+x*s:]
+				for dx := 0; dx < s; dx++ {
+					p := row[dx]
+					r, g, b = r+(p>>16&255), g+(p>>8&255), b+(p&255)
+				}
+			}
+			px[y*w+x] = 0xFF000000 | (r/n)<<16 | (g/n)<<8 | b/n
+		}
+	}
+	c.doc, c.shrink, c.key, c.px, c.w, c.h = a.doc, s, key, px, w, h
+	return px, w, h
 }
