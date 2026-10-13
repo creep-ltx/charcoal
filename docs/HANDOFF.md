@@ -32,6 +32,13 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 ## Testing
 
 - `go test ./...` (unit tests; `testdata/alove` = the same art in five PC formats, must give the same page).
+  **Tests that reach savePrefs (writeOut, save) must set XDG_CONFIG_HOME to a temp folder**: on 2026-10-13
+  one such test overwrote the user's real ~/.config/charcoal/prefs.json.
+- `FuzzParsers` (fuzz_test.go): every reader, any length; fails on a page over maxPageCells or a slow input.
+  Only under a memory cap: `systemd-run --user --scope -q -p MemoryMax=6G go test -run XXX -fuzz FuzzParsers
+  -fuzztime 120s -parallel 4 .`
+- Pages never grow past `maxRowsFor(cols)` (core.go): 100000 rows or 16M cells. The audit and its fixes:
+  docs/audit-2026-10-13.md.
 - The big check: `tools/bigcheck/README.md`. Files live in `/tmp/bigcheck/files` (lost on reboot; the fetch
   scripts there get them again). Last run 2026-10-13: 8196 files, only "issues" = 24 asciiarena.se pieces drawn
   with PC characters (fair as PC) and one test .prg.
@@ -63,4 +70,4 @@ Plan agreed in chat (2026-10-13), nothing built yet:
 - ~/Projects/Knowledge/bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
 - ~/Projects/Knowledge/go/sdl2-desktop-gui.md: the GUI approach and headless testing.
 
-Last updated 2026-10-13.
+Last updated 2026-10-13 (after the audit fixes).
