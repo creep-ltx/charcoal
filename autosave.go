@@ -25,32 +25,50 @@ func autosaveDir() string { return filepath.Join(appDataDir(), "autosave") }
 
 // autosaveMeta is what an autosave says about its page, next to the cells.
 type autosaveMeta struct {
-	PID        int       `json:"pid"` // the CharEdit that wrote it
-	Saved      time.Time `json:"saved"`
-	Path       string    `json:"path"` // the page's file, "" if it never had one
-	Name       string    `json:"name"`
-	Mode       string    `json:"mode"`
-	SaveFmt    string    `json:"save_format"`
-	Machine    string    `json:"machine,omitempty"`
-	STRes      string    `json:"st_resolution,omitempty"`
-	Font       string    `json:"font,omitempty"`
-	Palette    string    `json:"palette,omitempty"`
-	Ice        bool      `json:"ice,omitempty"`
-	Cols       int       `json:"cols"`
-	Rows       int       `json:"rows"`
-	Bg         int       `json:"bg"`
-	Border     int       `json:"border"`
-	Ink        int       `json:"ink"`
-	Glyph0     bool      `json:"glyph0,omitempty"`
-	Title      string    `json:"title,omitempty"`
-	Author     string    `json:"author,omitempty"`
-	Group      string    `json:"group,omitempty"`
-	WriteSauce bool      `json:"write_sauce"`
-	Clear      bool      `json:"clear,omitempty"`
-	Notes      []string  `json:"notes,omitempty"`
-	Subpage    int       `json:"tti_subpage,omitempty"` // a .tti carousel's subpage, from 1 (saving keeps the others)
-	Screen     int       `json:"screen,omitempty"`      // a .c / .petmate file's screen, from 1 (saving keeps the others)
-	SrcKind    string    `json:"source_kind,omitempty"` // "marq" or "petmate" with Screen
+	PID          int             `json:"pid"` // the CharEdit that wrote it
+	Saved        time.Time       `json:"saved"`
+	Path         string          `json:"path"` // the page's file, "" if it never had one
+	Name         string          `json:"name"`
+	Mode         string          `json:"mode"`
+	SaveFmt      string          `json:"save_format"`
+	Machine      string          `json:"machine,omitempty"`
+	STRes        string          `json:"st_resolution,omitempty"`
+	Font         string          `json:"font,omitempty"`
+	Palette      string          `json:"palette,omitempty"`
+	Ice          bool            `json:"ice,omitempty"`
+	Cols         int             `json:"cols"`
+	Rows         int             `json:"rows"`
+	Bg           int             `json:"bg"`
+	Border       int             `json:"border"`
+	Ink          int             `json:"ink"`
+	Glyph0       bool            `json:"glyph0,omitempty"`
+	Title        string          `json:"title,omitempty"`
+	Author       string          `json:"author,omitempty"`
+	Group        string          `json:"group,omitempty"`
+	WriteSauce   bool            `json:"write_sauce"`
+	Clear        bool            `json:"clear,omitempty"`
+	Notes        []string        `json:"notes,omitempty"`
+	Subpage      int             `json:"tti_subpage,omitempty"` // a .tti carousel's subpage, from 1 (saving keeps the others)
+	Screen       int             `json:"screen,omitempty"`      // 0.1b3: a .c / .petmate file's screen, from 1 (saving keeps the others)
+	SrcKind      string          `json:"source_kind,omitempty"` // the kind of the page's file ("tti", "marq", "petmate" ...), read again from Path
+	Cur          int             `json:"frame,omitempty"`       // the frame being worked on
+	Frames       []autosaveFrame `json:"frames,omitempty"`      // a page of several frames: their cells follow one another in .cells
+	Restructured bool            `json:"restructured,omitempty"`
+}
+
+// autosaveFrame is one frame of an autosaved page.
+type autosaveFrame struct {
+	Cols   int    `json:"cols"`
+	Rows   int    `json:"rows"`
+	Bg     int    `json:"bg"`
+	Border int    `json:"border"`
+	Ink    int    `json:"ink"`
+	Glyph0 bool   `json:"glyph0,omitempty"`
+	Hold   int    `json:"hold,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Lower  int    `json:"lower"`
+	Seg    []byte `json:"tti_subpage_text,omitempty"` // base64
+	Src    int    `json:"source_screen"`
 }
 
 // An autosave on disk: id.json and id.cells (the cells, 4 bytes each, little-endian).
@@ -72,21 +90,33 @@ func writeAutosave(t *Tab) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	d := t.doc
-	cells := make([]byte, 4*d.cols*d.rows)
-	for i, v := range d.cells[:d.cols*d.rows] {
-		binary.LittleEndian.PutUint32(cells[4*i:], v)
+	docs := t.allDocs()
+	if t.playing != nil { // the page, not the screen being played
+		docs[t.cur] = t.playing.saved.doc
+	}
+	d := docs[0]
+	var cells []byte
+	for _, fd := range docs {
+		for _, v := range fd.cells[:fd.cols*fd.rows] {
+			cells = binary.LittleEndian.AppendUint32(cells, v)
+		}
 	}
 	m := autosaveMeta{PID: os.Getpid(), Saved: time.Now(), Path: t.path, Name: t.name, Mode: t.mode, SaveFmt: t.saveFmt,
 		Machine: t.machine, STRes: t.stres, Font: t.fontFor[t.mode], Palette: t.paletteFor[t.mode], Ice: t.ice,
 		Cols: d.cols, Rows: d.rows, Bg: d.bg, Border: d.border, Ink: d.ink, Glyph0: d.glyph0,
 		Title: t.info.title, Author: t.info.author, Group: t.info.group, WriteSauce: t.info.writeSauce,
 		Clear: t.info.clear, Notes: t.info.notes}
-	if t.srcKind == "tti" {
-		m.Subpage = t.srcIndex + 1
-	}
-	if t.srcKind == "marq" || t.srcKind == "petmate" {
-		m.Screen, m.SrcKind = t.srcIndex+1, t.srcKind
+	m.SrcKind = t.srcKind
+	if t.frames != nil {
+		m.Cur, m.Restructured = t.cur, t.restructured
+		for i, f := range t.frames {
+			fd := docs[i]
+			m.Frames = append(m.Frames, autosaveFrame{Cols: fd.cols, Rows: fd.rows, Bg: fd.bg, Border: fd.border, Ink: fd.ink,
+				Glyph0: fd.glyph0, Hold: f.hold, Name: f.name, Lower: f.lower, Seg: f.seg, Src: f.src})
+		}
+		if t.mode == "c64" {
+			m.Frames[t.cur].Lower = map[bool]int{true: 1}[strings.HasSuffix(t.fontFor["c64"], "lower")]
+		}
 	}
 	js, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -179,7 +209,22 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	if err != nil {
 		return err
 	}
-	if m.Cols < 1 || m.Rows < 1 || m.Rows > maxRowsFor(m.Cols) || len(b) != 4*m.Cols*m.Rows {
+	frames := m.Frames
+	if len(frames) == 0 { // one picture (as autosaves before frames)
+		frames = []autosaveFrame{{Cols: m.Cols, Rows: m.Rows, Bg: m.Bg, Border: m.Border, Ink: m.Ink, Glyph0: m.Glyph0, Lower: -1, Src: -1}}
+	}
+	total := 0
+	for _, f := range frames {
+		if f.Cols < 1 || f.Rows < 1 || f.Cols > 1000 || f.Rows > maxRowsFor(f.Cols) {
+			total = -1
+			break
+		}
+		total += f.Cols * f.Rows
+		if total > maxPageCells {
+			break
+		}
+	}
+	if total < 1 || total > maxPageCells || len(b) != 4*total || m.Cur < 0 || m.Cur >= len(frames) {
 		return fmt.Errorf("%s: the autosave is damaged", m.Name)
 	}
 	mode := m.Mode
@@ -193,12 +238,17 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	if !a.pristine() {
 		a.focusTab(a.newTab(mode))
 	}
-	d := newDoc(m.Cols, m.Rows)
-	for i := range d.cells[:m.Cols*m.Rows] {
-		d.cells[i] = binary.LittleEndian.Uint32(b[4*i:])
+	docs := make([]*Doc, len(frames))
+	for i, f := range frames {
+		d := newDoc(f.Cols, f.Rows)
+		for j := range d.cells[:f.Cols*f.Rows] {
+			d.cells[j] = binary.LittleEndian.Uint32(b[4*j:])
+		}
+		b = b[4*f.Cols*f.Rows:]
+		d.bg, d.border, d.ink, d.glyph0 = f.Bg, f.Border, f.Ink, f.Glyph0
+		docs[i] = d
 	}
-	d.bg, d.border, d.ink, d.glyph0 = m.Bg, m.Border, m.Ink, m.Glyph0
-	a.mode, a.doc = mode, d
+	a.mode, a.doc = mode, docs[m.Cur]
 	if m.Machine != "" {
 		a.machine = machineByID(m.Machine).id
 	}
@@ -220,20 +270,35 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 		a.saveFmt = m.SaveFmt
 	}
 	a.info = Info{title: m.Title, author: m.Author, group: m.Group, writeSauce: m.WriteSauce, clear: m.Clear, notes: m.Notes}
-	a.source, a.srcKind = nil, ""
-	if m.Subpage > 0 && m.Path != "" {
-		// A subpage of a carousel: the file as it is now gives the other subpages.
-		if b, err := os.ReadFile(m.Path); err == nil && isTTI(b) && m.Subpage <= len(ttiSubpages(b)) {
-			a.source, a.srcKind, a.srcIndex = b, "tti", m.Subpage-1
+	a.source, a.srcKind, a.frames, a.cur = nil, "", nil, 0
+	kind, at := m.SrcKind, 0 // at: an autosave from before frames of one subpage or screen (from 1)
+	if m.Subpage > 0 {
+		kind, at = "tti", m.Subpage
+	}
+	if m.Screen > 0 {
+		at = m.Screen
+	}
+	if m.Path != "" && (kind == "tti" || kind == "marq" || kind == "petmate") {
+		// The file as it is now: a carousel's head lines, Petmate's own fields, and
+		// the other subpages or screens of an autosave from before frames.
+		if fb, err := os.ReadFile(m.Path); err == nil && (kind != "tti" || isTTI(fb)) {
+			a.source, a.srcKind = fb, kind
 		}
 	}
-	if m.Screen > 0 && m.Path != "" && (m.SrcKind == "marq" || m.SrcKind == "petmate") {
-		// A screen of a file with several: the file as it is now gives the others.
-		if b, err := os.ReadFile(m.Path); err == nil {
-			if scr, err := a.screens(b, m.SrcKind); err == nil && m.Screen <= len(scr) {
-				a.source, a.srcKind, a.srcIndex = b, m.SrcKind, m.Screen-1
-			}
+	switch {
+	case len(m.Frames) > 0:
+		a.frames, a.cur, a.restructured = make([]Frame, len(frames)), m.Cur, m.Restructured
+		for i, f := range frames {
+			a.frames[i] = Frame{doc: docs[i], hold: f.Hold, name: f.Name, lower: f.Lower, seg: f.Seg, src: f.Src}
 		}
+		a.showCase()
+	case at > 0 && a.source != nil:
+		a.reparse() // the file's subpages or screens as frames, this one as autosaved
+		if at <= a.nFrames() && a.frames != nil {
+			a.frames[at-1].doc, a.cur = docs[0], at-1
+			a.showCase()
+		}
+		a.doc = docs[0]
 	}
 	a.gen = nextGen() // changed, not saved
 	a.dirty = true

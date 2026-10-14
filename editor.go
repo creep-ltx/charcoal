@@ -153,7 +153,6 @@ type Tab struct {
 	page                Rect // where the page view was laid out
 	pal                 [16]uint32
 	srcKind             string      // "xbin", "marq", "petmate" or "prg" for files that are not a stream of codes; "tti" for a teletext .tti
-	srcIndex            int         // which screen (or .tti subpage) of a file that holds several
 	ownFont             *Font       // a font that came in the file (XBin)
 	ownPal              *[16]uint32 // a palette that came in the file (XBin)
 	machine             string      // the Commodore machine of a PETSCII page

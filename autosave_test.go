@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -151,5 +154,78 @@ func TestRecentFiles(t *testing.T) {
 	editorKey("O", true, true, false)
 	if a.path != paths[5] {
 		t.Errorf("Ctrl+Shift+O opened %q", a.path)
+	}
+}
+
+// A page of frames comes back with every frame, its hold, name, case and
+// carousel subpage text, on the frame being worked on.
+func TestAutosaveFrames(t *testing.T) {
+	orig := carouselTTI()
+	a, p := loadTTIFile(t, orig)
+	a.goFrame(1)
+	a.pushUndo()
+	a.doc.set(0, 5, makeCell('X', 0, 0, 0))
+	a.setHold(3000)
+	a.newFrame()
+	a.doc.set(0, 6, makeCell('N', 0, 0, 0))
+	if err := writeAutosave(a.Tab); err != nil {
+		t.Fatal(err)
+	}
+	want := a.allDocs()
+	b := restart(t, "pc")
+	files := leftAutosaves()
+	if len(files) != 1 {
+		t.Fatalf("%d autosaves", len(files))
+	}
+	if err := b.restoreAutosave(files[0]); err != nil {
+		t.Fatal(err)
+	}
+	if b.nFrames() != 4 || b.cur != 2 || b.srcKind != "tti" || b.holdOf(1) != 3000 || b.holdOf(0) != 8000 || !b.restructured {
+		t.Fatalf("%d frames, cur %d, kind %q, holds %d %d", b.nFrames(), b.cur, b.srcKind, b.holdOf(0), b.holdOf(1))
+	}
+	for i, w := range want {
+		if fmt.Sprint(b.frameDoc(i).cells[:w.rows*w.cols]) != fmt.Sprint(w.cells[:w.rows*w.cols]) {
+			t.Fatalf("frame %d did not come back the same", i)
+		}
+	}
+	if b.frames[0].seg == nil || b.frames[2].seg != nil {
+		t.Fatal("subpage texts")
+	}
+	// Saved, it is the carousel with the edit, the hold and the new subpage.
+	if !b.writeOut(p, "tti") {
+		t.Fatal(b.message)
+	}
+	got, _ := os.ReadFile(p)
+	_, subs := ttiHead(got)
+	if len(subs) != 4 || ttRowText(parseTTI(subs[1]), 5) != "X" || ttRowText(parseTTI(subs[2]), 6) != "N" ||
+		!strings.Contains(string(subs[1]), "CT,3,T") {
+		t.Fatalf("saved: %q", got)
+	}
+}
+
+// An autosave from 0.1b3 of one subpage of a carousel (a tab per subpage then)
+// comes back as the carousel's frames with that subpage as autosaved.
+func TestAutosaveOldSubpage(t *testing.T) {
+	orig := carouselTTI()
+	a, p := loadTTIFile(t, orig)
+	d := parseTTI(ttiSubpages(orig)[1])
+	d.set(0, 9, makeCell('Q', 0, 0, 0))
+	cells := make([]byte, 0, 4*40*25)
+	for _, v := range d.cells[:d.cols*d.rows] {
+		cells = binary.LittleEndian.AppendUint32(cells, v)
+	}
+	m := autosaveMeta{PID: 1 << 30, Saved: time.Now(), Path: p, Name: "carousel.tti", Mode: "tt", SaveFmt: "tti",
+		Cols: d.cols, Rows: d.rows, Subpage: 2}
+	js, _ := json.Marshal(m)
+	os.MkdirAll(autosaveDir(), 0o700)
+	os.WriteFile(filepath.Join(autosaveDir(), "old.json"), js, 0o644)
+	os.WriteFile(filepath.Join(autosaveDir(), "old.cells"), cells, 0o644)
+	_ = a
+	b := restart(t, "pc")
+	if err := b.restoreAutosave(autosaveFile{"old", m}); err != nil {
+		t.Fatal(err)
+	}
+	if b.nFrames() != 3 || b.cur != 1 || ttRowText(b.doc, 9) != "Q" || ttRowText(b.frameDoc(2), 1) != ".THIRD" || !b.dirty {
+		t.Fatalf("%d frames, cur %d", b.nFrames(), b.cur)
 	}
 }
