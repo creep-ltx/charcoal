@@ -1208,6 +1208,7 @@ func (a *App) drawStatus(u *UI, r Rect) {
 	if n := a.nFrames(); n > 1 {
 		pos += fmt.Sprintf("  Frame %d/%d", a.cur+1, n)
 	}
+	pos += a.orderNote()
 	x = fb.text(x, y, pos, cText) + 24
 	if a.hover != nil {
 		v := a.doc.get(a.hover.x, a.hover.y)

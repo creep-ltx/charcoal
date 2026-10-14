@@ -174,7 +174,7 @@ func main() {
 	redraw := true
 	for !a.quit {
 		wait := time.Until(nextBlink)
-		if a.playing != nil || len(script) > 0 || (viewer != nil && viewer.auto) {
+		if a.playing != nil || len(script) > 0 || (viewer != nil && viewer.auto) || dialogAnimates() {
 			wait = 15 * time.Millisecond
 		} else if download.what != "" {
 			wait = min(wait, 100*time.Millisecond) // look for the end of the download
@@ -195,6 +195,9 @@ func main() {
 		}
 		if a.playing != nil {
 			a.playStep()
+			redraw = true
+		}
+		if dialogAnimates() { // the Animate requester's preview
 			redraw = true
 		}
 		if viewer != nil {

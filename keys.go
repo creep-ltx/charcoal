@@ -185,6 +185,7 @@ func init() {
 		{"play", "Ctrl+P", "Play the frames (one frame: play it as if it came over a modem); again or Esc stops", func() { a.playKey() }},
 		{"onion", "Alt+O", "Onion skin on / off: the frame before, faint, under the empty cells", func() { a.toggleOnion() }},
 		{"frames_strip", "Ctrl+Shift+F", "Show / hide the frame strip", func() { a.toggleStrip() }},
+		{"animate", "Alt+J", "Animate: TheDraw's scan patterns (and fades, typewriter, scroll) as the saved file's draw order or as frames", openAnimate},
 
 		{"select_left", "Shift+Left", "Select with the keyboard: from the cursor, growing as it moves (Esc lets go)", func() { a.selectKey("Left") }},
 		{"select_right", "Shift+Right", "", func() { a.selectKey("Right") }},
