@@ -172,6 +172,7 @@ type Tab struct {
 	restructured        bool        // frames were added, deleted or moved since the file was read or saved
 	onion               bool        // the frame before shows faint under the empty cells
 	strip               int         // the frame strip: 0 while the page has several frames, 1 on, -1 off
+	split               splitInfo   // the pictures the page's file (a stream) shows, offered as frames
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -1396,7 +1397,11 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 			keyName("frame_previous"), keyName("frame_next")))
 		return
 	}
-	if a.doc.fullest {
+	a.split = a.streamSplit()
+	switch {
+	case a.split.clears >= 2:
+		a.msg(fmt.Sprintf("An animation of %d pictures: %s shows its frames", a.split.clears, keyName("frames_strip")))
+	case a.doc.fullest:
 		a.msg("An animation that ends nearly empty: showing its fullest picture (Play shows it all)")
 	}
 }
@@ -1603,7 +1608,7 @@ func (a *App) setMachine(id string) {
 	a.paletteFor["c64"] = m.palette
 	a.setPalette()
 	switch {
-	case a.source != nil && !a.dirty && (a.srcKind == "" || a.srcKind == "seq"):
+	case a.source != nil && !a.dirty && !a.splitPage() && (a.srcKind == "" || a.srcKind == "seq"):
 		a.forceCols = m.cols
 		a.reparse()
 		a.setCase(lower)
@@ -1643,7 +1648,7 @@ func (a *App) setSTRes(id string) {
 	a.setPalette()
 	a.fg, a.bg = r.fg, r.bg
 	switch {
-	case a.source != nil && !a.dirty:
+	case a.source != nil && !a.dirty && !a.splitPage():
 		a.forceCols = r.cols
 		a.reparse()
 	case a.source == nil && !a.dirty && a.doc.empty():
@@ -1683,7 +1688,7 @@ func (a *App) setCols(n int) {
 	if n == a.doc.cols || a.c64() || a.st() || a.zx() || a.tt() || (a.atari() && n != 38 && n != 40) {
 		return // a machine's screen has the width it has
 	}
-	if a.source != nil && !a.dirty {
+	if a.source != nil && !a.dirty && !a.splitPage() {
 		a.forceCols = n
 		a.reparse()
 	} else {
@@ -2177,6 +2182,22 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		a.msg(fmt.Sprintf("Only the first %d columns fit this format; the rest is not saved", limit))
 		d = d.withCols(limit)
 	}
+	if a.nFrames() > 1 && (fmtID == "ansi" || fmtID == "seq" || fmtID == "ata" || fmtID == "vt52") {
+		docs := a.allDocs()
+		if limit := map[string]int{"seq": a.mach().cols, "ata": 40}[fmtID]; limit > 0 {
+			for i, fd := range docs {
+				if fd.cols > limit {
+					docs[i] = fd.withCols(limit)
+				}
+			}
+		}
+		out := a.writeStreamFrames(fmtID, docs, info.writeSauce)
+		if fmtID == "ansi" {
+			d = &Doc{cols: docs[0].cols, rows: max(25, docs[0].rows)} // SAUCE: the first frame's size
+			out = withSauce(out, 1)
+		}
+		return out, nil
+	}
 	switch fmtID {
 	case "ansi":
 		return withSauce(writeAnsi(d, am, true, info.clear, info.writeSauce), 1), nil
@@ -2382,6 +2403,10 @@ func (a *App) writeOut(path, fmtID string) bool {
 			return true
 		}
 	}
+	if a.nFrames() > 1 && (fmtID == "ansi" || fmtID == "seq" || fmtID == "ata" || fmtID == "vt52") {
+		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d frames, a clear screen between them; the hold times are not kept (these files play at the modem's speed)", path, len(data), a.nFrames()))
+		return true
+	}
 	if fmtID == "tti" && a.nFrames() > 1 {
 		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d subpages, %d changed", path, len(data), a.nFrames(), changed))
 		return true
@@ -2415,6 +2440,9 @@ type emulator interface {
 func (a *App) playBytes() []byte {
 	if a.source != nil && !a.dirty && a.srcKind == "" {
 		return a.source
+	}
+	if a.nFrames() > 1 && !a.zx() && !a.tt() { // every frame, a clear between them
+		return a.writeStreamFrames(map[string]string{"c64": "seq", "atari": "ata", "st": "vt52"}[a.mode], a.allDocs(), false)
 	}
 	switch {
 	case a.c64():

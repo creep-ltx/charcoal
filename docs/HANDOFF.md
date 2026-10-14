@@ -25,9 +25,33 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL) |
 | PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form); ROMs from VICE on first use |
 | ZX Spectrum | .scr (6912 bytes); 48K ROM font built in (Amstrad allows passing it on) |
-| Teletext | .tti .ep1, edit.tf links (.url), Mode 7 dumps; Bedstead font (CC0) built in; a .tti carousel opens a tab per subpage (srcKind "tti", srcIndex) and saving one rewrites only its OL 0-24 rows, every other line kept (teletext.go writeTTISubpage) |
+| Teletext | .tti .ep1, edit.tf links (.url), Mode 7 dumps; Bedstead font (CC0) built in; a .tti carousel opens as frames (one per subpage) and saving rewrites only changed subpages' OL 0-24 rows, every other line kept (teletext.go writeTTIFrames) |
 
 CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide art shrunk to fit, m plays.
+
+## Frames and animation (2026-10-14, 0.1b3 + roadmap 2.1; plan: docs/frames-design.md)
+
+- `frames.go`: `Tab.frames []Frame` (doc, hold ms, name, lower, seg (.tti subpage text), src (.petmate framebuf)),
+  `Tab.cur`; nil = one picture (t.doc). **t.doc is always the live current frame; frames[cur].doc is stale**;
+  frames that are not current are never changed in place (goFrame clones), so undo snapshots share them.
+  Undo: one stack; `Snap.whole` steps keep the frame list (new, copy, delete, move, hold, width/crop of every
+  frame, split), cell steps keep `cur` and undoing one jumps to its frame; budget by `Snap.cost`.
+- Width (W, machine, ST resolution) and crop change every frame; height (H) is each frame's own.
+- Files: `.c`/`.petmate` screens and `.tti` subpages open as frames (reparse builds them); `writeMarqFrames`
+  (Petmate's form: frame0000.., one META), `writePetmateFrames` (keeps unknown fields per framebuf and top level,
+  customFonts, framebufUIStates reordered), `writeTTIFrames` (ttiHead; changed hold writes CT,n,T; new/moved
+  frames renumber PN/SC; `restructured`). Unchanged .c/.petmate save = the source bytes. Petmate9 and Marq store
+  no per-screen delay (checked 2026-10-14). ANSI/SEQ/ATA/VT52: `streams.go` `splitStream` cuts at clears (or
+  cursor homes: `beforeHome` hooks in Term/PetTerm), hold = bytes x 10 / baud; offered on the strip (Split), never
+  automatic; saved as one stream with a clear between frames. Formats of one picture write the current frame as an
+  export (page stays dirty). GIF (`anim.go`, image/gif) and APNG (`apng.go`, by hand) export every frame.
+- UI (`strip.go`): the strip under the page (boxes, drag to move, Hold field, New/Copy/Delete/Onion/Play/Loop,
+  speed), shown with several frames or Ctrl+Shift+F; onion skin (Alt+O) = the frame before at ~25% under empty
+  cells; Ctrl+P plays (Play.frames, `playStepAt(now)`); keys in keys.go's Frames block.
+- Autosave keeps every frame (`autosaveMeta.Frames`, cells one after another); 0.1b3's one-subpage/one-screen
+  autosaves come back as the file's frames.
+- Not done (design step 11): delta stream writing, CharView playing frames, onion of the next frame, timed capture
+  of scrolling ANSImations.
 
 ## Keys and safety (2026-10-13, evening)
 
@@ -70,6 +94,10 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - The big check: `tools/bigcheck/README.md`. Files live in `/tmp/bigcheck/files` (lost on reboot; the fetch
   scripts there get them again). Last run 2026-10-13: 8196 files, only "issues" = 24 asciiarena.se pieces drawn
   with PC characters (fair as PC) and one test .prg.
+- Big check 2026-10-14 (frames): every multi-screen .c/.petmate/.tti round-trips every frame (69 files, 4323
+  frames); 235 stream files split at their clears (1271 frames) and come back frame for frame, but 3 (WWANS404/405,
+  KS-CRI.ANS) with text after a DOS end-of-file 0x1A and no SAUCE: the 0x1A shows as a glyph and an ANSI
+  without SAUCE writes it as a space (as for any page; not new with frames).
 - Headless screenshots: `SDL_VIDEODRIVER=offscreen XDG_CONFIG_HOME=/tmp/x CHARCOAL_SCRIPT="click x y; key ctrl+S;
   text abc; wait 300; shot /tmp/a.png; quit" ./charedit file` (script.go). Never on the user's display.
   Ubuntu's SDL2 has no offscreen driver and on a Mac it wants OpenGL: use `SDL_VIDEODRIVER=dummy` there.
@@ -118,4 +146,4 @@ The goal and the plan: docs/roadmap.md (the go-to editor for text artists on eve
 - ~/Projects/Knowledge/bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
 - ~/Projects/Knowledge/go/sdl2-desktop-gui.md: the GUI approach and headless testing.
 
-Last updated 2026-10-14 (start screen).
+Last updated 2026-10-14 (frames and animation; release 0.1b3 tagged before them).

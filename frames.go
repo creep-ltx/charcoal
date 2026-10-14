@@ -294,7 +294,7 @@ func (a *App) snapshotLike(s Snap) Snap {
 }
 
 // framesFormats are the page formats that keep every frame.
-var framesFormats = map[string]bool{"marq": true, "petmate": true, "tti": true}
+var framesFormats = map[string]bool{"marq": true, "petmate": true, "tti": true, "ansi": true, "seq": true, "ata": true, "vt52": true}
 
 // savedFrames: the page's frames are now its file's (data), in order. For a
 // .tti it gives how many subpages were written anew.

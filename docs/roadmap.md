@@ -32,7 +32,7 @@ against each platform's best editor. Each step says what it wins.
 
 - [x] Windows and Mac builds, one file each (2026-10-14): GitHub Actions builds and tests Linux, Windows and
   macOS (Charcoal.app, Apple Silicon + Intel) on every push; a v* tag makes the release page. Details in HANDOFF.md.
-- [ ] The first release (a tag), tried by a Windows and a Mac user.
+- [ ] The first release, tried by a Windows and a Mac user: v0.1b3 tagged 2026-10-14 (prerelease, three zips).
 - [x] A start screen (2026-10-14): "New page for" with a tile per machine (Amiga, PC, Atari 8-bit, Atari ST,
   C64, PET, VIC-20, C128, ZX Spectrum, teletext) drawn in its own font and colours with its size, the last 10
   files, Open, "Drop a file here". Typing, a tool or Esc starts on the last used type. Not done: an example
@@ -42,9 +42,10 @@ against each platform's best editor. Each step says what it wins.
 
 ## Step 2: what every rival has and artists ask for most
 
-1. **Frames and animation** (the most-asked feature everywhere): a frame strip, duplicate, onion skin,
-   hold time, playback; ANSImation built frame by frame, PETSCII/ATASCII animations, teletext carousels;
-   export GIF and APNG (and the stream for real time). Multi-screen .c/.petmate open as frames, not tabs.
+1. [x] **Frames and animation** (done 2026-10-14, docs/frames-design.md): a frame strip, copy, onion skin,
+   hold time, playback; ANSImation built frame by frame or split from a file, PETSCII/ATASCII/VT52 animations,
+   teletext carousels; export GIF and APNG (and the stream for real time). Multi-screen .c/.petmate open as
+   frames, not tabs. Later: delta streams, CharView playing frames, onion of the next frame.
 2. **Reference image** to trace over: open, move, scale, fade, hide (not converted into characters: the
    scene bans conversions, so this stays a tracing aid).
 3. **Own fonts and character sets**: load .fnt/.psf/.f16 (PC), Atari .fnt, C64 .64c/charset .bin,
@@ -86,4 +87,4 @@ against each platform's best editor. Each step says what it wins.
 - Palette editing beyond 16 colours.
 - Not planned: Shift-JIS AA (proportional, scene gone), RIPscrip (vector, not text).
 
-Last updated 2026-10-13 (from the two surveys; nothing in Steps 1-5 built yet).
+Last updated 2026-10-14 (step 2.1 frames done; 0.1b3 released).

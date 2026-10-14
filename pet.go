@@ -322,6 +322,7 @@ func screenToPet(sc int) byte {
 // ANSI, the page is endless downwards instead of scrolling.
 type PetTerm struct {
 	beforeClear func()
+	beforeHome  func() // HOME (0x13)
 	doc         *Doc
 	x, y, fg    int
 	rev         bool
@@ -353,6 +354,9 @@ func (t *PetTerm) write(b []byte) {
 			d.clearPage(blank, 25) // also gives back the rows below the screen
 			t.x, t.y = 0, 0
 		case 0x13:
+			if t.beforeHome != nil {
+				t.beforeHome()
+			}
 			t.x, t.y = 0, 0
 		case 0x11:
 			t.y++

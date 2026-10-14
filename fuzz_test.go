@@ -81,5 +81,15 @@ func FuzzParsers(f *testing.F) {
 		check("petmate", func() []*Doc { return screens(parsePetmate(b)) })
 		check("prg", func() []*Doc { d, _, _ := parsePrg(b); return one(d) })
 		check("vt52", func() []*Doc { return one(parseVT52(b, stResolutions[0], 0)) })
+		for _, mode := range []string{"pc", "c64", "atari", "st"} {
+			docs, holds, _ := splitStream(b, mode, 40, false, stResolutions[0], true, 14400)
+			total := 0
+			for _, d := range docs {
+				total += d.cols * d.rows
+			}
+			if len(docs) > maxSplitFrames || total > maxPageCells || len(holds) != len(docs) {
+				t.Fatalf("split %s: %d frames, %d cells", mode, len(docs), total)
+			}
+		}
 	})
 }

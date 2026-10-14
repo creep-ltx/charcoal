@@ -162,6 +162,25 @@ func (a *App) drawStrip(u *UI, r Rect) {
 	})
 	right := r.x + r.w - w - 8
 
+	// A stream that shows several pictures: offered as frames.
+	if n == 1 && (a.split.clears >= 2 || a.split.homes >= 2) && !a.dirty {
+		x = r.x + 6
+		if a.split.clears >= 2 {
+			l := fmt.Sprintf("Split: %d pictures (clear screen)", a.split.clears)
+			if u.button(Rect{x, y, buttonW(l), h}, l, false, "Make a frame of each picture the file shows, cut where it clears the screen") != nil {
+				a.splitFrames(false)
+			}
+			x += buttonW(l) + 4
+		}
+		if a.split.homes >= 2 {
+			l := fmt.Sprintf("Split at cursor home (%d)", a.split.homes)
+			if u.button(Rect{x, y, buttonW(l), h}, l, false, "Cut where the cursor goes home too (some animations draw over the last picture)") != nil {
+				a.splitFrames(true)
+			}
+		}
+		return
+	}
+
 	// The boxes: as many as fit, the current one always on show.
 	boxW := func(i int) int { return textW(strconv.Itoa(i+1)) + 12 }
 	room := right - r.x - 8 - 2*20

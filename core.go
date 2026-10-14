@@ -422,6 +422,7 @@ type Term struct {
 	fontRequest                                int // a SyncTERM font number asked for by CSI 0;n SP D, -1 if none
 	screenH                                    int // the rows insert / delete line move; 0 means 25
 	beforeClear                                func()
+	beforeHome                                 func() // the cursor is sent home (CSI H, CSI 1;1H)
 	fg, bg                                     int
 	bold, blink, ital, under, reverse, conceal bool
 }
@@ -666,6 +667,9 @@ func (t *Term) csi(f byte) {
 	case 'd':
 		t.y = n(0, 1) - 1
 	case 'H', 'f':
+		if t.beforeHome != nil && n(0, 1) == 1 && n(1, 1) == 1 {
+			t.beforeHome()
+		}
 		t.y = n(0, 1) - 1
 		t.x = min(d.cols-1, n(1, 1)-1)
 	case 'J':

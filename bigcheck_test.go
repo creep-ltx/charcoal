@@ -26,43 +26,8 @@ type checkResult struct {
 	problem          string
 	rows, cols       int
 	frames           int
+	split            int // pictures a stream file shows, cut at its clears
 	took             time.Duration
-}
-
-// cellsMatch compares two pages the way the saved format can keep them.
-func cellsMatch(fmtID string, x, y *Doc) (bool, string) {
-	rows := max(x.usedRows(), y.usedRows())
-	if x.cols != y.cols && fmtID != "text" {
-		return false, fmt.Sprintf("width %d became %d", x.cols, y.cols)
-	}
-	for r := 0; r < rows; r++ {
-		for c := 0; c < x.cols; c++ {
-			a, b := x.get(c, r), y.get(c, r)
-			switch fmtID {
-			case "text", "ata", "tti", "ep1", "tturl":
-				a, b = a&255, b&255
-			case "seq", "marq", "petmate", "prg":
-				a, b = a&0xFFF, b&0xFFF
-				if a&255 == 32 { // a space carries no colour
-					a, b = a&255, b&255
-				}
-			case "ansi", "pcb", "avt", "vt52":
-				if isBlank(a) && isBlank(b) {
-					continue
-				}
-				if a&255 == 32 || a&255 == 0 { // a space's colour is only its background
-					a, b = a&0xF000|32, b&0xF000|32
-				}
-			}
-			if a != b {
-				return false, fmt.Sprintf("cell %d,%d: %08x became %08x", c, r, a, b)
-			}
-		}
-	}
-	if x.bg != y.bg && fmtID != "ansi" && fmtID != "text" && fmtID != "seq" && fmtID != "ata" {
-		return false, "background changed"
-	}
-	return true, ""
 }
 
 func expectedMode(path string, b []byte) string {
@@ -194,7 +159,13 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 	if ice != a.ice && fmtID == "ansi" && a.info.writeSauce {
 		res.problem = strings.TrimSpace(res.problem + " iCE flag changed")
 	}
+	// A stream that shows several pictures: cut into frames, saved and cut again.
+	if splitN := a.splitCheckOf(b, path, mode, &res); splitN > 0 {
+		res.split = splitN
+	}
 	// A picture of it.
+	a.focusTab(a.newTab(mode))
+	a.loadBytes(b, filepath.Base(path), path, "auto")
 	a.doc = orig
 	png, err := a.encode("png")
 	if err != nil || len(png) < 50 {
@@ -293,18 +264,59 @@ func TestBigCheck(t *testing.T) {
 		s := stats[g]
 		fmt.Fprintf(&sb, "%-12s %6d %6d %5d of %4d %10s  %v\n", g, s.n, s.bad, s.rightMode, s.known, s.slow.Round(time.Millisecond), s.modes)
 	}
-	multi, frames := 0, 0
+	multi, frames, splits, splitFr := 0, 0, 0, 0
 	for _, r := range results {
 		if r.frames > 1 {
 			multi++
 			frames += r.frames
 		}
+		if r.split > 1 {
+			splits++
+			splitFr += r.split
+		}
 	}
 	fmt.Fprintf(&sb, "\nfiles with several frames: %d (%d frames)\n", multi, frames)
+	fmt.Fprintf(&sb, "stream files that split at their clears: %d (%d frames)\n", splits, splitFr)
 	sb.WriteString("\n")
 	for _, p := range problems {
 		sb.WriteString(p + "\n")
 	}
 	os.WriteFile(filepath.Join(root, "..", "report.txt"), []byte(sb.String()), 0o644)
 	t.Logf("%d files (%d skipped as not art), %d with issues; report in %s", len(results), skipped, len(problems), filepath.Join(root, "..", "report.txt"))
+}
+
+// splitCheckOf opens the file again, cuts it into frames at its clears, saves
+// them and cuts that again: the same frames. It gives the frames, 0 if the file is no animation.
+func (a *App) splitCheckOf(b []byte, path, mode string, res *checkResult) int {
+	a.tabs, a.Tab = nil, nil
+	a.focusTab(a.newTab(mode))
+	a.loadBytes(b, filepath.Base(path), path, "auto")
+	if a.split.clears < 2 {
+		return 0
+	}
+	a.splitFrames(false)
+	n := a.nFrames()
+	fmtID := a.saveFmt
+	if fmtID == "text" {
+		fmtID = "ansi"
+	}
+	before := a.allDocs()
+	out, err := a.encode(fmtID)
+	if err != nil {
+		res.problem = strings.TrimSpace(res.problem + " split save: " + err.Error())
+		return n
+	}
+	docs, _, _ := splitStream(out, a.mode, a.doc.cols, a.amiga(), a.res(), false, a.baud)
+	if len(docs) != n {
+		// Empty pictures in the file are no frames; written, they are the same count.
+		res.problem = strings.TrimSpace(res.problem + fmt.Sprintf(" split: %d frames saved, %d read back", n, len(docs)))
+		return n
+	}
+	for i := range docs {
+		if ok, why := cellsMatch(fmtID, before[i], docs[i]); !ok {
+			res.problem = strings.TrimSpace(res.problem + fmt.Sprintf(" split frame %d round trip: %s", i+1, why))
+			break
+		}
+	}
+	return n
 }

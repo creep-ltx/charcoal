@@ -157,9 +157,27 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   in Petmate's form, so Petmate and Marq's PETSCII editor open it too; any .prg in that form opens), the **C array** of Marq's PETSCII editor and Petmate (`.c`), a
   **Petmate workspace** (`.petmate`), **PNG**
   (normal or twice the size; C64 pages with their border) and a **web page** (`.html`). A typed file ending picks
-  the format. Everything that holds characters opens too; a `.c` or `.petmate` with several screens opens each
-  screen in its own tab. (Pictures and web pages do not open.)
+  the format, and an **animated GIF or APNG** of the frames. Everything that holds characters opens too.
+  (Pictures and web pages do not open.)
 - Settings in `~/.config/charcoal/prefs.json` (`"uiscale": 2` doubles the window for big screens).
+
+## Frames and animation
+
+![Frames of a PETSCII page, the frame before shown faint (onion skin)](docs/screenshots/frames.png)
+
+A page can hold several frames. Alt+N adds an empty one, Ctrl+Shift+D copies the frame, Alt+, and Alt+. (or
+Alt+PgUp / PgDn) go through them, Alt+Delete deletes one. The **strip** under the page numbers them (click to go,
+drag to move) with each frame's **hold** time, and New, Copy, Delete, **Onion** (the frame before, faint, under the
+empty cells; Alt+O), **Play** (Ctrl+P, at 1/2x to 4x, looping or once). Undo covers all of it.
+
+- A `.c` or `.petmate` with several screens opens as frames and saves them all (Petmate's own fields, fonts and
+  screen names kept); a teletext `.tti` carousel opens a frame per subpage and saves every line but the changed
+  rows, its CT line as the hold.
+- An ANSI, PETSCII, ATASCII or VT52 file that clears the screen between pictures (an ANSImation) opens as its last
+  picture and says how many it shows: Ctrl+Shift+F shows the strip with **Split** (at each clear, or at each cursor
+  home). Saved, the frames are one stream with a clear between them; their hold times come from the modem speed.
+- Save as **Animation (.gif)** or **Animation, APNG (.png)** writes every frame for its hold time. A format that
+  holds one picture (`.scr`, `.png`, `.xb` ...) writes the frame on show and says the others are only in CharEdit.
 
 ## Keys
 
@@ -188,6 +206,10 @@ Delete, Insert, Esc. The defaults, the PC ANSI editors' (Moebius, PabloDraw, The
 | Ctrl+F1-F10, Ctrl+Shift+Up / Down | F-key set 1-10, next / previous set |
 | Ctrl+= / Ctrl++, Ctrl+-, Ctrl+9 | zoom in, out, fit the width |
 | Ctrl+G, Ctrl+R, Ctrl+H | grid, reverse (PETSCII, Atari), hide the gadgets |
+| Alt+N, Ctrl+Shift+D, Alt+Delete | new frame, copy the frame, delete it |
+| Alt+, / Alt+. (Alt+PgUp / PgDn), Alt+Home / End | previous / next frame, first / last |
+| Alt+Shift+PgUp / PgDn, Alt+[ / Alt+] | move the frame earlier / later, hold it shorter / longer |
+| Ctrl+P, Alt+O, Ctrl+Shift+F | play the frames, onion skin, show / hide the frame strip |
 
 Dragging inside a selection with the Select tool moves it (one undo step).
 
@@ -214,6 +236,8 @@ come back cell for cell after saving in their own format.
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
 | `keys.go` | the table of actions and their default keys, the keys file, the help's key list |
 | `rowscols.go`, `blockjobs.go` | insert/delete rows and columns; fill, move and crop a block |
+| `frames.go`, `strip.go`, `streams.go` | frames and their undo, the frame strip and onion skin, cutting streams into frames |
+| `anim.go`, `apng.go` | GIF and APNG export |
 | `autosave.go` | autosave and offering it back, `.bak` on save, recent files |
 | `paths.go`, `keymods.go`, `platform_*.go` | per system: the settings and data folders, Cmd and AltGr, drives, is a CharEdit still running |
 | `script.go` | `CHARCOAL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
