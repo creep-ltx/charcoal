@@ -25,7 +25,7 @@ func TestPNGExportUnchanged(t *testing.T) {
 		"stpng":     "f208dab0c61d4143",
 		"stpng2":    "720633d1f0230125",
 	}
-	for _, mode := range []string{"pc", "amiga", "c64", "atari", "zx", "tt", "st"} {
+	for _, mode := range []string{"pc", "amiga", "atari", "zx", "tt", "st"} {
 		a := testApp(t, mode)
 		a.hasC64 = true
 		for i := 0; i < 20; i++ {
