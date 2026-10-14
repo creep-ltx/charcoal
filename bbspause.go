@@ -242,7 +242,8 @@ const pcbLine = 2047
 // bytes) fills it to the end: the next line starts on a clean piece. Never
 // before a CR (a CR just past a full line makes an empty line more), a LF
 // (dosfgets drops a LF that starts a line) or a % ! $ (a line
-// starting with one of those may name a file to show or run).
+// starting with one of those may name a file to show or run; a line of the
+// art that starts with one gets "@DELAY:0@" before it).
 func layoutPCB(pieces []string) []byte {
 	var out []byte
 	room := pcbLine
@@ -252,6 +253,11 @@ func layoutPCB(pieces []string) []byte {
 			out = append(out, p...)
 			afterCR = false
 			continue
+		}
+		if room == pcbLine && strings.ContainsRune("%!$", rune(p[0])) {
+			// A line of the art starting with one of those: an empty delay first.
+			out = append(out, "@DELAY:0@"...)
+			room -= 9
 		}
 		afterCR = false
 		if room >= 9 && room <= 24 && !strings.ContainsRune("\r\n%!$", rune(p[0])) {
