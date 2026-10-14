@@ -173,6 +173,7 @@ type Tab struct {
 	onion               bool        // the frame before shows faint under the empty cells
 	strip               int         // the frame strip: 0 while the page has several frames, 1 on, -1 off
 	split               splitInfo   // the pictures the page's file (a stream) shows, offered as frames
+	ref                 *RefImage   // the reference picture to trace over (refimage.go), nil: none
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -218,6 +219,7 @@ type App struct {
 	startSel      int // the start screen's chosen item (keyboard)
 	startCols     int // tiles in a row of the start screen, as last drawn
 	startCol      int // the column Up goes back to from the recent files
+	drawOpts          // shapes, shade, mirror, colour / character only (shapes.go)
 }
 
 var a *App
@@ -683,14 +685,25 @@ func abs(v int) int {
 	return v
 }
 
+// paintAt paints with the Draw or Colour tool at (x, y) and, with the mirror
+// option, at its mirror images.
 func (a *App) paintAt(x, y, button int) {
+	for _, s := range symPoints(x, y, a.doc.cols, a.doc.rows, a.mirror) {
+		a.paintOne(s.x, s.y, button, s.fx, s.fy)
+	}
+}
+
+func (a *App) paintOne(x, y, button int, fx, fy bool) {
 	old := a.doc.get(x, y)
 	switch a.tool {
 	case "draw":
-		if button == 3 {
+		switch {
+		case a.shade && a.shadeSteps() != nil:
+			a.shadeAt(x, y, button != 3)
+		case button == 3:
 			a.setCell(x, y, blank)
-		} else {
-			a.setCell(x, y, a.brushCell())
+		default:
+			a.putCell(x, y, a.mirrorCell(a.brushCell(), fx, fy))
 		}
 	case "colour":
 		if (button == 3 && a.c64()) || a.atari() {
@@ -1899,6 +1912,10 @@ func (a *App) openPath(path, as string) {
 		a.msg("Could not open: " + err.Error())
 		return
 	}
+	if as == "auto" && isPicture(b) { // a picture is no art: it can be the page's reference
+		askReference(path)
+		return
+	}
 	for _, t := range a.tabs { // already open: go there
 		if t.path == path && as == "auto" {
 			a.focusTab(t)
@@ -1911,7 +1928,13 @@ func (a *App) openPath(path, as string) {
 		a.focusTab(a.newTab(a.mode))
 	}
 	a.start = false
+	a.refMove = false
+	kept := a.ref // a reference put on the empty page stays, unless the file has its own
 	a.loadBytes(b, filepath.Base(path), path, as)
+	a.restoreRef(nil)
+	if kept != nil && a.ref == kept {
+		a.rememberRef()
+	}
 	a.lastDir = filepath.Dir(path)
 	addRecent(path)
 	savePrefs()
@@ -2386,6 +2409,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg", "pcb": "pcb", "avt": "avt", "tti": "tti"}[fmtID]
 		a.markSaved()
 		dropAutosave(a.Tab)
+		a.rememberRef() // the reference goes with the file's new name
 		addRecent(path)
 		if framesFormats[fmtID] {
 			changed = a.savedFrames(fmtID, data)

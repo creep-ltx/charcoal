@@ -148,7 +148,7 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   pairs first, then by comparing the glyphs' pixels, so it works in every font).
 - Bottom strip: tools, all 256 characters (click = brush), 5 F-key sets (F1–F10), 16 colours (left fg, right bg,
   Shift+click edits the colour).
-- Tools: Type, Draw (Shift+click = line), Colour, Fill, Pick (or middle click), Select (copy/cut/paste/stamp), Half.
+- Tools: Type, Draw (Shift+click = line), Colour, Fill, Pick (or middle click), Select (copy/cut/paste/stamp), Shape, Half.
 - Undo/redo, play at modem speed; dropping a file on the window opens it.
 - **Safety**: pages with changes are kept aside every two minutes and offered back after a crash; saving over a
   file keeps the old one as `name.bak` (Settings); the Open requester lists the last 10 files.
@@ -158,7 +158,7 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   **Petmate workspace** (`.petmate`), **PNG**
   (normal or twice the size; C64 pages with their border) and a **web page** (`.html`). A typed file ending picks
   the format, and an **animated GIF or APNG** of the frames. Everything that holds characters opens too.
-  (Pictures and web pages do not open.)
+  (Web pages do not open; a picture can be the page's reference, below.)
 - Settings in `~/.config/charcoal/prefs.json` (`"uiscale": 2` doubles the window for big screens).
 
 ## Frames and animation
@@ -178,6 +178,26 @@ empty cells; Alt+O), **Play** (Ctrl+P, at 1/2x to 4x, looping or once). Undo cov
   home). Saved, the frames are one stream with a clear between them; their hold times come from the modem speed.
 - Save as **Animation (.gif)** or **Animation, APNG (.png)** writes every frame for its hold time. A format that
   holds one picture (`.scr`, `.png`, `.xb` ...) writes the frame on show and says the others are only in CharEdit.
+
+## Reference picture, shapes and brushes
+
+![A PC page traced over a reference picture: the sun and tree drawn in half blocks, the hill shaded](docs/screenshots/reference.png)
+
+- **Reference picture** to trace over (the **Ref** gadget, Ctrl+Shift+I, or drop a PNG, JPEG, GIF, BMP or WebP on
+  the window): it shows in the empty cells, or faintly over everything; fainter / stronger (Ctrl+[ / Ctrl+]),
+  hide (Ctrl+Shift+R), greys, move (Ctrl+Shift+M then drag or arrows, or Ctrl+drag), size (fit width, fit page,
+  1:1, bigger, smaller). Only shown: never turned into characters, never saved or exported. It is remembered with
+  the art file (`prefs.json` `references`) and in the autosave.
+- **Shape** tool: line, box or ellipse, dragged, outlined or filled (Shift at the press, or Filled); in the brush,
+  in box-drawing lines (PC single or double, PETSCII and Atari lines) or in half blocks (PC; sixels on teletext).
+  Right button erases. One undo step each.
+- **Shade** brush (Draw): left steps a cell up the shades, right down (PC: empty, the three shade blocks, the full
+  block; PETSCII: the checkerboard, then reversed; other pages a short ASCII ramp). Each page type's own sequence
+  can go in `prefs.json`, e.g. `"shades": {"amiga": [32, 46, 58, 43, 35]}`.
+- **Mirror**: what Draw, Colour, Half and Shape put down is mirrored left-right and/or top-bottom around the page's
+  centre, characters as their mirror twins.
+- **Colour only / Char only**: Draw and Shape paint just the colours or just the characters.
+- These options sit under the brush while a drawing tool is in use.
 
 ## Keys
 
@@ -210,6 +230,9 @@ Delete, Insert, Esc. The defaults, the PC ANSI editors' (Moebius, PabloDraw, The
 | Alt+, / Alt+. (Alt+PgUp / PgDn), Alt+Home / End | previous / next frame, first / last |
 | Alt+Shift+PgUp / PgDn, Alt+[ / Alt+] | move the frame earlier / later, hold it shorter / longer |
 | Ctrl+P, Alt+O, Ctrl+Shift+F | play the frames, onion skin, show / hide the frame strip |
+| Alt+Shift+L, R, O; Alt+Shift+F, B | Shape tool: line, box, ellipse; filled, style (brush / lines / half blocks) |
+| Alt+Shift+S, Alt+Shift+H / V, Alt+Shift+K / C | shade brush, mirror left-right / top-bottom, colour only / character only |
+| Ctrl+Shift+I, Ctrl+Shift+R, Ctrl+[ / Ctrl+], Ctrl+Shift+M, Ctrl+Alt+= / - | reference: open, show / hide, fainter / stronger, move, bigger / smaller |
 
 Dragging inside a selection with the Select tool moves it (one undo step).
 
@@ -258,6 +281,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | Petmate's file formats | Petmate, C. T. Lin | MIT, `third_party/petmate-LICENSE.txt` |
 | SDL2 (linked into the Windows and Mac programs) | libsdl.org, Sam Lantinga | zlib, `third_party/SDL2-LICENSE.txt` |
 | go-sdl2, the Go binding to SDL2 | github.com/veandco/go-sdl2 | BSD 3-clause, `third_party/go-sdl2-LICENSE.txt` |
+| BMP and WebP readers (reference pictures) | golang.org/x/image, The Go Authors | BSD 3-clause, `third_party/x-image-LICENSE.txt` |
 | Test art in `testdata/alove` | ansilove's tests | BSD 2-clause, `testdata/alove/LICENSE-ansilove.txt` |
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE

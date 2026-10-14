@@ -186,6 +186,21 @@ func init() {
 		{"onion", "Alt+O", "Onion skin on / off: the frame before, faint, under the empty cells", func() { a.toggleOnion() }},
 		{"frames_strip", "Ctrl+Shift+F", "Show / hide the frame strip", func() { a.toggleStrip() }},
 
+		// The reference picture (refimage.go).
+		{"ref_open", "Ctrl+Shift+I", "Open a picture as the page's reference, to trace over (never saved with the art)", openRefRequester},
+		{"ref_show", "Ctrl+Shift+R", "Show / hide the reference picture", func() { a.refShow() }},
+		{"ref_fainter", "Ctrl+[", "Reference fainter", func() { a.refFade(-1) }},
+		{"ref_stronger", "Ctrl+]", "Reference stronger", func() { a.refFade(1) }},
+		{"ref_move", "Ctrl+Shift+M", "Move the reference: drag, or arrows (Shift: a pixel), + and - size it; again, Return or Esc ends (Ctrl+drag moves it any time)", func() { a.toggleRefMove() }},
+		{"ref_bigger", "Ctrl+Alt+=", "Reference bigger", func() { a.refScaleBy(1.1) }},
+		{"ref_smaller", "Ctrl+Alt+-", "Reference smaller", func() { a.refScaleBy(1 / 1.1) }},
+		{"ref_fit_width", "", "Reference as wide as the page", func() { a.refSize("width") }},
+		{"ref_fit_page", "", "Reference fits the page", func() { a.refSize("page") }},
+		{"ref_actual", "", "Reference at 1:1 (a picture pixel for a pixel of the font)", func() { a.refSize("1") }},
+		{"ref_over", "", "Reference over everything (faint) or under the art (in the empty cells)", func() { a.refOver() }},
+		{"ref_grey", "", "Reference in greys or in colour", func() { a.refGrey() }},
+		{"ref_remove", "", "Take the reference picture away", func() { a.refRemove() }},
+
 		{"select_left", "Shift+Left", "Select with the keyboard: from the cursor, growing as it moves (Esc lets go)", func() { a.selectKey("Left") }},
 		{"select_right", "Shift+Right", "", func() { a.selectKey("Right") }},
 		{"select_up", "Shift+Up", "", func() { a.selectKey("Up") }},
@@ -207,6 +222,18 @@ func init() {
 		{"tool_pick", "Alt+P", "Pick tool", func() { a.toolKey("pick") }},
 		{"tool_select", "Alt+S", "Select tool", func() { a.toolKey("select") }},
 		{"tool_half", "Alt+B", "Half tool (PC pages), Sixel tool (teletext)", func() { a.toolKey("half") }},
+
+		// Shapes and brushes (shapes.go).
+		{"shape_line", "Alt+Shift+L", "Shape tool: line (drag; the shape tool's choices are under the brush)", func() { a.shapeKey(shapeLine) }},
+		{"shape_box", "Alt+Shift+R", "Shape tool: box", func() { a.shapeKey(shapeBox) }},
+		{"shape_ellipse", "Alt+Shift+O", "Shape tool: ellipse", func() { a.shapeKey(shapeEllipse) }},
+		{"shape_filled", "Alt+Shift+F", "Shapes filled or outlined (Shift at the press does the other)", func() { a.toggleFilled() }},
+		{"shape_style", "Alt+Shift+B", "Shapes in the brush, box-drawing lines or half blocks (by page type)", func() { a.cycleShapeStyle() }},
+		{"shade_brush", "Alt+Shift+S", "Shade brush on / off (Draw: left steps a cell up the shades, right down)", func() { a.toggleShade() }},
+		{"mirror_left_right", "Alt+Shift+H", "Symmetry: mirror what is drawn left-right around the page's centre", func() { a.toggleMirror(mirrorX) }},
+		{"mirror_top_bottom", "Alt+Shift+V", "Symmetry: mirror what is drawn top-bottom", func() { a.toggleMirror(mirrorY) }},
+		{"paint_colour_only", "Alt+Shift+K", "Draw and shapes paint only colours (the characters stay)", func() { a.setPaintOnly("colour") }},
+		{"paint_char_only", "Alt+Shift+C", "Draw and shapes paint only characters (the colours stay)", func() { a.setPaintOnly("char") }},
 
 		{"fg_previous", "Ctrl+Up", "Foreground colour -1", func() { a.stepFg(-1) }},
 		{"fg_next", "Ctrl+Down", "Foreground colour +1", func() { a.stepFg(1) }},

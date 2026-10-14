@@ -12,29 +12,31 @@ import (
 )
 
 type Prefs struct {
-	Mode      string             `json:"mode"`
-	Font      map[string]string  `json:"font"`
-	Palette   map[string]string  `json:"palette"`
-	Zoom      int                `json:"zoom"`
-	Ch8       bool               `json:"ch8"`
-	Smear     bool               `json:"smear"`
-	Fkeys     map[string][][]int `json:"fkeys"`
-	Custom    []string           `json:"custom"`
-	Dir       string             `json:"dir"`
-	Baud      int                `json:"baud"`
-	UIScale   int                `json:"uiscale"`
-	Grid      bool               `json:"grid"`
-	Machine   string             `json:"machine"`
-	STRes     string             `json:"st_resolution"`
-	ViewAuto  bool               `json:"view_auto_scroll"`
-	ViewStep  bool               `json:"view_step_scroll"`
-	ViewSpeed float64            `json:"view_scroll_speed"`
-	C64Asked  bool               `json:"c64asked"`        // the first-run question about the C64 character set
-	NoBackup  bool               `json:"no_backup"`       // saving over a file does not keep the old one as .bak
-	NoStart   bool               `json:"no_start_screen"` // start on an empty page, not the start screen
-	Recent    []string           `json:"recent"`          // the last files opened or saved, newest first
-	Width     int                `json:"width"`
-	Height    int                `json:"height"`
+	Mode      string              `json:"mode"`
+	Font      map[string]string   `json:"font"`
+	Palette   map[string]string   `json:"palette"`
+	Zoom      int                 `json:"zoom"`
+	Ch8       bool                `json:"ch8"`
+	Smear     bool                `json:"smear"`
+	Fkeys     map[string][][]int  `json:"fkeys"`
+	Custom    []string            `json:"custom"`
+	Dir       string              `json:"dir"`
+	Baud      int                 `json:"baud"`
+	UIScale   int                 `json:"uiscale"`
+	Grid      bool                `json:"grid"`
+	Machine   string              `json:"machine"`
+	STRes     string              `json:"st_resolution"`
+	ViewAuto  bool                `json:"view_auto_scroll"`
+	ViewStep  bool                `json:"view_step_scroll"`
+	ViewSpeed float64             `json:"view_scroll_speed"`
+	C64Asked  bool                `json:"c64asked"`             // the first-run question about the C64 character set
+	NoBackup  bool                `json:"no_backup"`            // saving over a file does not keep the old one as .bak
+	NoStart   bool                `json:"no_start_screen"`      // start on an empty page, not the start screen
+	Recent    []string            `json:"recent"`               // the last files opened or saved, newest first
+	Refs      map[string]*RefPref `json:"references,omitempty"` // each art file's reference picture (refimage.go)
+	Shades    map[string][]int    `json:"shades,omitempty"`     // the shade brush's characters per page type, lightest first
+	Width     int                 `json:"width"`
+	Height    int                 `json:"height"`
 }
 
 var prefs Prefs

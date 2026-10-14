@@ -542,6 +542,7 @@ func (a *App) drawBar(u *UI) int {
 		a.grid = v
 		savePrefs()
 	}
+	a.refGadget(u, fl.place(buttonW("Ref")))
 	layouts := []string{"One page", "Side by side", "Top / bottom"}
 	ids := []string{"one", "cols", "rows"}
 	lcur := 0
@@ -711,6 +712,7 @@ func (a *App) drawPage(u *UI, id string) {
 			a.drawCell(fb, ox+x*colPx, oy+y*rowPx, z, a.doc.get(x, y))
 		}
 	}
+	a.drawRef(fb, ox, oy, x0, x1, y0, y1)
 	a.drawOnion(fb, ox, oy, x0, x1, y0, y1)
 	if a.grid {
 		w := min(p.w, cw-a.scrollX)
@@ -743,12 +745,13 @@ func (a *App) drawPage(u *UI, id string) {
 	}
 	if a.hover != nil && a.float == nil && a.tool != "type" && a.tool != "select" && a.playing == nil && viewer == nil {
 		r := cell(a.hover.x, a.hover.y, 1, 1)
-		if a.tool == "half" && a.tt() { // the sixel under the mouse
+		halfTool := a.tool == "half" || (a.tool == "shape" && a.styleNow() == "half")
+		if halfTool && a.tt() { // the sixel under the mouse
 			r.w /= 2
 			r.x += a.hover.sx * r.w
 			top := []int{0, 6, 14, 20}
 			r.y, r.h = r.y+top[a.hover.sy]*z, (top[a.hover.sy+1]-top[a.hover.sy])*z
-		} else if a.tool == "half" {
+		} else if halfTool {
 			r.h /= 2
 			r.y += a.hover.half * r.h
 		}
@@ -822,11 +825,16 @@ func (a *App) pagePress(c *Click) {
 		}
 		return
 	}
+	if c.button == 1 && a.refPress(c.x, c.y) { // the reference picture is moved (Ctrl, or its move mode)
+		a.button = c.button
+		return
+	}
 	if c.button == 2 || a.tool == "pick" {
 		a.pick(p.x, p.y)
 		return
 	}
 	a.button = c.button
+	a.strokeSeen = nil
 	switch a.tool {
 	case "type":
 		a.cx, a.cy, a.sel = p.x, p.y, nil
@@ -849,9 +857,9 @@ func (a *App) pagePress(c *Click) {
 		if a.tt() { // teletext: sixels on (left) or off (right)
 			gx, gy := p.x*2+p.sx, p.y*3+p.sy
 			if c.shift && a.last != nil {
-				line(a.last.x, a.last.y, gx, gy, func(x, y int) { a.paintSixel(x, y, c.button != 3) })
+				line(a.last.x, a.last.y, gx, gy, func(x, y int) { a.sixelSym(x, y, c.button != 3) })
 			} else {
-				a.paintSixel(gx, gy, c.button != 3)
+				a.sixelSym(gx, gy, c.button != 3)
 			}
 			a.last = &Hover{x: gx, y: gy}
 			break
@@ -862,11 +870,13 @@ func (a *App) pagePress(c *Click) {
 			col = a.bg
 		}
 		if c.shift && a.last != nil {
-			line(a.last.x, a.last.y, p.x, hy, func(x, y int) { a.paintHalf(x, y, col) })
+			line(a.last.x, a.last.y, p.x, hy, func(x, y int) { a.halfSym(x, y, col) })
 		} else {
-			a.paintHalf(p.x, hy, col)
+			a.halfSym(p.x, hy, col)
 		}
 		a.last = &Hover{x: p.x, y: hy}
+	case "shape":
+		a.shapePress(p, c.button, c.shift)
 	default: // draw, colour
 		a.pushUndo()
 		if c.shift && a.last != nil {
@@ -894,17 +904,19 @@ func (a *App) pageMotion(mx, my int) {
 	case a.float == nil:
 		a.hover = nil
 	}
-	if a.button == 0 {
+	if a.button == 0 || a.refMotion(mx, my) {
 		return
 	}
 	switch {
+	case a.tool == "shape":
+		a.shapeMotion(p)
 	case a.selecting:
 		a.sel.x1, a.sel.y1 = p.x, p.y
 	case a.tool == "half" && a.tt():
 		gx, gy := p.x*2+p.sx, p.y*3+p.sy
 		on := a.button != 3
 		if a.last != nil {
-			line(a.last.x, a.last.y, gx, gy, func(x, y int) { a.paintSixel(x, y, on) })
+			line(a.last.x, a.last.y, gx, gy, func(x, y int) { a.sixelSym(x, y, on) })
 		}
 		a.last = &Hover{x: gx, y: gy}
 	case a.tool == "half":
@@ -914,7 +926,7 @@ func (a *App) pageMotion(mx, my int) {
 			col = a.bg
 		}
 		if a.last != nil {
-			line(a.last.x, a.last.y, p.x, hy, func(x, y int) { a.paintHalf(x, y, col) })
+			line(a.last.x, a.last.y, p.x, hy, func(x, y int) { a.halfSym(x, y, col) })
 		}
 		a.last = &Hover{x: p.x, y: hy}
 	case a.tool == "draw" || a.tool == "colour":
@@ -928,6 +940,8 @@ func (a *App) pageMotion(mx, my int) {
 
 func (a *App) pageRelease() {
 	a.stripRelease()
+	a.refRelease()
+	a.shapeRelease()
 	if a.moving && a.float != nil {
 		a.dropMoved()
 	}
@@ -954,6 +968,7 @@ var tools = []struct{ id, name, hint string }{
 	{"fill", "Fill", "Fill: fills the area of equal cells with the brush"},
 	{"pick", "Pick", "Pick: takes the character and colours of a cell (middle click does this with any tool)"},
 	{"select", "Select", "Select: drag a block; copy, cut, paste, Del"},
+	{"shape", "Shape", "Shape: drag a line, box or ellipse in the brush (the choices under the brush); Shift: filled; right button erases"},
 	{"half", "Half", "Half blocks: paint pixels of half a cell (PC page; Sixel on a teletext page)"},
 }
 
@@ -1184,6 +1199,9 @@ func (a *App) drawPane(u *UI, pane Rect) {
 			}
 			bx += r.w + 4
 		}
+	}
+	if a.sel == nil && a.float == nil {
+		a.drawToolOptions(u, br.x+br.w+8, by+smallH+6)
 	}
 	fb.clip = old
 }

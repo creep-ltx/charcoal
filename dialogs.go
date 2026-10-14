@@ -116,8 +116,9 @@ type FileReq struct {
 	err     string
 	lastClk time.Time
 	lastSel int
-	selPath string // the path field as the selection set it: Return then acts on the selection
-	after   func() // save: what to do once the page is saved
+	selPath string       // the path field as the selection set it: Return then acts on the selection
+	after   func()       // save: what to do once the page is saved
+	pick    func(string) // open: the file goes here instead of opening as a page (the reference picture)
 }
 
 var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "tt", "c64"}
@@ -342,6 +343,10 @@ func (d *FileReq) ok() {
 		return
 	}
 	closeDialog()
+	if d.pick != nil {
+		d.pick(p)
+		return
+	}
 	a.openPath(p, openAs[d.choice])
 }
 
@@ -677,9 +682,12 @@ MOUSE
 Draw: left paints the brush (character + colours), right erases, Shift+click draws a line from the last point.
 Colour: left sets the foreground, right the background (on a C64 page: the foreground only).
 Fill: left fills equal cells with the brush.
+Shape: drag a line, box or ellipse (the choice under the brush), in the brush, in box-drawing lines (PC single or double, PETSCII and Atari lines) or in half blocks (PC; sixels on teletext). Shift at the press: filled (or the other way with Filled on). Right button: erases (half blocks: the background colour). One undo step a shape.
+Under the brush, while drawing: Shade (left steps a cell up the shades (on PC pages from empty through the three shade blocks to the full block), right down; prefs.json "shades" can give each page type its own, e.g. "shades": {"amiga": [32, 46, 58, 43, 35]}), Colour only / Char only (paint just the colours or just the characters), and the mirror (what is drawn is mirrored around the page's centre, characters as their mirror twins).
 Half (PC): left paints half-cell pixels in the foreground, right in the background colour. Sixel (teletext): left sets, right clears a graphics pixel.
 Select: drag a block; drag inside a selected block to move it (Esc while moving puts it back). While pasting, the block follows the mouse: left click stamps it, Shift+click stamps it without its blank cells, right click or Esc stops.
 Middle click or Pick: take a cell's character and colours.
+Ctrl+drag moves the reference picture (any tool).
 Characters strip: click = brush (types it with Type). Right click = put on the active F-key.
 Colours: left = foreground, right = background (PETSCII and Atari: the screen colour; middle click: the border), Shift+click = change the colour.
 Pop-up gadgets: click opens the list, right click steps to the next item.
@@ -703,7 +711,9 @@ Teletext pages are 40 x 25 cells of 7-bit codes as on a BBC Micro in Mode 7 or a
 SAVE AS
 ANSI, plain text, UTF-8 text, PC .bin, PCBoard .pcb, Avatar .avt, ATASCII .ata, Atari ST .vt, ZX Spectrum .scr, teletext .tti, .ep1 and edit.tf links (.url), XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border), a web page (.html) and an animation of the frames (.gif, or APNG .png). Typing a file ending picks the format. Saving under the name of another file that is already there asks first.
 OPENING
-Everything above that holds characters opens again: ANSI, text, .bin, XBin, .pcb, .avt, .ata (also as .txt, recognised by its bytes), .vt, .scr, .tti, .ep1, edit.tf links, .seq, .c, .petmate, and C64 programs saved by CharEdit; also iCEDraw .idf, ArtWorx .adf and TundraDraw .tnd. A .c or .petmate with several screens and a .tti carousel open as frames. Pictures and web pages do not open.
+Everything above that holds characters opens again: ANSI, text, .bin, XBin, .pcb, .avt, .ata (also as .txt, recognised by its bytes), .vt, .scr, .tti, .ep1, edit.tf links, .seq, .c, .petmate, and C64 programs saved by CharEdit; also iCEDraw .idf, ArtWorx .adf and TundraDraw .tnd. A .c or .petmate with several screens and a .tti carousel open as frames. Web pages do not open; a picture opened or dropped can be the page's reference (below).
+REFERENCE PICTURE
+A picture (PNG, JPEG, GIF, BMP, WebP) to trace over: the Ref gadget, ` + keyName("ref_open") + `, or drop it on the window. It shows in the page's empty cells (or faintly over everything), and can be faded, hidden, shown in greys, moved (` + keyName("ref_move") + `: drag or arrows, Shift a pixel, + and - size it; or Ctrl+drag) and sized (fit width, fit page, 1:1, bigger, smaller). It is only shown: never turned into characters, never saved or exported with the art. CharEdit remembers it with the art file (in prefs.json) and in the autosave.
 FRAMES
 A page can hold several frames: ` + keyName("frame_new") + ` adds an empty one, ` + keyName("frame_duplicate") + ` copies the frame, ` + keyName("frame_previous") + ` / ` + keyName("frame_next") + ` go through them. The strip under the page numbers them (click to go, drag to move) and has each frame's hold time (how long it shows when played) and New, Copy, Delete, Onion (the frame before, faint, under the empty cells), Play, Loop and the speed. Width and crop change every frame; each frame has its own height. Undo goes back through all of it, to the frame each step changed.
 Saved as .c, .petmate or .tti every frame is kept (a .tti keeps each subpage's other lines; its hold is the CT line). ANSI, .seq, .ata and .vt save the frames as one stream with a clear screen between them; their speed is the modem's, so the hold times are not kept. A file that clears the screen between pictures opens as one picture and says so: ` + keyName("frames_strip") + ` shows the strip with Split (at each clear, or at each cursor home). Formats of one picture (.scr, .xb, .png ...) write the frame on show, and the page stays unsaved. Save as .gif or APNG for an animation.

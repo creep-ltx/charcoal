@@ -54,6 +54,7 @@ type autosaveMeta struct {
 	Cur          int             `json:"frame,omitempty"`       // the frame being worked on
 	Frames       []autosaveFrame `json:"frames,omitempty"`      // a page of several frames: their cells follow one another in .cells
 	Restructured bool            `json:"restructured,omitempty"`
+	Ref          *RefPref        `json:"reference,omitempty"` // the page's reference picture
 }
 
 // autosaveFrame is one frame of an autosaved page.
@@ -107,6 +108,9 @@ func writeAutosave(t *Tab) error {
 		Title: t.info.title, Author: t.info.author, Group: t.info.group, WriteSauce: t.info.writeSauce,
 		Clear: t.info.clear, Notes: t.info.notes}
 	m.SrcKind = t.srcKind
+	if t.ref != nil {
+		m.Ref = t.ref.pref()
+	}
 	if t.frames != nil {
 		m.Cur, m.Restructured = t.cur, t.restructured
 		for i, f := range t.frames {
@@ -300,6 +304,7 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 		}
 		a.doc = docs[0]
 	}
+	a.restoreRef(m.Ref)
 	a.gen = nextGen() // changed, not saved
 	a.dirty = true
 	a.cx, a.cy = 0, 0

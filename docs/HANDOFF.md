@@ -53,6 +53,33 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Not done (design step 11): delta stream writing, CharView playing frames, onion of the next frame, timed capture
   of scrolling ANSImations.
 
+## Reference picture, shapes and brushes (2026-10-14, roadmap 2.2 and 2.4)
+
+- `refimage.go`: `Tab.ref *RefImage` (pixels ARGB, x/y in font pixels of the page at zoom 1, scale = page pixels
+  per picture pixel, opacity %, hidden, over, grey). Pictures: image/png, jpeg, gif + golang.org/x/image bmp and
+  webp (v0.30.0: later versions want Go 1.26; BSD, `third_party/x-image-LICENSE.txt`); over 16 M pixels refused.
+  `drawRef` (called in `drawPage` before the onion) blends it into the cells `onionBlank` calls empty, or into
+  all with `over`; per-column/row lookup tables, nearest neighbour at screen resolution. Exports never see it
+  (`renderDoc` draws cells only; TestRefNeverExported). `openPath` asks "use as reference?" for a picture
+  (`isPicture` by magic) before opening a tab; the Ref gadget's pop-up (`refMenu`) and `FileReq.pick` open one.
+  Remembered: `prefs.Refs` (absolute art path -> `RefPref`, the 200 most recently used), written on every change
+  and on Save as (`writeOut` calls `rememberRef`); `autosaveMeta.Ref`. Move mode (`a.refMove`): `refKey` takes the
+  arrows / + / - / Return / Esc before the key table, typing is held; Ctrl+drag moves it any time (`refPress`).
+- `shapes.go`: `drawOpts` (embedded in App: shape, filled, style, mirror bits, shade, paintOnly, drag state).
+  `shapePoints` (line via `line`, box with box-piece kinds, ellipse = Zingl's rectangle algorithm with the tip
+  loop `<= b`, filled rows), `symPoints` (mirror around the centre, a point on the centre line once),
+  `mirrorCell` (Font.mapped), `putCell` (colour/char only; on PETSCII/Atari pages bit 7 = reverse counts as
+  colour). A shape is one undo step: pressed = `pushUndo`, each motion copies the undo snapshot's cells back and
+  draws again. Half blocks / sixels use `halfSym` / `sixelSym` (the Half and Sixel tools mirror too). Shade:
+  `shadeSteps` per mode (PC 32 B0 B1 B2 DB; C64 screen codes 32 66 A0; Atari/ZX/Amiga/ST ASCII ramps; none on
+  teletext), `prefs.Shades` overrides; `strokeSeen` makes a stroke step each cell once. Box pieces: PC CP437
+  single/double, C64 screen codes 40 5D 70 6E 6D 7D, ATASCII 12 7C 11 05 1A 03 (all checked on screen).
+- UI: one Shape button (tools pane), the options under the brush (`drawToolOptions`, where the block buttons go
+  while a block is selected), the Ref button in the bar. Keys: two blocks in keys.go (Alt+Shift+L/R/O/F/B/S/H/V/K/C;
+  Ctrl+Shift+I/R/M, Ctrl+[ ], Ctrl+Alt+= -, the rest without a default). Script: `drag x0 y0 x1 y1 shift`, `drop PATH`.
+- Not done: Marq's left/right Shift for colour/character only, PETSCII rounded corners (upper set only), shapes
+  on the Colour tool, a reference per frame.
+
 ## Keys and safety (2026-10-13, evening)
 
 - `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's
@@ -146,4 +173,4 @@ The goal and the plan: docs/roadmap.md (the go-to editor for text artists on eve
 - ~/Projects/Knowledge/bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
 - ~/Projects/Knowledge/go/sdl2-desktop-gui.md: the GUI approach and headless testing.
 
-Last updated 2026-10-14 (frames and animation; release 0.1b3 tagged before them).
+Last updated 2026-10-14 (reference picture, shapes and brushes; frames and animation; release 0.1b3 tagged before them).

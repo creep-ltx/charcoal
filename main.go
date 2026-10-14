@@ -359,7 +359,7 @@ func handleEvent(ev sdl.Event) bool {
 			if a.dialog != nil {
 				a.msg("Close the requester first, then drop " + filepath.Base(e.File) + " again")
 			} else {
-				a.openPath(e.File, "auto")
+				a.openPath(e.File, "auto") // a picture: asks whether it is the page's reference
 			}
 		}
 	default:
@@ -378,6 +378,10 @@ func textInput(s string) {
 	}
 	// Ctrl and left Alt are shortcuts; right Alt is AltGr (see shortcutMod).
 	if a.dialog != nil || a.playing != nil || ui.popup != nil || shortcutMod(sdl.GetModState()) {
+		return
+	}
+	if a.refMove {
+		a.msg("Moving the reference: Return or Esc ends it, then type")
 		return
 	}
 	a.start = false // typing starts on a page of the last used type
@@ -491,6 +495,9 @@ func editorKey(k string, ctrl, shift, alt bool) {
 		return
 	}
 	if a.start && !ctrl && !alt && a.startKey(k, shift) {
+		return
+	}
+	if a.refMove && !ctrl && !alt && a.refKey(k, shift) {
 		return
 	}
 	if runKey(combo{modsOf(ctrl, alt, shift), k}) {

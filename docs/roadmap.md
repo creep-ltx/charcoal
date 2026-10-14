@@ -46,12 +46,16 @@ against each platform's best editor. Each step says what it wins.
    hold time, playback; ANSImation built frame by frame or split from a file, PETSCII/ATASCII/VT52 animations,
    teletext carousels; export GIF and APNG (and the stream for real time). Multi-screen .c/.petmate open as
    frames, not tabs. Later: delta streams, CharView playing frames, onion of the next frame.
-2. **Reference image** to trace over: open, move, scale, fade, hide (not converted into characters: the
-   scene bans conversions, so this stays a tracing aid).
+2. [x] **Reference image** to trace over (done 2026-10-14): open (Ref gadget, Ctrl+Shift+I, or drop a PNG / JPEG
+   / GIF / BMP / WebP), move (drag, arrows, Ctrl+drag), scale (fit width, fit page, 1:1, steps), fade, greys,
+   hide, under the art or faintly over it; remembered per art file and in the autosave; never converted into
+   characters (the scene bans conversions) and never exported.
 3. **Own fonts and character sets**: load .fnt/.psf/.f16 (PC), Atari .fnt, C64 .64c/charset .bin,
    Spectrum 768-byte sets and UDGs, kept with the art (XBin, .prg); a small font editor.
-4. **Shapes and brushes**: line (drag), rectangle, ellipse (filled or not), a shade brush (░▒▓█),
-   symmetry drawing, colour-only / character-only painting.
+4. [x] **Shapes and brushes** (done 2026-10-14): the Shape tool (line, box, ellipse, outlined or filled) in the
+   brush, in box-drawing lines (PC single/double, PETSCII, ATASCII) or in half blocks / sixels; a shade brush
+   (░▒▓█, per page type, own sequences in prefs.json); symmetry (left-right, top-bottom); colour-only /
+   character-only painting. Later: Marq's left/right Shift for colour/character only, rounded PETSCII corners.
 
 ## Step 3: compo-ready (wins: party entrants, the most active artists)
 
@@ -87,4 +91,4 @@ against each platform's best editor. Each step says what it wins.
 - Palette editing beyond 16 colours.
 - Not planned: Shift-JIS AA (proportional, scene gone), RIPscrip (vector, not text).
 
-Last updated 2026-10-14 (step 2.1 frames done; 0.1b3 released).
+Last updated 2026-10-14 (steps 2.1 frames, 2.2 reference picture and 2.4 shapes and brushes done; 0.1b3 released).
