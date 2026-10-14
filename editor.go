@@ -1160,6 +1160,9 @@ func (a *App) textBlock(text string) *Block {
 
 func (a *App) reparse() {
 	a.frames, a.cur, a.restructured = nil, 0, false
+	if a.reparseEditor() {
+		return
+	}
 	switch a.srcKind {
 	case "pcb", "avt":
 		cols := a.forceCols
@@ -1249,6 +1252,9 @@ var seqExt = regexp.MustCompile(`(?i)\.(seq|pet)$`)
 // loadBytes reads a file into the current tab; as is "auto", "amiga", "pc" or "c64".
 func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.srcKind, a.ownFont, a.ownLower, a.ownPal = "", nil, nil, nil
+	if a.loadEditor(b, name, path, as) { // other editors' files (editorformats.go)
+		return
+	}
 	if what := notArt(b); what != "" && as == "auto" {
 		a.msg("Could not open " + name + ": it is " + what + ", not art")
 		return
@@ -2221,6 +2227,17 @@ var formats = []Format{
 	{"gif", "Animation (.gif)", ".gif", "amiga pc c64 atari st zx tt"},
 	{"apng", "Animation, APNG (.png)", ".png", "amiga pc c64 atari st zx tt"},
 	{"html", "Web page (.html)", ".html", "amiga pc c64 atari st zx"},
+	// The files of other editors (editorformats.go).
+	{"idf", "For other editors: iCEDraw (.idf)", ".idf", "amiga pc"},
+	{"adf", "For other editors: ArtWorx (.adf)", ".adf", "amiga pc"},
+	{"tnd", "For other editors: TundraDraw (.tnd)", ".tnd", "amiga pc"},
+	{"icy", "For other editors: IcyDraw (.icy)", ".icy", "amiga pc"},
+	{"xp", "For other editors: REXPaint (.xp)", ".xp", "pc"},
+	{"psci", "For other editors: Playscii (.psci)", ".psci", "amiga pc c64 atari"},
+	{"pet", "For other editors: PETSCII editor (.pet)", ".pet", "c64 (C64)"},
+	{"marqbas", "For other editors: PETSCII editor BASIC (.bas)", ".bas", "c64 (C64)"},
+	{"marqasm", "For other editors: PETSCII editor ACME (.s)", ".s", "c64 (C64)"},
+	{"pmjson", "For other editors: Petmate JSON (.json)", ".json", "c64"},
 }
 
 // modeFormats are the formats the current page can be saved in.
@@ -2395,6 +2412,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	case "gif", "apng":
 		return a.writeAnim(fmtID)
 	}
+	if out, ok, err := a.encodeEditor(fmtID, d); ok {
+		return out, err
+	}
 	return nil, fmt.Errorf("unknown format %s", fmtID)
 }
 
@@ -2490,7 +2510,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ")
+	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID]
 	if own && a.nFrames() > 1 && !framesFormats[fmtID] {
 		// One picture: written as an export, so the page is not taken for saved.
 		a.lastDir = filepath.Dir(path)
@@ -2503,6 +2523,9 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
 		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg", "pcb": "pcb", "avt": "avt", "tti": "tti"}[fmtID]
+		if editorOwn[fmtID] {
+			a.srcKind = fmtID
+		}
 		a.markSaved()
 		dropAutosave(a.Tab)
 		a.rememberRef() // the reference goes with the file's new name
