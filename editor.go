@@ -2132,6 +2132,8 @@ var formats = []Format{
 	{"petmate", "Petmate workspace (.petmate)", ".petmate", "c64"},
 	{"png", "Picture (.png)", ".png", "amiga pc c64 atari st zx tt"},
 	{"png2", "Picture, twice the size (.png)", ".png", "amiga pc c64 atari st zx tt"},
+	{"gif", "Animation (.gif)", ".gif", "amiga pc c64 atari st zx tt"},
+	{"apng", "Animation, APNG (.png)", ".png", "amiga pc c64 atari st zx tt"},
 	{"html", "Web page (.html)", ".html", "amiga pc c64 atari st zx"},
 }
 
@@ -2237,24 +2239,11 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	case "html":
 		return a.writeHTML(), nil
 	case "png", "png2":
-		H, z := a.cellH(), 1
+		z := 1
 		if fmtID == "png2" {
 			z = 2
 		}
-		rows := max(1, min(d.rows, 32000/(H*z)))
-		if a.screen() {
-			rows = max(rows, map[bool]int{true: 25, false: 24}[a.c64()])
-		}
-		border := 0
-		fb := &FB{}
-		if a.screen() || a.zx() { // with the machine's border around it
-			border = 32 * z
-			fb.resize(d.cols*a.cellW()*z+2*border, rows*H*z+2*border)
-			fb.fill(Rect{0, 0, fb.w, fb.h}, a.pal[d.borderColour()])
-		} else {
-			fb.resize(d.cols*a.cellW()*z, rows*H*z)
-		}
-		a.paintCells(fb, border, border, z, func(x, y int) uint32 { return d.get(x, y) }, d.cols, rows)
+		fb := a.renderDoc(d, z)
 		img := image.NewRGBA(image.Rect(0, 0, fb.w, fb.h))
 		for i, p := range fb.px {
 			img.Pix[i*4], img.Pix[i*4+1], img.Pix[i*4+2], img.Pix[i*4+3] = byte(p>>16), byte(p>>8), byte(p), 255
@@ -2264,6 +2253,8 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 			return nil, err
 		}
 		return buf.Bytes(), nil
+	case "gif", "apng":
+		return a.writeAnim(fmtID)
 	}
 	return nil, fmt.Errorf("unknown format %s", fmtID)
 }
