@@ -281,6 +281,45 @@ Logic), with only whole seconds (FAME `~W`, CNet `{W}`, Image BBS `£W`) or a fi
 Telegard `@8`), Hydra (its timed pause shows a prompt) and Ami-Express 4.x (its manual has no `~w`). PETSCII,
 ATASCII and VT52 files get no codes.
 
+## Animate a folder
+
+For a sysop with dozens of screens (menus, logon, bulletins) and no wish to open each: **Animate a folder**
+(Alt+Shift+J, or the button in the Open requester) animates every art file of a folder (and its subfolders, if
+ticked) for your board in one go, into a new folder (`<folder>-animated`, the names kept). The originals are
+never touched unless you tick *Replace the originals*, and then each is kept as `.bak`.
+
+![The Animate a folder requester](docs/screenshots/animate-folder.png)
+
+- **Effect**: one for every file, or *Random*: a different one for each, from all of them or the ticked ones,
+  never the same twice in a row, Reverse and Flip at random. The seed is shown and can be typed: the same seed
+  gives the same files again.
+- **Pace and board** as in Animate: a pause every N cells, the frame effects' hold, My BBS / None / a board, and
+  copies for other boards.
+- **Versions of each screen**: N animations of every screen, each with its own effect, named the way the board
+  picks one at random:
+
+| Board | Versions | How the board picks one |
+|---|---|---|
+| Ami-Express 5 | `001.LOGON.TXT`, `002.LOGON.TXT` ... | `LOGON.TXT` holds `~3SR_BBS:Node0/Screens/LOGON\|` (the screens folder is asked for) |
+| Mystic 1.10 | `logon.ans`, `logon.an1` ... `logon.an8` (9 at most) | by itself, when `logon.an1` is there |
+| Synchronet | `logon.ans`, `logon1.ans`, `logon2.ans` ... | a menu name with a wildcard: `bbs.menu("logon*")`, `@MENU:logon*@` (the stock logon.js shows `logon`, `logon1` ... one after another) |
+| PCBoard, Tempest, none | `LOGON.ANS`, `LOGON-2.ANS` ... | no random screens known: just numbered |
+
+- A **report** at the end: each file, the effect (and the seed of the effects with random parts), the size before
+  and after, and what was skipped and why (not art, a teletext or Spectrum page, already an animation, a
+  PETSCII file on a board with codes for `.ans` only ...). It is saved as `animate-report.txt` in the output
+  folder, with the command line that repeats the run.
+
+For scripts, the same without a window:
+
+```
+charedit --animate FOLDER|FILES... [--effect NAME|random] [--bbs amiexpress|mystic|pcboard|synchronet|tempest|none]
+                   [--variants N] [--seed N] [--out DIR] [--subfolders] [--replace] ...
+```
+
+It prints the report; `charedit --help` lists every option, `--effects` the effects. Exit status 0: done; 1: a
+file could not be written or nothing was animated; 2: a bad command line.
+
 ## Keys
 
 Every shortcut can be changed in `~/.config/charcoal/keys` (`action = key, key`; written with the defaults and

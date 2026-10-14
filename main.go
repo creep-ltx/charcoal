@@ -70,7 +70,12 @@ func main() {
 	}
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
 		fmt.Println("usage: charedit [FILE...]\nA character art editor for Amiga and PC ANSI, Atari, Atari ST, PETSCII (PET, VIC-20, C64, C128),\nZX Spectrum and teletext pages. Press ? in the window for the keys.")
+		fmt.Println("\n" + animateUsage)
 		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "--animate" { // Animate a folder, no window (batch.go)
+		headlessApp()
+		os.Exit(animateCLI(os.Args[2:], os.Stdout, os.Stderr))
 	}
 	a = &App{tool: "draw", fg: 7, brush: 0x2F, charHover: -1, layout: "one"}
 	a.hasC64 = loadC64Fonts()

@@ -160,6 +160,34 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Not done: reading a draw order back from a file (it opens as the picture; the order is not recognised), Amiga
   real-terminal check, TheDraw's own animation editing (limiting, markers, include files, pauses).
 
+## Animate a folder (2026-10-14, branch batch)
+
+- For sysops (not artists): every screen of a folder animated for the board at once. `batch.go` (logic + the
+  command line), `batch_ui.go` (the requester `BatchReq`: setup, progress, report; Alt+Shift+J `animate_folder`,
+  and a button in the Open requester). `batchSpec` -> `newBatchRun` (checks, lists files sorted, refuses an
+  output that is the originals' folder unless Replace) -> `step()` one file at a time (the GUI runs steps for
+  40 ms per drawn frame; `dialogAnimates` is also true while `batchBusy`) -> `reportText` / `writeReport`
+  (`animate-report.txt` in the output folder, with the command line that repeats the run).
+- Each file is read by the normal `loadBytes` in a **scratch tab** (`withScratch`: a.Tab swapped for a
+  `makeTab`, the tab, tool, F-key set, requester and message put back afterwards), given `a.order` and written by
+  `encodeFor(fmt, board, nil)`: exactly what Save would write. Non-stream sources (.bin .xb .pcb .avt .idf .adf
+  .tnd, one-screen .petmate) are written as the page's stream (.ans/.seq), `name-bin.ans` if the name is taken.
+- Random: one `rand.Rand` from the seed, used in file order only for files that get animated (`pick`): the
+  pattern (from the ticked pool, not the last one with NoRepeat; Fade in left out on pages that cannot fade),
+  Reverse/Flip (Toggles), the effect's seed. So the same seed and the same folder give the same bytes (test).
+- Versions (`variantNames`, `randomScreens`): Ami-Express `001.NAME.ext` ... + `NAME.ext` = `~<n>SR_<AEPath>NAME|`;
+  Mystic `name.ans`, `name.an1`..`.an8` (9 at most); Synchronet `name.ans`, `name1.ans` ...; others `NAME-2.ext`.
+  How each was established: ~/Projects/Knowledge/bbs/screens-variants-utf8-wide.md. Copies for other boards are
+  named their board's way + `-<id>` (copyPath).
+- Skipped with a reason: not art (`batchNotArt`: notArt's magics, Amiga icons, .bak, C source, no art ending and
+  no ESC[), unreadable, ROMs missing for PETSCII, teletext/Spectrum, several screens, already an animation
+  (`split.clears >= 2`, `fullest`), kind not ticked, a board with no codes for that format, too large, nothing drawn.
+- Tests: `batch_test.go` (seed repeatability, no repeats, ticked pool, names per board, every output through
+  bbspause_test's board models reads back as the original picture, skip reasons, originals untouched, replace +
+  .bak, command-line exit codes 0/1/2, a real-art run over /tmp/bigcheck when it is there).
+- Not done: the stub for a board copy of Ami-Express names the copy's versions only if renamed; Mystic needs the
+  base name asked without an ending (as its menus do); PETSCII/ATASCII/VT52 versions have no board naming.
+
 ## Keys and safety (2026-10-13, evening)
 
 - `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's

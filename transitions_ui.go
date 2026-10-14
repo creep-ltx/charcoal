@@ -40,7 +40,7 @@ func newSeed() int64 { return 1 + rand.Int63n(1<<31-1) }
 // dialogAnimates: the Animate requester is open (its preview plays).
 func dialogAnimates() bool {
 	_, ok := a.dialog.(*AnimReq)
-	return ok
+	return ok || batchBusy() // Animate a folder moves on while drawn (batch_ui.go)
 }
 
 func openAnimate() {

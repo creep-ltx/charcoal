@@ -49,6 +49,9 @@ against each platform's best editor. Each step says what it wins.
    - [x] **Animation templates (TheDraw's scan patterns)** (done 2026-10-14, transitions.go): a request from the
      Ami-Express sysops; TheDraw's 14 Easy Animation patterns + Reverse/Flip and Charcoal's own fades, typewriter
      and scroll, as a stream file's draw order or as frames.
+   - [x] **Animate a folder** (done 2026-10-14, batch.go): every screen of a folder animated for the board at
+     once (one effect or a random one each, from a seed), versions named the way each board picks a random
+     screen, a report; also `charedit --animate`.
 2. [x] **Reference image** to trace over (done 2026-10-14): open (Ref gadget, Ctrl+Shift+I, or drop a PNG / JPEG
    / GIF / BMP / WebP), move (drag, arrows, Ctrl+drag), scale (fit width, fit page, 1:1, steps), fade, greys,
    hide, under the art or faintly over it; remembered per art file and in the autosave; never converted into
