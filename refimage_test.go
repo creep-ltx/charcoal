@@ -138,9 +138,9 @@ func TestRefOldestForgotten(t *testing.T) {
 	for i := 0; i < maxRefPrefs; i++ {
 		prefs.Refs[filepath.Join("/old", string(rune('a'+i%26)), time.Duration(i).String())] = &RefPref{Path: pic, Used: int64(i + 1)}
 	}
-	a.path = "/new/art.ans"
+	a.path = "/new/art.ans" // kept as D:\\new\\art.ans on Windows
 	a.rememberRef()
-	if len(prefs.Refs) != maxRefPrefs || prefs.Refs["/new/art.ans"] == nil || prefs.Refs[filepath.Join("/old", "a", time.Duration(0).String())] != nil {
+	if len(prefs.Refs) != maxRefPrefs || prefs.Refs[refPrefKey(a.path)] == nil || prefs.Refs[filepath.Join("/old", "a", time.Duration(0).String())] != nil {
 		t.Fatalf("%d kept", len(prefs.Refs))
 	}
 }
