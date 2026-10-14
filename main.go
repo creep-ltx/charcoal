@@ -254,6 +254,9 @@ func pass() {
 			ui.fb.blend(Rect{0, 0, ui.fb.w, ui.fb.h}, cEdgeDk, 120)
 		}
 		a.dialog.draw(ui)
+		if ui.popup == nil {
+			ui.drawTooltip() // a requester covers the status line, where hints go
+		}
 	}
 	ui.drawPopup()
 	ui.click, ui.wheel = nil, 0

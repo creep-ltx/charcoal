@@ -530,3 +530,28 @@ func wrapBy(s string, w int, width func(string) int) []string {
 	}
 	return out
 }
+
+// drawTooltip shows the hint of the gadget under the mouse in a box beside it.
+func (u *UI) drawTooltip() {
+	if u.hint == "" || u.mx < 0 {
+		return
+	}
+	lines := wrap(u.hint, 360)
+	w := 0
+	for _, l := range lines {
+		w = max(w, textW(l))
+	}
+	r := Rect{u.mx + 14, u.my + 22, w + 16, len(lines)*lineH + 10}
+	if r.x+r.w > u.fb.w-4 {
+		r.x = max(4, u.fb.w-4-r.w)
+	}
+	if r.y+r.h > u.fb.h-4 { // no room under the mouse: above it
+		r.y = max(4, u.my-8-r.h)
+	}
+	f := u.fb
+	f.fill(r, cDark)
+	f.frame(r, cEdgeDk)
+	for i, l := range lines {
+		f.text(r.x+8, r.y+5+i*lineH, l, cHi)
+	}
+}

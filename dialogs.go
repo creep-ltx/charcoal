@@ -1053,19 +1053,14 @@ func (d *SettingsReq) draw(u *UI) {
 		}
 	}
 	u.choice("mybbs", Rect{in.x + 120, y, choiceW(boards), gadH}, boards, cur,
-		"Animated files you save (draw orders, frame effects, frames) get this board's pause codes, so they play at their pace over telnet too", func(i int) {
+		"Animated files you save (draw orders, frame effects, frames) get this board's pause codes, so they play at their pace over telnet too. None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text. Animate can choose for one page.", func(i int) {
 			prefs.MyBBS = ""
 			if i > 0 {
 				prefs.MyBBS = bbsBoards[i-1].id
 			}
 			savePrefs()
 		})
-	y += gadH + 4
-	for _, l := range wrap("Pauses in animated files. None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text. Animate can choose for one page.", in.w) {
-		fb.text(in.x, y, l, cText)
-		y += lineH
-	}
-	y += 6
+	y += gadH + 8
 	x := fb.text(in.x, y+3, "Animate warns when a file plays longer than", cText) + 8
 	u.field(Rect{x, y, digitsW(4) + 16, gadH}, &d.warn, "Seconds at the caller's speed chosen in Animate (the speed in the bar)")
 	fb.text(x+digitsW(4)+24, y+3, "s", cText)

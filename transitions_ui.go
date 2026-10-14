@@ -441,10 +441,10 @@ func (d *AnimReq) draw(u *UI) {
 			d.shuffleButton(u, x, y)
 		}
 		y += gadH + 8
-		fb.text(px, y, "The frames take the place of this frame; undo gives it back.", cText)
+		fb.text(px, y, "The frames take the place of this frame; undo gives it back.", cDim)
 		if b := boardByID(prefs.MyBBS); b != nil && b.shows(a.pageStreamFormat()) {
 			y += lineH
-			fb.text(px, y, "Saved as one stream, the holds become "+b.name+" pauses (Settings' My BBS).", cText)
+			fb.text(px, y, "Saved as one stream, the holds become "+b.name+" pauses (Settings' My BBS).", cDim)
 		}
 	} else {
 		if isEffect(d.pat) {
@@ -452,13 +452,13 @@ func (d *AnimReq) draw(u *UI) {
 			x := px + digitsW(7) + 8
 			u.field(Rect{x, y, digitsW(3) + 16, gadH}, &d.length, "How many frames the effect takes")
 			d.shuffleButton(u, x+digitsW(3)+24, y)
-			fb.text(x+digitsW(3)+32+buttonW("Shuffle"), y+3, "The file draws each frame's changes only.", cText)
+			fb.text(x+digitsW(3)+32+buttonW("Shuffle"), y+3, "The file draws each frame's changes only.", cDim)
 			y += gadH + 8
 		}
 		y = d.drawPauses(u, px, y, pw)
 		for _, l := range wrap(fmt.Sprintf("Play (%s) shows it at %s%s. Kept with the page until changed or cleared.", keyName("play"), speedName(a.baud),
 			map[bool]string{true: ", with the board's pauses"}[d.board() != ""]), pw) {
-			fb.text(px, y, l, cText)
+			fb.text(px, y, l, cDim)
 			y += lineH
 		}
 	}
@@ -549,7 +549,7 @@ func (d *AnimReq) drawPauses(u *UI, x, y, w int) int {
 	}
 	lx := fb.text(x, y+3, "BBS pauses", cText) + 8
 	u.choice("animbbs", Rect{lx, y, choiceW(items), gadH}, items, cur,
-		"The board whose pause codes the saved file gets, so it plays at its pace over telnet too (My BBS is in Settings)",
+		"The board whose pause codes the saved file gets, so it plays at its pace over telnet too (My BBS is in Settings). None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text.",
 		func(i int) {
 			switch i {
 			case 0:
@@ -586,7 +586,7 @@ func (d *AnimReq) drawPauses(u *UI, x, y, w int) int {
 		y += gadH + 6
 		if b != nil && b.shows(f) {
 			for _, l := range wrap(b.name+": "+b.note+".", w) {
-				fb.text(x, y, l, cText)
+				fb.text(x, y, l, cDim)
 				y += lineH
 			}
 		}
@@ -605,10 +605,5 @@ func (d *AnimReq) drawPauses(u *UI, x, y, w int) int {
 		}
 		cx += cw + 16
 	}
-	y += gadH + 6
-	for _, l := range wrap("None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text.", w) {
-		fb.text(x, y, l, cText)
-		y += lineH
-	}
-	return y + 6
+	return y + gadH + 6
 }

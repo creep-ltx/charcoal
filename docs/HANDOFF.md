@@ -417,6 +417,9 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   (Noto Sans 13: 19). `centre` makes requesters bigger when lineH > 16. The art window is drawn at logical
   pixels and scaled by the Window size setting, so at 2x the interface text is pixel-doubled, not rendered at
   the screen's resolution. New module: golang.org/x/text (x/image's sfnt needs it).
+- Requesters (step 5, 2026-10-14): explanations go in the gadget's hint, not in paragraphs (the BBS
+  "safe choice" text in Animate and Settings); secondary notes in cDim. While a requester is open the hint
+  shows as a tooltip by the mouse (`drawTooltip`, main.go): a big requester covers the status line.
 - Sources: 16colo.rs packs and tags, asciiarena.se (sitemap; files at /collections/<name>/<file>),
   ~/Amiga/BBS/BBS Style (412 files), NAS /mnt/nas/home/Unsorted/Junk/Latex/Petscii* (with the PETSCII editor's
   own PNGs: rendering is pixel-identical). **Not csdb.dk and not zxart.ee files: their robots.txt forbid it.**
