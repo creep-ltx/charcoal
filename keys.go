@@ -168,6 +168,9 @@ func init() {
 		{"turn", "Alt+R", "Turn the block a quarter clockwise (nothing selected: the brush character)", func() { a.blockOp(turnCW) }},
 		{"invert", "Alt+I", "Invert the block (reversed characters, or the two colours swapped)", func() { a.blockOp(invertBlock) }},
 
+		{"font_load", "Ctrl+Shift+L", "Load a font or character set for the page: PC .fnt/.f08/.f14/.f16/.psf, C64 .64c/.bin, Atari .fnt, Spectrum .ch8 and UDGs", openFontRequester},
+		{"font_editor", "Ctrl+Shift+E", "Font editor: draw the brush character's pixels, the page shows them at once; save the font as a file", openFontEditor},
+
 		{"fill_block", "Alt+F", "Fill the selection with the brush (nothing selected: the Fill tool)", func() { a.fillSel() }},
 		{"crop", "Ctrl+K", "Crop the page to the selection (Amiga and PC pages)", func() { a.cropToSel() }},
 

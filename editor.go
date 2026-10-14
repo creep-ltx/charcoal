@@ -159,7 +159,8 @@ type Tab struct {
 	page                Rect // where the page view was laid out
 	pal                 [16]uint32
 	srcKind             string      // "xbin", "marq", "petmate" or "prg" for files that are not a stream of codes; "tti" for a teletext .tti
-	ownFont             *Font       // a font that came in the file (XBin)
+	ownFont             *Font       // the page's own font: from its file (XBin, Petmate), a font file or the font editor
+	ownLower            *Font       // a PETSCII page's own lower case set
 	ownPal              *[16]uint32 // a palette that came in the file (XBin)
 	machine             string      // the Commodore machine of a PETSCII page
 	stres               string      // the resolution of an Atari ST page
@@ -251,8 +252,8 @@ func (a *App) res() STRes { return stResByID(a.stres) }
 func (a *App) screen() bool { return a.c64() || a.atari() }
 
 func (a *App) font() *Font {
-	if a.ownFont != nil && a.fontFor[a.mode] == "xbin" {
-		return a.ownFont
+	if f := a.ownInUse(); f != nil {
+		return f
 	}
 	if a.st() {
 		if f := fontByID(a.res().font); f != nil {
@@ -293,6 +294,10 @@ func (a *App) mach() Machine { return machineByID(a.machine) }
 
 // setCase picks the upper or lower case set of the page's machine.
 func (a *App) setCase(lower bool) {
+	if strings.HasPrefix(a.fontFor["c64"], ownID) && a.ownFont != nil && (!lower || a.ownLower != nil) {
+		a.fontFor["c64"] = map[bool]string{true: ownLowerID, false: ownID}[lower]
+		return
+	}
 	a.fontFor["c64"] = a.mach().family + map[bool]string{true: "lower", false: "upper"}[lower]
 }
 
@@ -306,7 +311,10 @@ func (a *App) cellH() int {
 	if a.tt() {
 		return ttH
 	}
-	if a.screen() || (a.ch8 && a.amiga()) || (a.font() == a.ownFont && a.ownFont != nil && a.ownFont.h8) {
+	if f := a.font(); (a.pc() || a.amiga()) && f.h > 0 {
+		return f.h // a font of 8 or 14 rows
+	}
+	if a.screen() || (a.ch8 && a.amiga()) {
 		return 8
 	}
 	return 16
@@ -1171,7 +1179,7 @@ func (a *App) reparse() {
 			a.doc = parseTTI(a.source)
 		}
 	} else if a.zx() {
-		d, approx := parseSCR(a.source)
+		d, approx := parseSCRFont(a.source, a.font())
 		a.doc = d
 		if approx > 0 {
 			a.msg(fmt.Sprintf("%d of 768 cells are drawings, not characters: shown as the nearest character", approx))
@@ -1209,7 +1217,7 @@ var seqExt = regexp.MustCompile(`(?i)\.(seq|pet)$`)
 
 // loadBytes reads a file into the current tab; as is "auto", "amiga", "pc" or "c64".
 func (a *App) loadBytes(b []byte, name, path, as string) {
-	a.srcKind, a.ownFont, a.ownPal = "", nil, nil
+	a.srcKind, a.ownFont, a.ownLower, a.ownPal = "", nil, nil, nil
 	if what := notArt(b); what != "" && as == "auto" {
 		a.msg("Could not open " + name + ": it is " + what + ", not art")
 		return
@@ -1234,7 +1242,6 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		}
 		a.mode, a.srcKind, a.ice = "pc", ownKind, info.ice
 		if info.font != nil {
-			info.font.h8 = info.cellH == 8
 			a.ownFont, a.fontFor["pc"] = info.font, "xbin"
 		}
 		if info.pal != nil {
@@ -1288,6 +1295,11 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		a.mode, a.srcKind = "c64", kind
 		a.screenMachine(scr[0].machine)
 		a.finishLoad(b, name, path, nil, kind)
+		if kind == "petmate" {
+			if f := petmateOwnFont(b); f != nil {
+				a.useOwnFont(f, nil, false)
+			}
+		}
 		if len(scr) > 1 {
 			a.msg(fmt.Sprintf("%s: %d screens, opened as frames (%s and %s go through them)", name, len(scr),
 				keyName("frame_previous"), keyName("frame_next")))
@@ -1358,10 +1370,8 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	}
 	a.ice = false
 	if sauce != nil {
-		for _, f := range fonts {
-			if strings.EqualFold(f.sauce, sauce.font) && f.kind == mode {
-				a.fontFor[mode] = f.id
-			}
+		if f := fontBySauce(sauce.font, mode); f != nil {
+			a.fontFor[mode] = f.id
 		}
 		a.ice = sauce.flags&1 != 0
 	}
@@ -1941,6 +1951,7 @@ func (a *App) openPath(path, as string) {
 	if a.message == "" || time.Since(a.messageAt) > time.Second {
 		a.msg("Opened " + path)
 	}
+	a.restoreArtFont(path)
 }
 
 func (a *App) anyDirty() int {
@@ -2233,7 +2244,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	case "vt52":
 		return writeVT52(d, a.res()), nil
 	case "scr":
-		return writeSCR(d), nil
+		return writeSCRFont(d, a.font()), nil
 	case "tti":
 		if a.srcKind == "tti" && isTTI(a.source) || a.nFrames() > 1 {
 			return a.writeTTIFrames(), nil
@@ -2279,7 +2290,16 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		if a.unchangedSource(fmtID) {
 			return a.source, nil
 		}
-		return writePetmateFrames(map[bool][]byte{true: a.source}[a.srcKind == "petmate"], a.petScreens()), nil
+		scr := a.petScreens()
+		ws := writePetmateFrames(map[bool][]byte{true: a.source}[a.srcKind == "petmate"], scr)
+		var lowers []int
+		for _, s := range scr {
+			lowers = append(lowers, s.lower)
+		}
+		if a.ownInUse() != nil {
+			return petmateWithFont(ws, a.ownFont, a.ownLower, lowers), nil
+		}
+		return petmateWithFont(ws, nil, nil, lowers), nil
 	case "html":
 		return a.writeHTML(), nil
 	case "png", "png2":
@@ -2417,29 +2437,30 @@ func (a *App) writeOut(path, fmtID string) bool {
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
+	note := a.keepArtFont(path, fmtID)
 	if bakErr != nil {
-		a.msg(fmt.Sprintf("Saved %s, but the old version could not be kept as .bak: %v", path, bakErr))
+		a.msg(fmt.Sprintf("Saved %s, but the old version could not be kept as .bak: %v", path, bakErr) + note)
 		return true
 	}
 	if fmtID == "vt52" {
 		if n := stUnprintable(a.doc); n > 0 {
-			a.msg(fmt.Sprintf("Saved %s; %d characters below 32 became spaces (an ST cannot print them)", path, n))
+			a.msg(fmt.Sprintf("Saved %s; %d characters below 32 became spaces (an ST cannot print them)", path, n) + note)
 			return true
 		}
 	}
 	if a.nFrames() > 1 && (fmtID == "ansi" || fmtID == "seq" || fmtID == "ata" || fmtID == "vt52") {
-		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d frames, a clear screen between them; the hold times are not kept (these files play at the modem's speed)", path, len(data), a.nFrames()))
+		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d frames, a clear screen between them; the hold times are not kept (these files play at the modem's speed)", path, len(data), a.nFrames()) + note)
 		return true
 	}
 	if fmtID == "tti" && a.nFrames() > 1 {
-		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d subpages, %d changed", path, len(data), a.nFrames(), changed))
+		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d subpages, %d changed", path, len(data), a.nFrames(), changed) + note)
 		return true
 	}
 	if framesFormats[fmtID] && a.nFrames() > 1 {
-		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d frames", path, len(data), a.nFrames()))
+		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d frames", path, len(data), a.nFrames()) + note)
 		return true
 	}
-	a.msg(fmt.Sprintf("Saved %s (%d bytes)", path, len(data)))
+	a.msg(fmt.Sprintf("Saved %s (%d bytes)", path, len(data)) + note)
 	return true
 }
 

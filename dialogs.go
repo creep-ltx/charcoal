@@ -116,9 +116,12 @@ type FileReq struct {
 	err     string
 	lastClk time.Time
 	lastSel int
-	selPath string       // the path field as the selection set it: Return then acts on the selection
-	after   func()       // save: what to do once the page is saved
-	pick    func(string) // open: the file goes here instead of opening as a page (the reference picture)
+	selPath string            // the path field as the selection set it: Return then acts on the selection
+	after   func()            // save: what to do once the page is saved
+	pick    func(path string) // a requester for something else (a font): takes the path; no format choice
+	title   string            // and its title
+	note    string            // and the line where the format choice would be
+	back    Dialog            // and the requester to go back to afterwards
 }
 
 var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "tt", "c64"}
@@ -312,6 +315,11 @@ func (d *FileReq) ok() {
 		d.err = "No such drawer: " + p
 		return
 	}
+	if d.pick != nil {
+		closeDialog()
+		d.pick(p)
+		return
+	}
 	if d.save {
 		// A typed file ending picks the format, unless the chosen one already
 		// fits it (.png normal or twice the size, .txt plain or UTF-8).
@@ -388,6 +396,9 @@ func (d *FileReq) draw(u *UI) {
 	if d.save {
 		title = "Save as"
 	}
+	if d.title != "" {
+		title = d.title
+	}
 	in := u.window(centre(720, ui.fb.h*4/5), title)
 	if d.dir == "" {
 		fb.text(in.x, in.y, rootsLabel(), cText)
@@ -440,7 +451,9 @@ func (d *FileReq) draw(u *UI) {
 	fb.text(in.x, y+3, "File", cText)
 	u.field(Rect{in.x + 48, y, in.w - 48, gadH}, &d.path, "Type a path; Enter opens it (a drawer lists it)")
 	y += gadH + 8
-	if d.save {
+	if d.pick != nil {
+		fb.text(in.x, y+3, d.note, cText)
+	} else if d.save {
 		fb.text(in.x, y+3, "Format", cText)
 		names := []string{}
 		for _, f := range a.modeFormats() {
@@ -718,6 +731,10 @@ FRAMES
 A page can hold several frames: ` + keyName("frame_new") + ` adds an empty one, ` + keyName("frame_duplicate") + ` copies the frame, ` + keyName("frame_previous") + ` / ` + keyName("frame_next") + ` go through them. The strip under the page numbers them (click to go, drag to move) and has each frame's hold time (how long it shows when played) and New, Copy, Delete, Onion (the frame before, faint, under the empty cells), Play, Loop and the speed. Width and crop change every frame; each frame has its own height. Undo goes back through all of it, to the frame each step changed.
 Saved as .c, .petmate or .tti every frame is kept (a .tti keeps each subpage's other lines; its hold is the CT line). ANSI, .seq, .ata and .vt save the frames as one stream with a clear screen between them; their speed is the modem's, so the hold times are not kept. A file that clears the screen between pictures opens as one picture and says so: ` + keyName("frames_strip") + ` shows the strip with Split (at each clear, or at each cursor home). Formats of one picture (.scr, .xb, .png ...) write the frame on show, and the page stays unsaved. Save as .gif or APNG for an animation.
 The Commodore character sets are the machines' ROMs and do not come with the program: the first run offers to download them from the VICE emulator project (each checked by its SHA-1), and so does Settings.
+
+FONTS
+The Font gadget picks the page's font: on PC pages IBM VGA, EGA 8x14, VGA 8x8 (80 x 50) and the code pages 850 and 866 (VileR's Ultimate Oldschool PC Font Pack); a SAUCE font name (IBM VGA, IBM EGA, IBM VGA50, IBM VGA 850 ...) chooses it when a file opens and is written when it is saved. "Load a font..." (` + keyName("font_load") + `, or drop the file on the window) takes a font of your own for the page: PC raw fonts (.fnt .f08 .f14 .f16, 256 characters of 8, 14 or 16 rows), PSF, an XBin's font; C64, VIC-20 and PET character sets (.64c, .bin: 2048 bytes a set, 4096 both); Atari 8-bit .fnt (1024 bytes); Spectrum sets (768 bytes) and UDGs (168 bytes). The font is named after its file. XBin and Petmate files keep the font inside; for every other format CharEdit remembers the font with the file (the status line says so) and so do the autosaves.
+The font editor (` + keyName("font_editor") + `, or "Edit the font..."): the brush character's pixels in a grid; left click or drag sets them (a set pixel clicked clears), right clears; Invert (I), Flip H (H), Flip V (V), Clear (Delete), Move (Shift+arrows), Copy and Paste (Ctrl+C, Ctrl+V), Undo and Redo (Ctrl+Z, Ctrl+Y); arrows or a click in the character map pick another character. The page shows every change at once. Editing a built-in font makes a copy of it, the page's own. Save font... writes it as a file: the name's ending says the kind (.psf, .f08/.f14/.f16, .64c, .fnt, .ch8, .udg).
 
 SETTINGS
 Kept in ` + shownDir(configDir()) + `prefs.json (a broken one is put aside as prefs.json.bad); the keys in ` + shownDir(configDir()) + `keys. Settings: the window size (1x to 4x for big screens), keeping the old version of a file as name.bak when a save writes over it (on unless switched off), and the downloads, which run while you work on.

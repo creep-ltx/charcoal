@@ -35,6 +35,7 @@ type Prefs struct {
 	Recent    []string            `json:"recent"`               // the last files opened or saved, newest first
 	Refs      map[string]*RefPref `json:"references,omitempty"` // each art file's reference picture (refimage.go)
 	Shades    map[string][]int    `json:"shades,omitempty"`     // the shade brush's characters per page type, lightest first
+	ArtFonts  map[string]ArtFont  `json:"art_fonts"`            // art file -> the font CharEdit keeps for it (fontfile.go)
 	Width     int                 `json:"width"`
 	Height    int                 `json:"height"`
 }
@@ -142,10 +143,18 @@ func savePrefs() {
 	if now, ok := readPrefsFile(); ok { // the viewer's own settings are the viewer's
 		p.ViewAuto, p.ViewStep, p.ViewSpeed = now.ViewAuto, now.ViewStep, now.ViewSpeed
 		p.C64Asked = p.C64Asked || now.C64Asked
+		for k, v := range now.ArtFonts { // fonts another CharEdit kept meanwhile
+			if _, ok := p.ArtFonts[k]; !ok && !droppedArtFonts[k] {
+				if p.ArtFonts == nil {
+					p.ArtFonts = map[string]ArtFont{}
+				}
+				p.ArtFonts[k] = v
+			}
+		}
 	}
 	// The page being worked on sets what new tabs start with.
 	for k, v := range a.fontFor {
-		if v != "xbin" { // a file's own font stays with the file
+		if !strings.HasPrefix(v, ownID) { // a page's own font stays with the page
 			a.defFont[k] = v
 		}
 	}

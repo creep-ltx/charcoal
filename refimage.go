@@ -239,7 +239,8 @@ func askReference(path string) {
 
 // openRefRequester picks a picture with the file requester.
 func openRefRequester() {
-	d := &FileReq{sel: -1, pick: func(p string) { a.openRef(p) }}
+	d := &FileReq{sel: -1, pick: func(p string) { a.openRef(p) }, title: "Reference picture",
+		note: "A picture to trace over: PNG, JPEG, GIF, BMP or WebP"}
 	d.listFirst(startDir(a.lastDir))
 	d.path.enter = d.enter
 	a.dialog = d

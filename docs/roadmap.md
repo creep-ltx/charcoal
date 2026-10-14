@@ -50,8 +50,10 @@ against each platform's best editor. Each step says what it wins.
    / GIF / BMP / WebP), move (drag, arrows, Ctrl+drag), scale (fit width, fit page, 1:1, steps), fade, greys,
    hide, under the art or faintly over it; remembered per art file and in the autosave; never converted into
    characters (the scene bans conversions) and never exported.
-3. **Own fonts and character sets**: load .fnt/.psf/.f16 (PC), Atari .fnt, C64 .64c/charset .bin,
-   Spectrum 768-byte sets and UDGs, kept with the art (XBin, .prg); a small font editor.
+3. [x] **Own fonts and character sets** (done 2026-10-14): load .fnt/.f08/.f14/.f16/.psf (PC), Atari .fnt,
+   C64 .64c/charset .bin, Spectrum 768-byte sets and UDGs (file requester, or a dropped file that asks), kept with
+   the art (XBin, Petmate customFonts; a .prg in Petmate's form cannot hold one, so it and the stream formats have
+   CharEdit remember the font per file), autosaved; a small font editor that saves the font as a file.
 4. [x] **Shapes and brushes** (done 2026-10-14): the Shape tool (line, box, ellipse, outlined or filled) in the
    brush, in box-drawing lines (PC single/double, PETSCII, ATASCII) or in half blocks / sixels; a shade brush
    (░▒▓█, per page type, own sequences in prefs.json); symmetry (left-right, top-bottom); colour-only /
@@ -67,7 +69,9 @@ against each platform's best editor. Each step says what it wins.
 ## Step 4: PC artists feel at home (the biggest group)
 
 - 9-pixel VGA cells and the 4:3 aspect preview (from SAUCE flags).
-- More PC fonts: EGA 8x14, VGA50 8x8 (80x50), other code pages; SAUCE font names honoured.
+- [x] More PC fonts (done 2026-10-14): EGA 8x14, VGA50 8x8 (80x50), code pages 850 and 866; SAUCE font names
+  honoured on opening and written on saving (IBM VGA, IBM EGA, IBM VGA50, IBM EGA43, IBM VGA 850 ...). Not yet:
+  other code pages' 8x8/8x14 sets, the 9-pixel cells and 4:3 aspect above.
 - TheDraw fonts (logo typing), select by character or colour, fill limited to a colour.
 - Layers (later: they touch everything, so after frames).
 
