@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"strconv"
 	"time"
 )
@@ -20,11 +21,18 @@ type AnimReq struct {
 	byTime               bool // a frame every ms at the modem's speed, not every n cells
 	cells, ms, steps     Field
 	rows, hold           Field
+	length               Field // a frame effect's frames
+	seed                 int64 // a frame effect's random parts
+	shown                int   // the pattern whose defaults the fields hold
 	prevKey              string
 	prev                 []*Doc
+	prevHolds            []int
 	prevFB               []*FB
 	prevAt               time.Time
 }
+
+// newSeed is a fresh seed for a frame effect's random parts.
+func newSeed() int64 { return 1 + rand.Int63n(1<<31-1) }
 
 // dialogAnimates: the Animate requester is open (its preview plays).
 func dialogAnimates() bool {
@@ -38,18 +46,27 @@ func openAnimate() {
 		a.msg(fmt.Sprintf("The page is too large to animate (%dx%d)", a.doc.cols, a.doc.rows))
 		return
 	}
-	d := &AnimReq{pat: patClock, cells: Field{max: 6}, ms: Field{max: 6}, steps: Field{max: 3}, rows: Field{max: 4}, hold: Field{max: 5}}
+	d := &AnimReq{pat: patClock, cells: Field{max: 6}, ms: Field{max: 6}, steps: Field{max: 3}, rows: Field{max: 4}, hold: Field{max: 5},
+		length: Field{max: 3}, seed: newSeed(), shown: -1}
 	d.cells.set("40")
 	d.ms.set("100")
 	d.steps.set("8")
 	d.rows.set("1")
 	d.hold.set("60")
-	for _, f := range []*Field{&d.cells, &d.ms, &d.steps, &d.rows, &d.hold} {
+	for _, f := range []*Field{&d.cells, &d.ms, &d.steps, &d.rows, &d.hold, &d.length} {
 		f.enter = d.apply
 	}
 	if o := a.order; o != nil && o.pat() >= 0 {
 		d.pat, d.reverse, d.flip = o.pat(), o.Reverse, o.Flip
+		if isEffect(d.pat) {
+			d.syncDefaults()
+			d.length.set(strconv.Itoa(effectLength(d.pat, o.Frames)))
+			if o.Seed != 0 {
+				d.seed = o.Seed
+			}
+		}
 	}
+	d.syncDefaults()
 	if a.pageStreamFormat() == "" || a.order == nil && a.nFrames() > 1 {
 		d.frames = true
 	}
@@ -59,6 +76,21 @@ func openAnimate() {
 // makesFrames: Apply makes frames (asked for, or the only thing this pattern and page can be).
 func (d *AnimReq) makesFrames() bool {
 	return d.frames || framesOnly(d.pat, d.erase) || a.pageStreamFormat() == ""
+}
+
+// syncDefaults puts a frame effect's own length and hold in the fields when it is chosen.
+func (d *AnimReq) syncDefaults() {
+	if d.pat == d.shown {
+		return
+	}
+	if isEffect(d.pat) {
+		def := effectDefaults[d.pat]
+		d.length.set(strconv.Itoa(def[0]))
+		d.hold.set(strconv.Itoa(def[1]))
+	} else if d.shown < 0 || isEffect(d.shown) {
+		d.hold.set("60")
+	}
+	d.shown = d.pat
 }
 
 func fieldInt(f *Field, def, lo, hi int) int {
@@ -75,10 +107,13 @@ func (d *AnimReq) spec() animSpec {
 	if !hasToggles(d.pat) {
 		s.reverse, s.flip = false, false
 	}
-	switch d.pat {
-	case patFadeIn, patFadeOut:
+	switch {
+	case isEffect(d.pat):
+		s.n = fieldInt(&d.length, effectDefaults[d.pat][0], 2, maxEffectFrames)
+		s.seed = d.seed
+	case d.pat == patFadeIn, d.pat == patFadeOut:
 		s.n = fieldInt(&d.steps, 8, 2, 64)
-	case patScroll:
+	case d.pat == patScroll:
 		s.n = fieldInt(&d.rows, 1, 1, 9999)
 	default:
 		s.n = fieldInt(&d.cells, 40, 1, 1<<20)
@@ -102,12 +137,17 @@ func (d *AnimReq) apply() {
 			return
 		}
 	}
-	a.applyOrder(&drawOrder{Pattern: patterns[d.pat].id, Reverse: s.reverse, Flip: s.flip})
+	o := &drawOrder{Pattern: patterns[d.pat].id, Reverse: s.reverse, Flip: s.flip}
+	if isEffect(d.pat) {
+		o.Seed, o.Frames = s.seed, s.n
+	}
+	a.applyOrder(o)
 }
 
 // preview: the effect on the page's first screen, about 40 frames.
 func (d *AnimReq) preview() []*Doc {
-	key := fmt.Sprint(d.pat, d.reverse, d.flip, d.erase, a.gen, a.cur, a.mode, a.machine, a.stres, a.doc.cols, a.doc.rows)
+	s := d.spec()
+	key := fmt.Sprint(d.pat, d.reverse, d.flip, d.erase, a.gen, a.cur, a.mode, a.machine, a.stres, a.doc.cols, a.doc.rows, s.seed, s.n, s.hold)
 	if key == d.prevKey {
 		return d.prev
 	}
@@ -116,9 +156,13 @@ func (d *AnimReq) preview() []*Doc {
 	c := newDoc(src.cols, rows)
 	c.bg, c.border, c.ink, c.glyph0 = src.bg, src.border, src.ink, src.glyph0
 	copy(c.cells, src.cells[:rows*src.cols])
-	s := d.spec()
-	s.ms, s.hold = 0, 60
+	s.ms = 0
+	if !isEffect(d.pat) {
+		s.hold = 60
+	}
 	switch d.pat {
+	case patMatrix, patDecrypt, patDrop, patAssemble, patShine, patShadeIn, patMelt, patPowerOn:
+		s.n = min(s.n, 150)
 	case patFadeIn, patFadeOut:
 		s.n = 8
 	case patScroll:
@@ -128,25 +172,32 @@ func (d *AnimReq) preview() []*Doc {
 		n := len(a.cellsInOrder(c, e, d.pat, s.reverse, s.flip))
 		s.n = max(1, (n+39)/40)
 	}
-	docs, _, _ := a.transitionFrames(c, s, 4<<20)
+	docs, holds, _ := a.transitionFrames(c, s, 4<<20)
 	if (d.pat == patFadeIn || d.pat == patFadeOut) && a.fadeRefused() != "" {
 		docs = nil
 	}
 	if len(docs) == 0 {
-		docs = []*Doc{c}
+		docs, holds = []*Doc{c}, []int{60}
 	}
-	d.prevKey, d.prev, d.prevFB, d.prevAt = key, docs, make([]*FB, len(docs)), time.Now()
+	d.prevKey, d.prev, d.prevHolds, d.prevFB, d.prevAt = key, docs, holds, make([]*FB, len(docs)), time.Now()
 	return docs
 }
 
-// drawPreview plays the preview in r: each frame 70 ms, the last one a while longer.
+// drawPreview plays the preview in r: each frame for its hold, the last one a while longer.
 func (d *AnimReq) drawPreview(fb *FB, r Rect) {
 	fb.fill(r, cDark)
 	docs := d.preview()
-	const step, rest = 70, 1200
-	total := len(docs)*step + rest
+	const rest = 1200
+	total := rest
+	for _, h := range d.prevHolds[:len(docs)-1] {
+		total += h
+	}
 	t := int(time.Since(d.prevAt)/time.Millisecond) % total
-	i := min(len(docs)-1, t/step)
+	i := 0
+	for i < len(docs)-1 && t >= d.prevHolds[i] {
+		t -= d.prevHolds[i]
+		i++
+	}
 	if d.prevFB[i] == nil {
 		lowerWas := a.lower()
 		d.prevFB[i] = a.renderDoc(docs[i], 1)
@@ -181,19 +232,21 @@ func blitScaled(dst *FB, r Rect, src *FB) {
 
 func (d *AnimReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(820, 560), "Animate")
-	// The patterns.
+	d.syncDefaults()
+	in := u.window(centre(980, 580), "Animate")
+	// The patterns: TheDraw's, and Charcoal's own beside them.
 	ly := in.y
-	listW := 180
-	fb.text(in.x, ly, "TheDraw's patterns", cHi)
+	listW := 150
+	lx := in.x
+	fb.text(lx, ly, "TheDraw's", cHi)
 	ly += lineH + 4
 	for i := 0; i < nPatterns; i++ {
 		if i == nTheDraw {
-			ly += 8
-			fb.text(in.x, ly, "Charcoal's own", cHi)
+			lx, ly = in.x+listW+8, in.y
+			fb.text(lx, ly, "Charcoal's own", cHi)
 			ly += lineH + 4
 		}
-		r := Rect{in.x, ly, listW, lineH + 4}
+		r := Rect{lx, ly, listW, lineH + 4}
 		col := uint32(cText)
 		if i == d.pat {
 			fb.fill(r, cBlue)
@@ -207,7 +260,7 @@ func (d *AnimReq) draw(u *UI) {
 		ly += lineH + 4
 	}
 	// The preview, and what the pattern does.
-	px := in.x + listW + 16
+	px := in.x + 2*listW + 24
 	pw := in.x + in.w - px
 	pv := Rect{px, in.y, pw, 270}
 	d.drawPreview(fb, pv)
@@ -244,6 +297,9 @@ func (d *AnimReq) draw(u *UI) {
 	} else {
 		ext := map[string]string{"ansi": ".ans", "seq": ".seq", "ata": ".ata", "vt52": ".vt"}[a.pageStreamFormat()]
 		items := []string{"the draw order of the saved " + ext, "frames"}
+		if isEffect(d.pat) {
+			items[0] = "the saved " + ext + ", frame by frame"
+		}
 		cur := map[bool]int{true: 1}[d.frames]
 		u.choice("animresult", Rect{px + 48, y, choiceW(items), gadH}, items, cur,
 			"Draw order: saving as "+ext+" draws the picture in this order (any terminal plays it); frames: the strip, Play, GIF and APNG",
@@ -257,11 +313,14 @@ func (d *AnimReq) draw(u *UI) {
 			u.field(Rect{x, y, chars*charW + 16, gadH}, f, hint)
 			x += chars*charW + 24
 		}
-		switch d.pat {
-		case patFadeIn, patFadeOut:
+		switch {
+		case isEffect(d.pat):
+			label("Frames")
+			field(&d.length, 3, "How many frames the effect takes")
+		case d.pat == patFadeIn, d.pat == patFadeOut:
 			label("Steps")
 			field(&d.steps, 3, "How many frames the fade takes")
-		case patScroll:
+		case d.pat == patScroll:
 			label("Rows a frame")
 			field(&d.rows, 4, "How many rows the picture moves up each frame")
 		default:
@@ -282,14 +341,26 @@ func (d *AnimReq) draw(u *UI) {
 				field(&d.cells, 6, "Cells drawn a frame")
 			}
 		}
-		if !(d.byTime && a.pageStreamFormat() != "" && d.pat != patFadeIn && d.pat != patFadeOut && d.pat != patScroll) {
+		if !(d.byTime && a.pageStreamFormat() != "" && isScan(d.pat)) {
 			label("Hold")
 			field(&d.hold, 5, "How long each frame is shown, in ms (the finished picture stays at least 2 s)")
 			label("ms")
 		}
+		if isEffect(d.pat) {
+			d.shuffleButton(u, x, y)
+		}
 		y += gadH + 8
 		fb.text(px, y, "The frames take the place of this frame; undo gives it back.", cText)
 	} else {
+		if isEffect(d.pat) {
+			fb.text(px, y+3, "Frames", cText)
+			x := px + 7*charW + 8
+			u.field(Rect{x, y, 3*charW + 16, gadH}, &d.length, "How many frames the effect takes")
+			d.shuffleButton(u, x+3*charW+24, y)
+			y += gadH + 8
+			fb.text(px, y, "The file draws each frame's changes only; the modem's speed is the pace.", cText)
+			y += lineH
+		}
 		fb.text(px, y, fmt.Sprintf("Play (%s) shows it at %d bps, the speed in the bar.", keyName("play"), a.baud), cText)
 		y += lineH
 		fb.text(px, y, "Kept with the page until changed or cleared.", cText)
@@ -310,6 +381,13 @@ func (d *AnimReq) draw(u *UI) {
 	}
 }
 
+// shuffleButton: a new seed for the effect's random parts.
+func (d *AnimReq) shuffleButton(u *UI, x, y int) {
+	if u.button(Rect{x, y, buttonW("Shuffle"), gadH}, "Shuffle", false, "Other random glyphs, places and times (S)") != nil {
+		d.seed = newSeed()
+	}
+}
+
 func (d *AnimReq) key(k string, ctrl, shift bool) bool {
 	switch k {
 	case "Escape":
@@ -322,6 +400,11 @@ func (d *AnimReq) key(k string, ctrl, shift bool) bool {
 		d.pat = (d.pat + 1) % nPatterns
 	case "Tab":
 		ui.focus = nil
+	case "S":
+		if ui.focus != nil || !isEffect(d.pat) {
+			return false
+		}
+		d.seed = newSeed()
 	case "R", "F", "E":
 		if ui.focus != nil || !hasToggles(d.pat) {
 			return false

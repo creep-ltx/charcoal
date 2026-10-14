@@ -50,7 +50,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   cells; Ctrl+P plays (Play.frames, `playStepAt(now)`); keys in keys.go's Frames block.
 - Autosave keeps every frame (`autosaveMeta.Frames`, cells one after another); 0.1b3's one-subpage/one-screen
   autosaves come back as the file's frames.
-- Not done (design step 11): delta stream writing, CharView playing frames, onion of the next frame, timed capture
+- Not done (design step 11): delta stream writing for the strip's frames (the effects have it: writeDeltaFrames), CharView playing frames, onion of the next frame, timed capture
   of scrolling ANSImations.
 
 ## Reference picture, shapes and brushes (2026-10-14, roadmap 2.2 and 2.4)
@@ -132,6 +132,19 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   the current frame as one undo step (`applyFrames`); the finished picture holds at least 2 s.
 - Tests: `transitions_test.go` (coverage of every pattern/toggle, shapes, round trip of every pattern through
   parseArt/parseSeq/parseAta/parseVT52 on random pages, PETSCII quotes, undo/save/play/autosave, frames).
+- Ten more templates (2026-10-14, branch templates): `effects.go`. Spiral and Blinds are scan keys (`patSpiral`,
+  `patBlinds`, `blindRows` = 4; `isScan`). The frame effects (Matrix rain, Decrypt, Drop, Assemble, Shine, Shade
+  in, Melt in, Power on; `isEffect`, `effectDefaults` = frames and hold) build k frames from `fx` (`base` = the
+  clear screen with teletext codes kept, `cellOf` per page type, `glint` = white / BRIGHT+inverse on ZX / reverse
+  without colours / block on teletext, `inkOf`, `shadeSeq`), time 0..1, the last frame forced to the picture,
+  random parts from `drawOrder.Seed` (also `Frames`; the requester's Shuffle / S). As the saved file they are
+  `writeDeltaFrames` (transitions.go): clear, then per frame the cells that look different (`usedCell` both
+  ways), through `writeStepsIn` with `seg` so a PETSCII quote is closed only on a cell of the same frame. The
+  frame strip's normal multi-frame save keeps a clear between frames: Split can cut that back into frames, a delta
+  stream cannot be. Requester: two columns, Frames + Hold fields per effect (`syncDefaults`), preview at the holds.
+  Video: `tools/preview.sh` (preview_test.go with CHARCOAL_PREVIEW) -> preview/templates.mp4 + sheet.png
+  (preview/ is excluded from git). Test trap: on random ANSI pages a 0x1A ends the plain reference file and a
+  0x9B before digits reads as CSI, so stream-vs-plain comparisons of intermediate frames clean those first.
 - Not done: reading a draw order back from a file (it opens as the picture; the order is not recognised), Amiga
   real-terminal check, TheDraw's own animation editing (limiting, markers, include files, pauses).
 

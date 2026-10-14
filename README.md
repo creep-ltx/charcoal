@@ -228,13 +228,32 @@ empty cells; Alt+O), **Play** (Ctrl+P, at 1/2x to 4x, looping or once). Undo cov
 TheDraw 4.63 could turn any finished screen into an animation by drawing it cell by cell in a pattern. CharEdit
 does the same (Alt+J, **Animate**): TheDraw's fourteen patterns (Top, Left, Clock, Circles, Checkerboard, Angle,
 Gate, Pyramid, Squares, Scramble, Door, Diamond, Wiggle, Wiggle out) with its two toggles **Reverse** and **Flip**,
-and a few of Charcoal's own (Fade in / out through the palette, Typewriter, Scroll in). A preview plays the effect.
+and Charcoal's own: Fade in / out through the palette, Typewriter, Scroll in, and ten more:
+
+| Template | What it does |
+|---|---|
+| Matrix rain | in every column a stream of changing glyphs falls (bright head, darker trail; reverse where the page has no colours to spare) and leaves the picture behind; columns start at random times |
+| Decrypt | every cell shows random glyphs until it locks to its own character with a flash, sweeping left to right, ragged |
+| Spiral | a draw order: clockwise from the outer edge inwards |
+| Drop | every character falls from the top row to its place, faster and faster, columns filling from the bottom in a wave |
+| Assemble | every character flies in a straight line from a random place to its own, slowing down as it lands |
+| Blinds | a draw order: venetian blinds, bands of four rows opening at the same time |
+| Shine | a slanted band of light passes once over the finished picture, a logo's glint |
+| Shade in | every cell comes up through the page's shade steps (PC: light, medium, dark shade) to its own character |
+| Melt in | Doom's screen melt the other way round: the columns slide down into place, each a little behind or ahead of its neighbour |
+| Power on | a television switched on: a bright line grows across the middle, then opens up and down, its edges bright |
+
+Each keeps its page's rules: teletext codes stay where they are, Spectrum ink and paper share their brightness, the
+Atari 8-bit, PET and ST high resolution use reverse. Random parts come from a seed kept with the page (Shuffle or
+S picks another), so saving twice gives the same file. A preview plays the effect at its own speed.
 
 - **Draw order**: saving as `.ans`, `.seq`, `.ata` or `.vt` writes the picture in that order: a clear screen, then
   each cell with a cursor move where it does not follow the one before (ANSI `ESC[row;colH`, PETSCII cursor keys
   and HOME, ATASCII cursor keys, VT52 `ESC Y`), colours only where they change, empty cells left out. Any BBS
   terminal plays it at modem speed; opened again it is exactly the same picture. The order stays with the page
-  until changed or cleared; Ctrl+P (and CharView's `m`) plays it.
+  until changed or cleared; Ctrl+P (and CharView's `m`) plays it. The frame effects (Matrix rain, Decrypt, Drop,
+  Assemble, Shine, Shade in, Melt in, Power on) save as a **delta stream**: the clear screen, then each frame's
+  changed cells only (the same cursor moves and colours); the modem's speed is the pace, no pauses are put in.
 - **Frames**: one every N cells (or every N ms at the modem speed), for the strip, Play, GIF and APNG. Erase makes
   the picture go away instead (TheDraw's Fadeout). Teletext and Spectrum pages make frames only.
 

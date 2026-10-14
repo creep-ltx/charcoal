@@ -5,7 +5,8 @@ package main
 // (Top, Left, Clock, Circles, Checkerboard, Angle, Gate, Pyramid, Squares,
 // Scramble, Door, Diamond, Wiggle, Wiggle out), with its two toggles Reverse
 // (the whole order backwards) and Flip (rows mirrored top to bottom), plus a
-// few of Charcoal's own (fade in / out, typewriter, scroll in).
+// few of Charcoal's own (fade in / out, typewriter, scroll in, spiral,
+// blinds, and the frame effects of effects.go).
 //
 // The result is either the draw order of the saved stream (.ans .seq .ata
 // .vt: a clear screen, then each cell with a cursor move before it where it
@@ -44,6 +45,16 @@ const (
 	patFadeOut
 	patType
 	patScroll
+	patMatrix
+	patDecrypt
+	patSpiral
+	patDrop
+	patAssemble
+	patBlinds
+	patShine
+	patShadeIn
+	patMelt
+	patPowerOn
 	nPatterns
 )
 
@@ -69,6 +80,16 @@ var patterns = [nPatterns]struct{ id, name, help string }{
 	{"fadeout", "Fade out", "Charcoal's own: the colours sink into the paper (frames only)"},
 	{"typewriter", "Typewriter", "Charcoal's own: row by row with a cursor, spaces too, at an even pace"},
 	{"scroll", "Scroll in", "Charcoal's own: the picture scrolls in from the bottom (frames only)"},
+	{"matrix", "Matrix rain", "Charcoal's own: streams of changing glyphs fall down every column and leave the picture behind"},
+	{"decrypt", "Decrypt", "Charcoal's own: every cell shows random glyphs until it locks to its own, left to right"},
+	{"spiral", "Spiral", "Charcoal's own: a spiral from the outer edge inwards, clockwise"},
+	{"drop", "Drop", "Charcoal's own: every character falls from the top to its place, columns in a wave"},
+	{"assemble", "Assemble", "Charcoal's own: every character flies in from a random place to its own"},
+	{"blinds", "Blinds", "Charcoal's own: venetian blinds: bands of four rows open at the same time"},
+	{"shine", "Shine", "Charcoal's own: a band of light passes over the finished picture once"},
+	{"shadein", "Shade in", "Charcoal's own: every cell comes up through the shade steps to its own character"},
+	{"melt", "Melt in", "Charcoal's own: Doom's screen melt the other way round: columns slide down into place"},
+	{"poweron", "Power on", "Charcoal's own: a television switched on: a bright line opens up to the picture"},
 }
 
 func patternByID(id string) int {
@@ -87,13 +108,15 @@ func framesOnly(pat int, erase bool) bool {
 }
 
 // hasToggles: Reverse and Flip change this pattern.
-func hasToggles(pat int) bool { return pat < nTheDraw || pat == patType }
+func hasToggles(pat int) bool { return isScan(pat) || pat == patType }
 
 // drawOrder is the order a page's stream file draws it in (kept with the page).
 type drawOrder struct {
 	Pattern string `json:"pattern"`
 	Reverse bool   `json:"reverse,omitempty"`
 	Flip    bool   `json:"flip,omitempty"`
+	Seed    int64  `json:"seed,omitempty"`   // a frame effect's random parts
+	Frames  int    `json:"frames,omitempty"` // a frame effect's length (0: its own)
 }
 
 func (o *drawOrder) pat() int { return patternByID(o.Pattern) }
@@ -106,6 +129,9 @@ func (o *drawOrder) String() string {
 	if o.Flip {
 		s += ", flipped"
 	}
+	if isEffect(o.pat()) {
+		s += fmt.Sprintf(", %d frames", effectLength(o.pat(), o.Frames))
+	}
 	return s
 }
 
@@ -116,6 +142,9 @@ type scanOpts struct {
 	reverse, flip bool
 	aspect        float64 // a cell's height over its width (2 for 8x16 cells); 0 means 2
 }
+
+// blindRows is how tall a band of Blinds is.
+const blindRows = 4
 
 // scanSeed makes Scramble the same every time, so saving twice gives the same file.
 const scanSeed = 1991
@@ -239,6 +268,26 @@ func scanKey(pat, cols, rows int, asp float64) func(x, y int) [3]float64 {
 			}
 			return [3]float64{float64(y), float64(x)}
 		}
+	case patSpiral:
+		// Rings from the edge in (a row counts asp columns); each ring round
+		// clockwise: its top row, right side, bottom row, left side.
+		return func(x, y int) [3]float64 {
+			top, bottom := float64(y), float64(rows-1-y)
+			left, right := float64(x)/asp, float64(cols-1-x)/asp
+			ring := math.Floor(min(top, bottom, left, right))
+			switch {
+			case math.Floor(top) == ring:
+				return [3]float64{ring, 0, float64(x)}
+			case math.Floor(right) == ring:
+				return [3]float64{ring, 1, float64(y)}
+			case math.Floor(bottom) == ring:
+				return [3]float64{ring, 2, float64(cols - x)}
+			}
+			return [3]float64{ring, 3, float64(rows - y)}
+		}
+	case patBlinds:
+		// Bands of blindRows rows; all bands draw their first row at once, then the next.
+		return func(x, y int) [3]float64 { return [3]float64{float64(y % blindRows), float64(x), float64(y)} }
 	case patWiggleOut:
 		return func(x, y int) [3]float64 {
 			k := math.Floor(math.Abs(float64(y) - cy))
@@ -304,7 +353,7 @@ func (a *App) cellsInOrder(d *Doc, e *Doc, pat int, rev, flip bool) []int {
 		}
 		return scanOrder(patTop, o, d.cols, d.rows, func(x, y int) bool { return x <= last[y] })
 	}
-	if pat >= nTheDraw {
+	if !isScan(pat) {
 		pat = patTop
 	}
 	return scanOrder(pat, o, d.cols, d.rows, used)
@@ -439,6 +488,15 @@ type cursorWriter interface {
 // after step i. The cursor ends where the page's last row counts, so the file
 // opens exactly as tall as d.
 func writeDrawSteps(fmtID string, d *Doc, steps []drawStep, o streamOpts) (out []byte, offs []int) {
+	out, offs, _ = writeStepsIn(fmtID, d, steps, nil, o)
+	return out, offs
+}
+
+// writeStepsIn writes the steps; seg[i] (nil: all one) is the frame step i is
+// part of: a PETSCII quote is closed on a cell drawn later only within its
+// frame, so every frame ends on the screen it should. begun is the length of
+// the clear screen the stream starts with.
+func writeStepsIn(fmtID string, d *Doc, steps []drawStep, seg []int, o streamOpts) (out []byte, offs []int, begun int) {
 	var w cursorWriter
 	switch fmtID {
 	case "seq":
@@ -450,13 +508,22 @@ func writeDrawSteps(fmtID string, d *Doc, steps []drawStep, o streamOpts) (out [
 	default:
 		w = &ansiWriter{cols: d.cols, amiga: o.amiga, raw1A: o.sauce}
 	}
-	lastAt := make([]int32, d.cols*d.rows) // the last step that draws each cell
-	for i, s := range steps {
-		lastAt[s.y*d.cols+s.x] = int32(i + 1)
+	lastAt := make([]int32, d.cols*d.rows) // the last step of this frame that draws each cell
+	segOf := func(i int) int {
+		if seg == nil {
+			return 0
+		}
+		return seg[i]
 	}
 	out = w.begin()
+	begun = len(out)
 	offs = make([]int, len(steps))
 	for i, s := range steps {
+		if i == 0 || segOf(i) != segOf(i-1) {
+			for j := i; j < len(steps) && segOf(j) == segOf(i); j++ {
+				lastAt[steps[j].y*d.cols+steps[j].x] = int32(j + 1)
+			}
+		}
 		if x, y := w.at(); x != s.x || y != s.y {
 			out = append(out, w.move(s.x, s.y)...)
 		}
@@ -474,7 +541,43 @@ func writeDrawSteps(fmtID string, d *Doc, steps []drawStep, o streamOpts) (out [
 			out = append(out, w.move(0, d.rows)...)
 		}
 	}
-	return append(out, w.end()...), offs
+	return append(out, w.end()...), offs, begun
+}
+
+// writeDeltaFrames writes frames as one stream: a clear screen, then for each
+// frame only the cells that look different from what the screen shows by then
+// (cursor moves and colours as a draw order's). No pauses are put in: the
+// modem's speed is the pacing. ends[i] is the stream's length after frame i.
+func writeDeltaFrames(fmtID, mode string, paper *Doc, docs []*Doc, o streamOpts) (out []byte, ends []int) {
+	if len(docs) == 0 {
+		return nil, nil
+	}
+	d := docs[len(docs)-1]
+	n := d.cols * d.rows
+	screen := slices.Clone(paper.cells[:n])
+	var steps []drawStep
+	var seg, last []int
+	for i, f := range docs {
+		for c := 0; c < n && c < len(f.cells); c++ {
+			v := f.cells[c]
+			if v != screen[c] && (usedCell(mode, v, paper.cells[c]) || usedCell(mode, screen[c], paper.cells[c])) {
+				steps = append(steps, drawStep{c % d.cols, c / d.cols, v})
+				seg = append(seg, i)
+				screen[c] = v
+			}
+		}
+		last = append(last, len(steps))
+	}
+	out, offs, begun := writeStepsIn(fmtID, d, steps, seg, o)
+	ends = make([]int, len(docs))
+	for i, l := range last {
+		ends[i] = begun
+		if l > 0 {
+			ends[i] = offs[l-1]
+		}
+	}
+	ends[len(ends)-1] = len(out)
+	return out, ends
 }
 
 // shortest is the shortest of some ways to move the cursor.
@@ -808,6 +911,11 @@ var streamFormats = map[string]bool{"ansi": true, "seq": true, "ata": true, "vt5
 
 // writeOrdered writes picture d in the page's draw order as fmtID.
 func (a *App) writeOrdered(fmtID string, d *Doc, sauce bool) []byte {
+	if p := a.order.pat(); isEffect(p) {
+		e := a.paperOf(d)
+		out, _ := writeDeltaFrames(fmtID, a.mode, e, a.effectFrames(d, e, p, a.order.Seed, a.order.Frames), a.streamOpts(sauce))
+		return out
+	}
 	out, _ := writeDrawSteps(fmtID, d, a.drawSteps(d, a.order), a.streamOpts(sauce))
 	return out
 }
@@ -858,6 +966,7 @@ type animSpec struct {
 	ms            int  // > 0: a frame every ms at the modem's speed instead of every n cells
 	hold          int  // ms each frame is shown
 	baud          int
+	seed          int64 // a frame effect's random parts
 }
 
 // Holds of the ends of an effect: the finished picture stays a while.
@@ -876,6 +985,23 @@ func (a *App) transitionFrames(d *Doc, s animSpec, maxCells int) (docs []*Doc, h
 		return nil, nil, "The page is too large to make frames of"
 	}
 	hold := max(20, s.hold)
+	if isEffect(s.pat) {
+		k := effectLength(s.pat, s.n)
+		if k > maxK {
+			k = maxK
+			note = fmt.Sprintf("%d frames fit", k)
+		}
+		docs = a.effectFrames(d, e, s.pat, s.seed, k)
+		holds = make([]int, len(docs))
+		for i := range holds {
+			holds[i] = hold
+		}
+		if s.pat == patShine {
+			holds[0] = max(hold, 400) // the picture a moment before the light comes
+		}
+		holds[len(holds)-1] = max(hold, animEndHold)
+		return docs, holds, note
+	}
 	switch s.pat {
 	case patFadeIn, patFadeOut:
 		k := max(2, min(s.n, maxK-1))
