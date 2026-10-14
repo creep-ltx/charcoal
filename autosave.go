@@ -54,6 +54,7 @@ type autosaveMeta struct {
 	Cur          int             `json:"frame,omitempty"`       // the frame being worked on
 	Frames       []autosaveFrame `json:"frames,omitempty"`      // a page of several frames: their cells follow one another in .cells
 	Restructured bool            `json:"restructured,omitempty"`
+	OwnFont      *ArtFont        `json:"own_font,omitempty"` // the page's own font, in id.font (fontfile.go)
 }
 
 // autosaveFrame is one frame of an autosaved page.
@@ -118,11 +119,22 @@ func writeAutosave(t *Tab) error {
 			m.Frames[t.cur].Lower = map[bool]int{true: 1}[strings.HasSuffix(t.fontFor["c64"], "lower")]
 		}
 	}
+	base := filepath.Join(dir, t.autoID)
+	if t.ownFont != nil {
+		data := append([]byte(nil), t.ownFont.bits...)
+		if t.ownLower != nil {
+			data = append(data, t.ownLower.bits...)
+		}
+		if err := writeAtomic(base+".font", data); err != nil {
+			return err
+		}
+		m.OwnFont = &ArtFont{File: t.autoID + ".font", Name: t.ownFont.name, Kind: t.ownFont.kind, H: t.ownFont.h,
+			Lower: t.ownLower != nil, Format: t.ownFont.format}
+	}
 	js, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
 	}
-	base := filepath.Join(dir, t.autoID)
 	if err := writeAtomic(base+".cells", cells); err != nil {
 		return err
 	}
@@ -146,6 +158,7 @@ func removeAutosave(id string) {
 	base := filepath.Join(autosaveDir(), id)
 	os.Remove(base + ".json")
 	os.Remove(base + ".cells")
+	os.Remove(base + ".font")
 }
 
 // autosaveTick saves aside, every autosaveEvery, each page changed since its last autosave.
@@ -257,6 +270,11 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	}
 	if m.Font != "" {
 		a.fontFor[mode] = m.Font
+	}
+	if m.OwnFont != nil {
+		if up, low, err := readFontCopy(*m.OwnFont, autosaveDir()); err == nil {
+			a.ownFont, a.ownLower = up, low
+		}
 	}
 	if m.Palette != "" && m.Palette != "file" {
 		a.paletteFor[mode] = m.Palette

@@ -76,14 +76,20 @@ func newZXDoc() *Doc {
 // scrAddr is where pixel row y (0-191), byte column x (0-31) is in the Spectrum's bitmap.
 func scrAddr(x, y int) int { return (y&0xC0)<<5 | (y&7)<<8 | (y&0x38)<<2 | x }
 
-func writeSCR(d *Doc) []byte {
+func writeSCR(d *Doc) []byte { return writeSCRFont(d, zxFont) }
+
+// writeSCRFont writes a screen drawn in the page's font (its own, or the ROM's).
+func writeSCRFont(d *Doc, f *Font) []byte {
+	if f == nil || f.kind != "zx" {
+		f = zxFont
+	}
 	out := make([]byte, 6912)
 	for cy := 0; cy < 24; cy++ {
 		for cx := 0; cx < 32; cx++ {
 			v := d.get(cx, cy)
 			ch := cellCh(v)
 			for r := 0; r < 8; r++ {
-				out[scrAddr(cx, cy*8+r)] = zxFont.bits[ch*16+r*2]
+				out[scrAddr(cx, cy*8+r)] = f.bits[ch*16+r*2]
 			}
 			attr := byte(cellFg(v)&7) | byte(cellBg(v)&7)<<3
 			if cellFg(v) > 7 || cellBg(v) > 7 {
@@ -102,7 +108,13 @@ func writeSCR(d *Doc) []byte {
 // with ink and paper swapped); it tells how many cells were only near a character.
 // Any file can be opened as a screen: a short one is read as if padded with
 // zeros, bytes past 6912 are ignored.
-func parseSCR(b []byte) (*Doc, int) {
+func parseSCR(b []byte) (*Doc, int) { return parseSCRFont(b, zxFont) }
+
+// parseSCRFont matches the cells to the page's font (its own, or the ROM's).
+func parseSCRFont(b []byte, font *Font) (*Doc, int) {
+	if font == nil || font.kind != "zx" {
+		font = zxFont
+	}
 	if len(b) < 6912 {
 		b = append(append(make([]byte, 0, 6912), b...), make([]byte, 6912-len(b))...)
 	}
@@ -121,7 +133,7 @@ func parseSCR(b []byte) (*Doc, int) {
 			for c := 32; c < 165; c++ {
 				dn, di := 0, 0
 				for r := 0; r < 8; r++ {
-					f := zxFont.bits[c*16+r*2]
+					f := font.bits[c*16+r*2]
 					dn += popcount(g[r] ^ f)
 					di += popcount(g[r] ^ ^f)
 				}

@@ -199,8 +199,8 @@ func xbinSaveError(d *Doc) error {
 // A page taller than an XBin can be (see xbinSaveError) is cut at maxXBinRows.
 func writeXBin(d *Doc, pal [16]uint32, f *Font, cellH int, ice bool) []byte {
 	rows := max(1, min(d.rows, maxXBinRows))
-	if cellH != 8 {
-		cellH = 16 // the fonts are kept as 8x16: 8 rows (every other one) or 16
+	if cellH < 1 || cellH > 16 {
+		cellH = 16 // the fonts are kept as 8x16: 8 rows (every other one), 9-16 rows as they are
 	}
 	out := []byte{'X', 'B', 'I', 'N', 0x1A, byte(d.cols), byte(d.cols >> 8), byte(rows), byte(rows >> 8), byte(cellH)}
 	flags := byte(1 | 2) // palette, font
@@ -211,7 +211,10 @@ func writeXBin(d *Doc, pal [16]uint32, f *Font, cellH int, ice bool) []byte {
 	for _, c := range biosPalette(pal) { // the file's palette is in BIOS order
 		out = append(out, byte(c>>16&255)>>2, byte(c>>8&255)>>2, byte(c&255)>>2)
 	}
-	skip := 16 / cellH
+	skip := 1
+	if cellH == 8 {
+		skip = 2
+	}
 	for c := 0; c < 256; c++ {
 		for r := 0; r < cellH; r++ {
 			if i := c*16 + r*skip; f != nil && i < len(f.bits) {
@@ -275,19 +278,26 @@ func parseXBin(b []byte) (*Doc, XBinInfo, error) {
 		if len(b) < p+n*fh {
 			return nil, info, fmt.Errorf("the XBin is cut short")
 		}
-		// Kept as an 8x16 font: rows doubled from 8, others fitted into 16.
+		// Kept as an 8x16 font: 8 rows doubled, 9-16 rows as they are (h), taller ones fitted into 16.
 		bits := make([]byte, 4096)
 		for c := 0; c < 256; c++ {
 			for r := 0; r < 16; r++ {
 				src := r * fh / 16
+				if fh > 8 && fh <= 16 {
+					if r >= fh {
+						continue
+					}
+					src = r
+				}
 				bits[c*16+r] = b[p+c*fh+src]
 			}
 		}
-		info.font = &Font{id: "xbin", name: "The file's own font", kind: "pc", syncterm: -1, bits: bits}
-		info.cellH = 16
-		if fh <= 8 {
+		info.font = &Font{id: "xbin", name: "The file's own font", kind: "pc", syncterm: -1, bits: bits, format: "xbin"}
+		info.cellH = min(16, max(8, fh))
+		if fh < 8 {
 			info.cellH = 8
 		}
+		info.font.h = info.cellH
 		p += n * fh
 	}
 	info.ice = flags&8 != 0

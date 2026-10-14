@@ -68,10 +68,7 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	inside := px >= cl.x && py >= cl.y && px+a.cellW()*z <= cl.x+cl.w && py+H*z <= cl.y+cl.h
 	for r := 0; r < H; r++ {
 		bits := int(f.bits[ch*16+r*skip])
-		r8 := r
-		if H == 16 {
-			r8 = r >> 1
-		}
+		r8 := r * 8 / H // the row of an 8-row cell (italic, underline)
 		if it {
 			bits >>= max(0, (6-r8)>>1)
 		}
@@ -422,12 +419,17 @@ func (a *App) drawBar(u *UI) int {
 			fontIDs = append(fontIDs, f.id)
 		}
 	}
-	if a.ownFont != nil && a.ownFont.kind == a.mode {
-		if a.font() == a.ownFont {
-			cur = len(fontIDs)
+	for _, o := range []struct {
+		f  *Font
+		id string
+	}{{a.ownFont, ownID}, {a.ownLower, ownLowerID}} { // the page's own font
+		if o.f != nil && o.f.kind == a.mode {
+			if a.font() == o.f {
+				cur = len(fontIDs)
+			}
+			fontNames = append(fontNames, o.f.name)
+			fontIDs = append(fontIDs, o.id)
 		}
-		fontNames = append(fontNames, a.ownFont.name)
-		fontIDs = append(fontIDs, "xbin")
 	}
 	if a.c64() {
 		var mNames []string
@@ -443,8 +445,8 @@ func (a *App) drawBar(u *UI) int {
 			a.setMachine(machines[i].id)
 		})
 		var keep []int
-		for i, id := range fontIDs { // only this machine's two sets
-			if strings.HasPrefix(id, a.mach().family) {
+		for i, id := range fontIDs { // only this machine's two sets, and the page's own
+			if strings.HasPrefix(id, a.mach().family) || strings.HasPrefix(id, ownID) {
 				keep = append(keep, i)
 			}
 		}
@@ -459,7 +461,19 @@ func (a *App) drawBar(u *UI) int {
 		fontNames, fontIDs, cur = n2, id2, cur2
 	}
 	if len(fontNames) > 0 {
-		u.choice("font", fl.place(choiceW(fontNames)), fontNames, cur, "Font (on a PETSCII page: upper case + graphics, or lower + upper case)", func(i int) {
+		if !a.st() && !a.tt() { // fonts from files and the font editor (fontedit.go)
+			fontNames = append(fontNames, "Load a font...", "Edit the font...")
+			fontIDs = append(fontIDs, "+load", "+edit")
+		}
+		u.choice("font", fl.place(choiceW(fontNames)), fontNames, cur, "Font (on a PETSCII page: upper case + graphics, or lower + upper case); load one from a file, or edit it", func(i int) {
+			switch fontIDs[i] {
+			case "+load":
+				openFontRequester()
+				return
+			case "+edit":
+				openFontEditor()
+				return
+			}
 			a.fontFor[a.mode] = fontIDs[i]
 			savePrefs()
 		})

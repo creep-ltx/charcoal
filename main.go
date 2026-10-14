@@ -241,7 +241,9 @@ func pass() {
 	a.drawWindow(ui)
 	ui.inert = false
 	if a.dialog != nil {
-		ui.fb.blend(Rect{0, 0, ui.fb.w, ui.fb.h}, cEdgeDk, 120)
+		if _, fe := a.dialog.(*FontEd); !fe { // the font editor leaves the page bright: it shows the font live
+			ui.fb.blend(Rect{0, 0, ui.fb.w, ui.fb.h}, cEdgeDk, 120)
+		}
 		a.dialog.draw(ui)
 	}
 	ui.drawPopup()
@@ -359,7 +361,7 @@ func handleEvent(ev sdl.Event) bool {
 			if a.dialog != nil {
 				a.msg("Close the requester first, then drop " + filepath.Base(e.File) + " again")
 			} else {
-				a.openPath(e.File, "auto")
+				dropFile(e.File) // a font file asks whether it is the page's font
 			}
 		}
 	default:

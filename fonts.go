@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-//go:embed fonts/*.raw
+//go:embed fonts/*.raw fonts/*.f08 fonts/*.f14 fonts/*.f16
 var fontFiles embed.FS
 
 type Font struct {
@@ -21,34 +21,69 @@ type Font struct {
 	syncterm int    // SyncTERM font number, -1 if none
 	bits     []byte
 	mirror   [3][]int // the character that looks flipped left-right, upside down, turned (flipH, flipV, turnCW)
-	h8       bool     // a font of 8 rows (kept doubled) from a file
+	h        int      // rows of the glyphs if not the kind's own (rows()): 8 (kept doubled) or 9-16
+	src      string   // the file it came from
+	format   string   // the kind of file it came from ("psf2", "64c", "petmate:custom_1" ...), see fontfile.go
 }
 
 var fonts = func() []*Font {
 	list := []struct {
 		id, name, file, sauce string
-		sync                  int
+		sync, h               int
 	}{
-		{"topaz1", "Topaz 1 (A500)", "Topaz_a500_v1.0.raw", "Amiga Topaz 1", 42},
-		{"topaz1p", "Topaz 1+ (A500)", "TopazPlus_a500_v1.0.raw", "Amiga Topaz 1+", 40},
-		{"topaz2", "Topaz 2 (A1200)", "Topaz_a1200_v1.0.raw", "Amiga Topaz 2", -1},
-		{"topaz2p", "Topaz 2+ (A1200)", "TopazPlus_a1200_v1.0.raw", "Amiga Topaz 2+", -1},
-		{"mk", "MicroKnight", "MicroKnight_v1.0.raw", "Amiga MicroKnight", 41},
-		{"mkp", "MicroKnight+", "MicroKnightPlus_v1.0.raw", "Amiga MicroKnight+", 39},
-		{"noodle", "P0T-NOoDLE", "P0T-NOoDLE_v1.0.raw", "Amiga P0T-NOoDLE", 37},
-		{"mosoul", "mO'sOul", "mOsOul_v1.0.raw", "Amiga mOsOul", 38},
-		{"vga", "IBM VGA (CP437)", "IBM_VGA_8x16.raw", "IBM VGA", 0},
+		{"topaz1", "Topaz 1 (A500)", "Topaz_a500_v1.0.raw", "Amiga Topaz 1", 42, 0},
+		{"topaz1p", "Topaz 1+ (A500)", "TopazPlus_a500_v1.0.raw", "Amiga Topaz 1+", 40, 0},
+		{"topaz2", "Topaz 2 (A1200)", "Topaz_a1200_v1.0.raw", "Amiga Topaz 2", -1, 0},
+		{"topaz2p", "Topaz 2+ (A1200)", "TopazPlus_a1200_v1.0.raw", "Amiga Topaz 2+", -1, 0},
+		{"mk", "MicroKnight", "MicroKnight_v1.0.raw", "Amiga MicroKnight", 41, 0},
+		{"mkp", "MicroKnight+", "MicroKnightPlus_v1.0.raw", "Amiga MicroKnight+", 39, 0},
+		{"noodle", "P0T-NOoDLE", "P0T-NOoDLE_v1.0.raw", "Amiga P0T-NOoDLE", 37, 0},
+		{"mosoul", "mO'sOul", "mOsOul_v1.0.raw", "Amiga mOsOul", 38, 0},
+		{"vga", "IBM VGA (CP437)", "IBM_VGA_8x16.raw", "IBM VGA", 0, 0},
+		// VileR's Ultimate Oldschool PC Font Pack, drawn by tools/pcfonts.py.
+		{"ega", "IBM EGA 8x14", "IBM_EGA_8x14.f14", "IBM EGA", -1, 14},
+		{"vga50", "IBM VGA 8x8 (80x50)", "IBM_VGA_8x8.f08", "IBM VGA50", -1, 8},
+		{"vga850", "IBM VGA CP850", "IBM_VGA_8x16_850.f16", "IBM VGA 850", -1, 16},
+		{"vga866", "IBM VGA CP866", "IBM_VGA_8x16_866.f16", "IBM VGA 866", -1, 16},
 	}
 	var out []*Font
 	for _, f := range list {
 		b, err := fontFiles.ReadFile("fonts/" + f.file)
-		if err != nil || len(b) != 4096 {
+		if err != nil || (f.h == 0 && len(b) != 4096) || (f.h > 0 && len(b) != 256*f.h) {
 			panic("font " + f.file)
 		}
-		out = append(out, &Font{id: f.id, name: f.name, kind: map[bool]string{true: "pc", false: "amiga"}[f.id == "vga"], sauce: f.sauce, syncterm: f.sync, bits: b})
+		kind := "amiga"
+		if strings.HasPrefix(f.file, "IBM") {
+			kind = "pc"
+		}
+		font := &Font{id: f.id, name: f.name, kind: kind, sauce: f.sauce, syncterm: f.sync, bits: b}
+		if f.h > 0 {
+			font = newFont(f.id, f.name, kind, b, f.h, 256)
+			font.sauce, font.syncterm = f.sauce, f.sync
+		}
+		out = append(out, font)
 	}
 	return out
 }()
+
+// sauceAliases are other SAUCE font names for the built-in fonts (the SAUCE
+// standard's "IBM VGA 437" is plain "IBM VGA"; EGA43 is the same 8x8 ROM font as VGA50).
+var sauceAliases = map[string]string{"ibm vga 437": "IBM VGA", "ibm ega 437": "IBM EGA", "ibm vga50 437": "IBM VGA50",
+	"ibm ega43": "IBM VGA50", "ibm ega43 437": "IBM VGA50"}
+
+// fontBySauce is the page type's font a SAUCE font name means, nil if none.
+func fontBySauce(name, mode string) *Font {
+	name = strings.TrimSpace(name)
+	if al, ok := sauceAliases[strings.ToLower(name)]; ok {
+		name = al
+	}
+	for _, f := range fonts {
+		if f.sauce != "" && strings.EqualFold(f.sauce, name) && f.kind == mode {
+			return f
+		}
+	}
+	return nil
+}
 
 func fontByID(id string) *Font {
 	for _, f := range fonts {
