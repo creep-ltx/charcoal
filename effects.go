@@ -60,6 +60,7 @@ type fx struct {
 	paper      int // the clear screen's colour
 	bright     int // a colour that stands out on it
 	colours    bool
+	detail     int // detailLarge, detailMedium or detailSmall: how much changes each frame
 }
 
 func (a *App) newFx(d, e *Doc, seed int64) *fx {
@@ -125,6 +126,13 @@ func (a *App) effectGlyphs() []int {
 		add(0x81, 0x8E) // block graphics
 	}
 	return g
+}
+
+// flight is how long a falling or flying character is on its way, against
+// Large's: below it the characters arrive sooner, so fewer frames show each
+// on the way (every one of those is a character taken off and put down).
+func (x *fx) flight() float64 {
+	return map[int]float64{detailLarge: 1, detailMedium: 0.7, detailSmall: 0.4}[x.detail]
 }
 
 func (x *fx) glyph() int { return x.glyphs[x.r.Intn(len(x.glyphs))] }
@@ -268,8 +276,14 @@ func clamp01(t float64) float64 { return max(0, min(1, t)) }
 // effectFrames are the k frames of effect pat on picture d (e: the clear
 // screen); the last is d. Spiral and Blinds are orders, not effects.
 func (a *App) effectFrames(d, e *Doc, pat int, seed int64, k int) []*Doc {
-	k = effectLength(pat, k)
+	return a.effectFramesAt(d, e, pat, seed, k, detailLarge)
+}
+
+// effectFramesAt is effectFrames at a detail level (k 0: the level's own frames).
+func (a *App) effectFramesAt(d, e *Doc, pat int, seed int64, k, detail int) []*Doc {
+	k = effectLengthAt(pat, k, detail)
 	x := a.newFx(d, e, seed)
+	x.detail = detail
 	var frames []*Doc
 	for i := 0; i < k; i++ {
 		frames = append(frames, nil)
@@ -294,6 +308,13 @@ func tAt(i, k int) float64 { return float64(i) / float64(max(1, k-1)) }
 func (x *fx) matrix(frames []*Doc) {
 	k := len(frames)
 	trail := max(4, min(14, x.rows/3))
+	churn := 3 // a trail's glyph changes one frame in churn (0: never)
+	switch x.detail {
+	case detailMedium:
+		trail, churn = max(3, min(8, x.rows/4)), 8
+	case detailSmall:
+		trail, churn = 2, 0
+	}
 	type stream struct {
 		s, dur float64
 		l      int
@@ -301,7 +322,12 @@ func (x *fx) matrix(frames []*Doc) {
 	cols := make([]stream, x.cols)
 	for i := range cols {
 		s := x.r.Float64() * 0.35
-		cols[i] = stream{s, (0.93 - s) * (0.5 + 0.5*x.r.Float64()), max(3, int(float64(trail)*(0.6+0.8*x.r.Float64())))}
+		dur := (0.93 - s) * (0.5 + 0.5*x.r.Float64())
+		l := max(3, int(float64(trail)*(0.6+0.8*x.r.Float64())))
+		if x.detail == detailSmall {
+			l = trail
+		}
+		cols[i] = stream{s, dur, l}
 	}
 	head, near, tail := x.colour(0xDDFFDD), x.colour(0x55FF55), x.colour(0x00AA00)
 	if x.a.zx() {
@@ -314,6 +340,9 @@ func (x *fx) matrix(frames []*Doc) {
 		return c
 	}
 	head, near, tail = fix(head), fix(near), fix(tail)
+	if x.detail == detailSmall {
+		near = tail // the head and one colour behind it
+	}
 	inverseHead := !x.colours || head == near
 	if !x.colours {
 		head, near, tail = x.bright, x.bright, x.bright
@@ -326,7 +355,7 @@ func (x *fx) matrix(frames []*Doc) {
 		u := tAt(i, k)
 		f := x.base.clone()
 		for c := range glyph {
-			if x.r.Intn(3) == 0 {
+			if churn > 0 && x.r.Intn(churn) == 0 {
 				glyph[c] = x.glyph()
 			}
 		}
@@ -368,6 +397,8 @@ func (x *fx) decrypt(frames []*Doc) {
 		lock[c] = max(0.05, min(0.93, 0.14+0.7*pos+(x.r.Float64()-0.5)*0.18))
 		show[c] = max(0, lock[c]-0.3-0.3*x.r.Float64())
 	}
+	// Below Large the random glyphs change less often (Small: one each, kept), and Small has no flash.
+	held := make([]uint32, n)
 	for i := range frames {
 		u, prev := tAt(i, k), tAt(i-1, k)
 		f := x.base.clone()
@@ -378,8 +409,16 @@ func (x *fx) decrypt(frames []*Doc) {
 			switch {
 			case u < show[c]:
 			case u < lock[c]:
-				f.cells[c] = x.cellOf(c, x.glyph(), x.inkOf(c), false)
-			case prev < lock[c] && i > 0:
+				switch {
+				case x.detail == detailLarge:
+					f.cells[c] = x.cellOf(c, x.glyph(), x.inkOf(c), false)
+				case held[c] == 0 || x.detail == detailMedium && x.r.Intn(3) == 0:
+					held[c] = x.cellOf(c, x.glyph(), x.inkOf(c), false)
+					f.cells[c] = held[c]
+				default:
+					f.cells[c] = held[c]
+				}
+			case prev < lock[c] && i > 0 && x.detail != detailSmall:
 				f.cells[c] = x.glint(x.d.cells[c], 1)
 			default:
 				f.cells[c] = x.d.cells[c]
@@ -408,7 +447,7 @@ func (x *fx) drop(frames []*Doc) {
 		}
 		gap := 0.22 / float64(max(1, len(ys)))
 		for j, y := range ys {
-			all = append(all, faller{y*x.cols + cx, wave + float64(j)*gap, 0.24 * math.Sqrt(float64(y+1)/float64(x.rows))})
+			all = append(all, faller{y*x.cols + cx, wave + float64(j)*gap, 0.24 * x.flight() * math.Sqrt(float64(y+1)/float64(x.rows))})
 		}
 	}
 	for i := range frames {
@@ -441,7 +480,7 @@ func (x *fx) assemble(frames []*Doc) {
 	var all []flyer
 	for c, u := range x.used {
 		if u {
-			all = append(all, flyer{c, x.r.Float64() * 0.55, 0.28 + 0.12*x.r.Float64(), x.r.Float64() * float64(x.cols-1), x.r.Float64() * float64(x.rows-1)})
+			all = append(all, flyer{c, x.r.Float64() * 0.55, (0.28 + 0.12*x.r.Float64()) * x.flight(), x.r.Float64() * float64(x.cols-1), x.r.Float64() * float64(x.rows-1)})
 		}
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].s < all[j].s })
@@ -478,9 +517,9 @@ func (x *fx) shine(frames []*Doc) {
 			}
 			q := float64(c%x.cols) + float64(c/x.cols)*x.asp
 			switch dist := math.Abs(q - p); {
-			case dist < w*0.4:
+			case dist < w*0.4 || x.detail == detailSmall && dist < w*0.6:
 				f.cells[c] = x.glint(x.d.cells[c], 1)
-			case dist < w:
+			case dist < w && x.detail != detailSmall:
 				f.cells[c] = x.glint(x.d.cells[c], 0.5)
 			}
 		}
@@ -493,6 +532,12 @@ func (x *fx) shine(frames []*Doc) {
 func (x *fx) shadeIn(frames []*Doc) {
 	k := len(frames)
 	steps := x.shadeSeq()
+	switch { // fewer steps below Large: the middle ones
+	case x.detail == detailSmall && len(steps) > 1:
+		steps = steps[len(steps)/2 : len(steps)/2+1]
+	case x.detail == detailMedium && len(steps) > 2:
+		steps = steps[len(steps)-2:]
+	}
 	stepLen := min(0.07, 0.26/float64(len(steps)))
 	span := float64(x.cols-1) + float64(x.rows-1)*x.asp
 	start := make([]float64, len(x.used))

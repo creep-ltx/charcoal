@@ -319,7 +319,8 @@ func (o *drawOrder) effectHold() int {
 	if o.Hold > 0 {
 		return o.Hold
 	}
-	return effectDefaults[o.pat()][1]
+	_, hold := effectOwn(o.pat(), o.detail())
+	return hold
 }
 
 // copyPath is the name of a board's copy beside path: name-amiexpress.ans.

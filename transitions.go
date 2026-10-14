@@ -117,6 +117,7 @@ type drawOrder struct {
 	Flip    bool   `json:"flip,omitempty"`
 	Seed    int64  `json:"seed,omitempty"`   // a frame effect's random parts
 	Frames  int    `json:"frames,omitempty"` // a frame effect's length (0: its own)
+	Detail  string `json:"detail,omitempty"` // "small", "medium" or "large" ("": large; animcost.go)
 	// BBS pauses (bbspause.go): the board whose codes the saved file gets
 	// ("": Settings' My BBS, "none": none for this page), the boards that also
 	// get a copy (ids, comma separated), a frame effect's hold (ms, 0: its
@@ -139,7 +140,10 @@ func (o *drawOrder) String() string {
 		s += ", flipped"
 	}
 	if isEffect(o.pat()) {
-		s += fmt.Sprintf(", %d frames", effectLength(o.pat(), o.Frames))
+		s += fmt.Sprintf(", %d frames", effectLengthAt(o.pat(), o.Frames, o.detail()))
+	}
+	if o.Detail != "" && o.pat() != patTop && o.pat() != patType {
+		s += ", " + strings.ToLower(detailNames[o.detail()])
 	}
 	return s
 }
@@ -150,6 +154,7 @@ func (o *drawOrder) String() string {
 type scanOpts struct {
 	reverse, flip bool
 	aspect        float64 // a cell's height over its width (2 for 8x16 cells); 0 means 2
+	run           int     // cells of a row put down together (0, 1: one by one; scanRun)
 }
 
 // blindRows is how tall a band of Blinds is.
@@ -175,9 +180,21 @@ func scanOrder(pat int, o scanOpts, cols, rows int, used func(x, y int) bool) []
 			}
 		}
 	}
+	// Runs: up to o.run cells next to each other on a row go together, at the
+	// place of their middle cell (one by one: each cell its own run).
+	var runs [][2]int // first cell, length
+	for i := 0; i < len(cells); {
+		j := i + 1
+		for o.run > 1 && j < len(cells) && j-i < o.run && cells[j] == cells[j-1]+1 && cells[j]%cols != 0 {
+			j++
+		}
+		runs = append(runs, [2]int{i, j - i})
+		i = j
+	}
 	key := scanKey(pat, cols, rows, asp)
-	keys := make([][4]float64, len(cells))
-	for i, c := range cells {
+	keys := make([][4]float64, len(runs))
+	for i, r := range runs {
+		c := cells[r[0]+r[1]/2]
 		x, y := c%cols, c/cols
 		if o.flip { // the scan visits (x, rows-1-y) where it would visit (x, y)
 			y = rows - 1 - y
@@ -185,7 +202,7 @@ func scanOrder(pat int, o scanOpts, cols, rows int, used func(x, y int) bool) []
 		k := key(x, y)
 		keys[i] = [4]float64{k[0], k[1], k[2], float64(y*cols + x)} // the last breaks every tie
 	}
-	idx := make([]int, len(cells))
+	idx := make([]int, len(runs))
 	for i := range idx {
 		idx[i] = i
 	}
@@ -198,12 +215,12 @@ func scanOrder(pat int, o scanOpts, cols, rows int, used func(x, y int) bool) []
 		}
 		return false
 	})
-	out := make([]int, len(cells))
-	for i, k := range idx {
-		out[i] = cells[k]
-	}
 	if o.reverse {
-		slices.Reverse(out)
+		slices.Reverse(idx)
+	}
+	out := make([]int, 0, len(cells))
+	for _, k := range idx {
+		out = append(out, cells[runs[k][0]:runs[k][0]+runs[k][1]]...) // a run left to right, also reversed
 	}
 	return out
 }
@@ -347,8 +364,16 @@ func (a *App) aspect() float64 { return float64(a.cellH()) / float64(max(1, a.ce
 // cellsInOrder are the cells of d a pattern draws, in order. The typewriter
 // types every row up to its last used cell, spaces too.
 func (a *App) cellsInOrder(d *Doc, e *Doc, pat int, rev, flip bool) []int {
+	return a.cellsInOrderAt(d, e, pat, rev, flip, detailLarge)
+}
+
+// cellsInOrderAt is cellsInOrder at a detail level (a scan in runs of cells below Large).
+func (a *App) cellsInOrderAt(d *Doc, e *Doc, pat int, rev, flip bool, detail int) []int {
 	used := func(x, y int) bool { return usedCell(a.mode, d.get(x, y), e.get(x, y)) }
 	o := scanOpts{reverse: rev, flip: flip, aspect: a.aspect()}
+	if isScan(pat) {
+		o.run = scanRun(detail)
+	}
 	if pat == patType {
 		last := make([]int, d.rows)
 		for y := range last {
@@ -455,15 +480,16 @@ type drawStep struct {
 func (a *App) drawSteps(d *Doc, o *drawOrder) []drawStep {
 	e := a.paperOf(d)
 	pat := o.pat()
-	order := a.cellsInOrder(d, e, pat, o.Reverse, o.Flip)
+	order := a.cellsInOrderAt(d, e, pat, o.Reverse, o.Flip, o.detail())
 	var steps []drawStep
 	if pat == patFadeIn {
 		paper := a.paperRGB(d, e)
-		for p := 1; p <= fadePasses; p++ {
+		passes := fadePassesAt(o.detail())
+		for p := 1; p <= passes; p++ {
 			for _, c := range order {
 				v := d.cells[c]
-				if p < fadePasses {
-					v = a.fadeCell(v, paper, float64(p)/fadePasses)
+				if p < passes {
+					v = a.fadeCell(v, paper, float64(p)/float64(passes))
 				}
 				steps = append(steps, drawStep{c % d.cols, c / d.cols, v})
 			}
@@ -775,7 +801,7 @@ func (w *ansiWriter) move(x, y int) []byte {
 	if y == w.y && x > w.x && x-w.x <= 3 {
 		again = w.reprint(w.x, x, y)
 	}
-	var nl []byte                                                // line ends: to the start of a row below
+	var nl []byte // line ends: to the start of a row below
 	if y > w.y && y-w.y <= 3 {
 		end := "\r\n"
 		if w.amiga {
@@ -1095,7 +1121,7 @@ func (a *App) writeOrderedPaced(fmtID string, d *Doc, sauce bool) ([]byte, []pau
 	var ps []pause
 	if p := a.order.pat(); isEffect(p) {
 		e := a.paperOf(d)
-		out, ends := writeDeltaFrames(fmtID, a.mode, e, a.effectFrames(d, e, p, a.order.Seed, a.order.Frames), a.streamOpts(sauce))
+		out, ends := writeDeltaFrames(fmtID, a.mode, e, a.effectFramesAt(d, e, p, a.order.Seed, a.order.Frames, a.order.detail()), a.streamOpts(sauce))
 		hold := a.order.effectHold()
 		for i, at := range ends[:len(ends)-1] {
 			ms := hold
@@ -1165,6 +1191,7 @@ type animSpec struct {
 	hold          int  // ms each frame is shown
 	baud          int
 	seed          int64 // a frame effect's random parts
+	detail        int   // detailLarge, detailMedium or detailSmall (animcost.go)
 }
 
 // Holds of the ends of an effect: the finished picture stays a while.
@@ -1184,12 +1211,12 @@ func (a *App) transitionFrames(d *Doc, s animSpec, maxCells int) (docs []*Doc, h
 	}
 	hold := max(20, s.hold)
 	if isEffect(s.pat) {
-		k := effectLength(s.pat, s.n)
+		k := effectLengthAt(s.pat, s.n, s.detail)
 		if k > maxK {
 			k = maxK
 			note = fmt.Sprintf("%d frames fit", k)
 		}
-		docs = a.effectFrames(d, e, s.pat, s.seed, k)
+		docs = a.effectFramesAt(d, e, s.pat, s.seed, k, s.detail)
 		holds = make([]int, len(docs))
 		for i := range holds {
 			holds[i] = hold
@@ -1246,7 +1273,7 @@ func (a *App) transitionFrames(d *Doc, s animSpec, maxCells int) (docs []*Doc, h
 			}
 		}
 	default:
-		order := a.cellsInOrder(d, e, s.pat, s.reverse, s.flip)
+		order := a.cellsInOrderAt(d, e, s.pat, s.reverse, s.flip, s.detail)
 		if len(order) == 0 {
 			return nil, nil, "Nothing is drawn on the page"
 		}

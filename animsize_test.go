@@ -27,7 +27,7 @@ func TestMeasureEffectSizes(t *testing.T) {
 	testApp(t, "pc")
 	var sb strings.Builder
 	pats := batchPatterns()
-	fmt.Fprintf(&sb, "%-22s %7s", "file", "plain")
+	fmt.Fprintf(&sb, "%-22s %7s", "file          level", "plain")
 	for _, p := range pats {
 		fmt.Fprintf(&sb, " %8s", patterns[p].id[:min(8, len(patterns[p].id))])
 	}
@@ -42,13 +42,15 @@ func TestMeasureEffectSizes(t *testing.T) {
 			fm := a.pageStreamFormat()
 			a.order = nil
 			plain, _ := a.encodeFor(fm, "", nil)
-			fmt.Fprintf(&sb, "%-22s %7d", filepath.Base(f), len(plain))
-			for _, p := range pats {
-				a.order = &drawOrder{Pattern: patterns[p].id, Seed: 7}
-				out, _ := a.encodeFor(fm, "", nil)
-				fmt.Fprintf(&sb, " %8d", len(out))
+			for _, det := range []int{detailLarge, detailMedium, detailSmall} {
+				fmt.Fprintf(&sb, "%-16s %-5s %7d", filepath.Base(f), detailIDs[det][:1], len(plain))
+				for _, p := range pats {
+					a.order = &drawOrder{Pattern: patterns[p].id, Seed: 7, Detail: detailIDs[det]}
+					out, _ := a.encodeFor(fm, "", nil)
+					fmt.Fprintf(&sb, " %8d", len(out))
+				}
+				fmt.Fprintf(&sb, "   %dx%d %s\n", a.doc.cols, a.doc.rows, a.mode)
 			}
-			fmt.Fprintf(&sb, "   %dx%d %s\n", a.doc.cols, a.doc.rows, a.mode)
 		})
 	}
 	t.Log("\n" + sb.String())
