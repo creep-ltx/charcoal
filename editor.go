@@ -163,6 +163,8 @@ type Tab struct {
 	frames              []Frame     // the page's pictures when it has several (nil: one, the doc); see frames.go
 	cur                 int         // the frame being worked on: doc is it
 	restructured        bool        // frames were added, deleted or moved since the file was read or saved
+	onion               bool        // the frame before shows faint under the empty cells
+	strip               int         // the frame strip: 0 while the page has several frames, 1 on, -1 off
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),

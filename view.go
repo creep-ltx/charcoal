@@ -214,7 +214,15 @@ func (a *App) drawWindow(u *UI) {
 		pane.h = max(0, status.y-top-80)
 		pane.y = status.y - pane.h
 	}
-	a.drawPages(u, Rect{0, top, W, pane.y - top})
+	end := pane.y
+	if a.stripShown() {
+		strip := Rect{0, pane.y - gadH - 3, W, gadH + 3}
+		if strip.y-top >= 80 {
+			end = strip.y
+			a.drawStrip(u, strip)
+		}
+	}
+	a.drawPages(u, Rect{0, top, W, end - top})
 	a.drawPane(u, pane)
 	a.drawStatus(u, status)
 }
@@ -703,6 +711,7 @@ func (a *App) drawPage(u *UI, id string) {
 			a.drawCell(fb, ox+x*colPx, oy+y*rowPx, z, a.doc.get(x, y))
 		}
 	}
+	a.drawOnion(fb, ox, oy, x0, x1, y0, y1)
 	if a.grid {
 		w := min(p.w, cw-a.scrollX)
 		for x := x0; x <= x1; x++ {
@@ -918,6 +927,7 @@ func (a *App) pageMotion(mx, my int) {
 }
 
 func (a *App) pageRelease() {
+	a.stripRelease()
 	if a.moving && a.float != nil {
 		a.dropMoved()
 	}

@@ -182,6 +182,8 @@ func init() {
 		{"frame_later", "Alt+Shift+PageDown", "Move the frame later", func() { a.moveFrame(1) }},
 		{"frame_hold_less", "Alt+[, Alt+Keypad -", "Show the frame a shorter time when played", func() { a.stepHold(-1) }},
 		{"frame_hold_more", "Alt+], Alt+Keypad +", "Show the frame a longer time when played", func() { a.stepHold(1) }},
+		{"onion", "Alt+O", "Onion skin on / off: the frame before, faint, under the empty cells", func() { a.toggleOnion() }},
+		{"frames_strip", "Ctrl+Shift+F", "Show / hide the frame strip", func() { a.toggleStrip() }},
 
 		{"select_left", "Shift+Left", "Select with the keyboard: from the cursor, growing as it moves (Esc lets go)", func() { a.selectKey("Left") }},
 		{"select_right", "Shift+Right", "", func() { a.selectKey("Right") }},

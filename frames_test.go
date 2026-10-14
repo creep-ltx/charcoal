@@ -182,3 +182,62 @@ func TestFrameHold(t *testing.T) {
 		t.Fatal(b.holdOf(0))
 	}
 }
+
+// The strip shows while a page has several frames, unless switched off; Ctrl+Shift+F switches it.
+func TestStripShown(t *testing.T) {
+	a := testApp(t, "pc")
+	if a.stripShown() {
+		t.Fatal("shown for one frame")
+	}
+	a.toggleStrip()
+	if !a.stripShown() {
+		t.Fatal("not shown when switched on")
+	}
+	a.toggleStrip()
+	a.newFrame()
+	if a.stripShown() {
+		t.Fatal("switched off, shown again")
+	}
+	a.strip = 0
+	if !a.stripShown() {
+		t.Fatal("not shown for two frames")
+	}
+	a.bare = true
+	if a.stripShown() {
+		t.Fatal("shown with the gadgets hidden")
+	}
+}
+
+// The onion skin draws the frame before at about a quarter under an empty cell, and nothing over ink.
+func TestOnionPixels(t *testing.T) {
+	a := testApp(t, "pc")
+	a.doc.set(0, 0, makeCell(0xDB, 15, 0, 0)) // a white full block
+	a.doc.set(1, 0, makeCell(0xDB, 15, 0, 0))
+	a.newFrame()
+	a.doc.set(1, 0, makeCell(0xDB, 4, 0, 0)) // the new frame's own ink in cell 1
+	u := &UI{fb: &FB{}}
+	u.fb.resize(400, 200)
+	a.page = Rect{0, 0, 300, 150}
+	a.blink = false
+	px := func() (uint32, uint32) {
+		u.fb.fill(Rect{0, 0, 400, 200}, 0)
+		a.drawPage(u, "0")
+		z := a.zoom
+		return u.fb.px[(4*z)*400+4*z] & 0xFFFFFF, u.fb.px[(4*z)*400+a.cellW()*z+4*z] & 0xFFFFFF
+	}
+	if c0, _ := px(); c0 != 0 {
+		t.Fatalf("onion off: %06x", c0)
+	}
+	a.onion = true
+	c0, c1 := px()
+	if r := c0 >> 16; r < 0x30 || r > 0x50 || c0 != r*0x10101 {
+		t.Fatalf("onion: %06x, want a quarter white", c0)
+	}
+	if c1 != a.pal[4]&0xFFFFFF {
+		t.Fatalf("onion over ink: %06x", c1)
+	}
+	a.goFrame(0)
+	if c0, _ := px(); c0 != 0xFFFFFF {
+		t.Fatalf("first frame: %06x", c0)
+	}
+}
