@@ -139,6 +139,7 @@ func TestBatchNoRepeatsAndTickedList(t *testing.T) {
 	last := ""
 	seen := map[string]bool{}
 	for _, e := range effectsOf(r) {
+		e = strings.SplitN(e, ",", 2)[0] // the name, without ", medium"
 		if e != "Top" && e != "Clock" {
 			t.Fatalf("an effect not ticked: %q", e)
 		}
@@ -155,7 +156,7 @@ func TestBatchNoRepeatsAndTickedList(t *testing.T) {
 	r = runBatch(t, batchSpec{Inputs: []string{src}, Effect: "random", NoRepeat: true, Seed: 9, Board: "none", Pool: []string{"diamond"},
 		Out: filepath.Join(t.TempDir(), "p")})
 	for _, e := range effectsOf(r) {
-		if e != "Diamond" {
+		if e = strings.SplitN(e, ",", 2)[0]; e != "Diamond" {
 			t.Fatalf("pool of one gave %q", e)
 		}
 	}

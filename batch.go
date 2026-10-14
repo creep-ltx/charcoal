@@ -44,6 +44,56 @@ type batchSpec struct {
 	Out        string   // the output folder ("": <folder>-animated)
 	Replace    bool     // write over the originals (each kept as .bak)
 	AEPath     string   // Ami-Express: the screens folder on the board, for ~SR_
+	// Size (animcost.go): the detail level ("": medium), and a budget each
+	// version must keep: at most MaxKB KB, at most MaxSeconds s at AtBps (0:
+	// no limit), no heavier than MaxWeight ("": any, "light", "medium").
+	// Effects that do not fit are played lower, then passed over.
+	Detail     string
+	MaxKB      int
+	MaxSeconds int
+	AtBps      int // 0: 14400; telnet: -1
+	MaxWeight  string
+}
+
+// budgeted: the run checks each version against a budget.
+func (s *batchSpec) budgeted() bool { return s.MaxKB > 0 || s.MaxSeconds > 0 || s.MaxWeight != "" }
+
+// bps is the speed the run's times are given at.
+func (s *batchSpec) bps() int {
+	if s.AtBps == 0 {
+		return 14400
+	}
+	return s.AtBps
+}
+
+// level is the run's detail level.
+func (s *batchSpec) level() int {
+	if d := detailByID(s.Detail); s.Detail != "" && d >= 0 {
+		return d
+	}
+	return detailMedium
+}
+
+// fits says why a version costing c is over the budget ("" it fits).
+func (s *batchSpec) fits(c animCost) string {
+	switch {
+	case s.MaxKB > 0 && c.size > s.MaxKB*1024:
+		return fmt.Sprintf("%s, over %d KB", kbWords(c.size), s.MaxKB)
+	case s.MaxSeconds > 0 && c.at(s.bps()) > s.MaxSeconds*1000:
+		return fmt.Sprintf("%s at %s, over %d s", durWords(c.at(s.bps())), speedName(s.bps()), s.MaxSeconds)
+	case s.MaxWeight != "" && c.weight() > weightByName(s.MaxWeight):
+		return weightNames[c.weight()] + ", not " + s.MaxWeight
+	}
+	return ""
+}
+
+func weightByName(n string) int {
+	for i, w := range weightNames {
+		if strings.EqualFold(w, n) {
+			return i
+		}
+	}
+	return weightHeavy
 }
 
 // batchKinds: the kinds of file a run can animate, for the requester and the report.
@@ -190,7 +240,10 @@ type batchItem struct {
 	outs    []string // what was written, from the output folder
 	effects []string // the effect of each version
 	before  int64
-	after   int64 // all versions and copies
+	after   int64        // all versions and copies
+	orders  []*drawOrder // each version's order
+	sizes   []int64      // each output's size
+	times   []int        // each version's play time at the run's speed, ms (-1: a copy or a stub)
 	skipped string
 	note    string
 	err     bool // a file could not be written
@@ -230,6 +283,14 @@ func newBatchRun(s batchSpec) *batchRun {
 	}
 	if r.spec.Variants < 1 {
 		r.spec.Variants = 1
+	}
+	if s.Detail != "" && detailByID(s.Detail) < 0 {
+		r.err = "No such detail level: " + s.Detail + " (small, medium or large)"
+		return r
+	}
+	if s.MaxWeight != "" && !strings.EqualFold(s.MaxWeight, "light") && !strings.EqualFold(s.MaxWeight, "medium") {
+		r.err = "No such weight: " + s.MaxWeight + " (light or medium)"
+		return r
 	}
 	if s.Effect == "random" {
 		ids := s.Pool
@@ -503,7 +564,7 @@ func (r *batchRun) animate(it *batchItem, root, rel, full string, b []byte) {
 	if r.spec.Variants > len(names) {
 		it.note = joinNote(it.note, fmt.Sprintf("%s takes %d versions at most", boardName(r.board), len(names)))
 	}
-	write := func(rel string, data []byte) bool {
+	write := func(rel string, data []byte, ms int) bool {
 		p := r.outPath(root, rel)
 		err := os.MkdirAll(filepath.Dir(p), 0o755)
 		if err == nil && r.spec.Replace {
@@ -519,6 +580,8 @@ func (r *batchRun) animate(it *batchItem, root, rel, full string, b []byte) {
 		}
 		it.outs = append(it.outs, rel)
 		it.after += int64(len(data))
+		it.sizes = append(it.sizes, int64(len(data)))
+		it.times = append(it.times, ms)
 		r.used[p] = true
 		return true
 	}
@@ -535,7 +598,21 @@ func (r *batchRun) animate(it *batchItem, root, rel, full string, b []byte) {
 		}
 	}
 	for i, name := range names {
-		o := r.pick()
+		var o *drawOrder
+		var cost animCost
+		if r.spec.budgeted() {
+			var why string
+			if o, cost, why = r.pickFitting(fmtID); o == nil {
+				if len(it.outs) == 0 {
+					it.skipped = why
+				} else {
+					it.note = joinNote(it.note, fmt.Sprintf("only %d versions: %s", i, why))
+				}
+				return
+			}
+		} else if o = r.pick(); o != nil {
+			cost = a.costOf(fmtID, o, r.board)
+		}
 		if o == nil {
 			it.skipped = "none of the chosen effects works on this page (" + a.fadeRefused() + ")"
 			return
@@ -550,24 +627,25 @@ func (r *batchRun) animate(it *batchItem, root, rel, full string, b []byte) {
 		if isEffect(o.pat()) {
 			desc += fmt.Sprintf(", seed %d", o.Seed)
 		}
-		if !write(name, data) {
+		if !write(name, data, cost.at(r.spec.bps())) {
 			continue
 		}
 		it.effects = append(it.effects, desc)
+		it.orders = append(it.orders, o)
 		for _, c := range copies { // the same version with another board's codes, named its way
 			if i >= len(c.names) {
 				continue
 			}
-			if data, err := a.encodeFor(fmtID, c.b.id, nil); err == nil && write(copyPath(c.names[i], c.b.id), data) {
+			if data, err := a.encodeFor(fmtID, c.b.id, nil); err == nil && write(copyPath(c.names[i], c.b.id), data, -1) {
 				it.effects = append(it.effects, "the same, with "+c.b.name+"'s codes")
 			}
 		}
 	}
-	if stub != nil && write(outRel, stub) {
+	if stub != nil && write(outRel, stub, -1) {
 		it.effects = append(it.effects, fmt.Sprintf("shows one of the %d at random: %s", len(names), strings.TrimSpace(string(stub))))
 	}
 	for _, c := range copies {
-		if c.stub != nil && write(copyPath(outRel, c.b.id), c.stub) {
+		if c.stub != nil && write(copyPath(outRel, c.b.id), c.stub, -1) {
 			it.effects = append(it.effects, c.b.name+": shows one at random (rename to the plain names on the board)")
 		}
 	}
@@ -604,7 +682,7 @@ func (r *batchRun) pick() *drawOrder {
 	}
 	p := cand[r.rng.Intn(len(cand))]
 	r.last = p
-	o := &drawOrder{Pattern: patterns[p].id, BBS: "none"}
+	o := &drawOrder{Pattern: patterns[p].id, BBS: "none", Detail: detailIDs[r.spec.level()]}
 	if r.board != "" {
 		o.BBS = r.board
 	}
@@ -620,6 +698,58 @@ func (r *batchRun) pick() *drawOrder {
 		o.Every, o.Pause = r.spec.Every, r.spec.Pause
 	}
 	return o
+}
+
+// pickFitting is the next effect that keeps the budget on this page: the
+// candidates in a random order (the chosen one alone when not Random), each
+// at the run's level, then lower ones, the first that fits taken. why says
+// what the smallest would have cost when none fits.
+func (r *batchRun) pickFitting(fmtID string) (*drawOrder, animCost, string) {
+	cand := []int{}
+	for _, p := range r.pool {
+		if p == patFadeIn && a.fadeRefused() != "" {
+			continue
+		}
+		if r.spec.NoRepeat && len(r.pool) > 1 && p == r.last {
+			continue
+		}
+		cand = append(cand, p)
+	}
+	if len(cand) == 0 {
+		return nil, animCost{}, "none of the chosen effects works on this page (" + a.fadeRefused() + ")"
+	}
+	r.rng.Shuffle(len(cand), func(i, j int) { cand[i], cand[j] = cand[j], cand[i] })
+	best, bestWhy := animCost{}, ""
+	for _, p := range cand {
+		o := &drawOrder{Pattern: patterns[p].id, BBS: "none"}
+		if r.board != "" {
+			o.BBS = r.board
+		}
+		if r.spec.Toggles && hasToggles(p) {
+			o.Reverse, o.Flip = r.rng.Intn(2) == 1, r.rng.Intn(2) == 1
+		}
+		if isEffect(p) {
+			o.Seed = 1 + r.rng.Int63n(1<<31-1)
+			if r.spec.Hold > 0 {
+				o.Hold = r.spec.Hold
+			}
+		} else {
+			o.Every, o.Pause = r.spec.Every, r.spec.Pause
+		}
+		for det := r.spec.level(); det < nDetails; det++ { // Large, Medium, Small: lower each time
+			o.Detail = detailIDs[det]
+			c := a.costOf(fmtID, o, r.board)
+			why := r.spec.fits(c)
+			if why == "" {
+				r.last = p
+				return o, c, ""
+			}
+			if bestWhy == "" || c.size < best.size {
+				best, bestWhy = c, fmt.Sprintf("nothing fits the budget (the smallest, %s: %s)", o, why)
+			}
+		}
+	}
+	return nil, animCost{}, bestWhy
 }
 
 // ---------------------------------------------------------------- the report
@@ -680,6 +810,23 @@ func (r *batchRun) reportText() string {
 	}
 	fmt.Fprintf(&sb, "Effect:   %s\n", r.effectWords())
 	fmt.Fprintf(&sb, "Seed:     %d (the same seed picks the same again)\n", s.Seed)
+	fmt.Fprintf(&sb, "Detail:   %s%s\n", detailNames[s.level()], map[bool]string{true: " (lower where the budget asks)"}[s.budgeted()])
+	if s.budgeted() {
+		var b []string
+		if s.MaxKB > 0 {
+			b = append(b, fmt.Sprintf("at most %d KB", s.MaxKB))
+		}
+		if s.MaxSeconds > 0 {
+			b = append(b, fmt.Sprintf("at most %d s at %s", s.MaxSeconds, speedName(s.bps())))
+		}
+		if s.MaxWeight == "light" {
+			b = append(b, "light effects only")
+		} else if s.MaxWeight != "" {
+			b = append(b, "light and medium effects only")
+		}
+		fmt.Fprintf(&sb, "Budget:   %s, each screen\n", strings.Join(b, ", "))
+	}
+	fmt.Fprintf(&sb, "Times:    at %s (bytes x 10 / bps, plus the board's pauses)\n", speedName(s.bps()))
 	if b := boardByID(r.board); b != nil {
 		every, ms := (&drawOrder{Every: s.Every, Pause: s.Pause}).pacing()
 		hold := "each effect's own hold"
@@ -714,7 +861,14 @@ func (r *batchRun) reportText() string {
 			if i < len(it.effects) {
 				e = it.effects[i]
 			}
-			fmt.Fprintf(&sb, "      %-28s %s\n", o, e)
+			cost := ""
+			if i < len(it.sizes) {
+				cost = kbWords(int(it.sizes[i]))
+				if it.times[i] >= 0 {
+					cost += ", " + durWords(it.times[i])
+				}
+			}
+			fmt.Fprintf(&sb, "      %-28s %-20s %s\n", o, cost, e)
 		}
 		if it.note != "" {
 			fmt.Fprintf(&sb, "      (%s)\n", it.note)
@@ -775,7 +929,21 @@ func (r *batchRun) commandLine() string {
 	if s.Toggles {
 		parts = append(parts, "--toggles")
 	}
-	parts = append(parts, "--seed", fmt.Sprint(s.Seed))
+	parts = append(parts, "--seed", fmt.Sprint(s.Seed), "--detail", detailIDs[s.level()])
+	if s.MaxKB > 0 {
+		parts = append(parts, "--max-kb", fmt.Sprint(s.MaxKB))
+	}
+	if s.MaxSeconds > 0 {
+		parts = append(parts, "--max-seconds", fmt.Sprint(s.MaxSeconds))
+	}
+	if s.MaxSeconds > 0 || s.AtBps != 0 {
+		parts = append(parts, "--at", speedLabel(s.bps()))
+	}
+	if s.MaxWeight == "light" {
+		parts = append(parts, "--light")
+	} else if s.MaxWeight != "" {
+		parts = append(parts, "--weight", s.MaxWeight)
+	}
 	b := r.board
 	if b == "" {
 		b = "none"
@@ -844,6 +1012,14 @@ folder, the names kept; the originals are never changed unless --replace is give
   --repeats             random: the same effect may come twice in a row
   --toggles             Reverse and Flip at random too
   --seed N              the random choices (the same seed gives the same files)
+  --detail LEVEL        small, medium (the default) or large: Small is for modems, Large the full look
+  --max-kb N            each version at most N KB (an effect that does not fit is played at a
+                        lower detail, then passed over; a screen nothing fits is skipped)
+  --max-seconds N       each version plays in at most N seconds at --at's speed
+  --at BPS              the speed for --max-seconds and the report's times: 2400 ... 57600,
+                        or telnet (only the pauses count); 14400 when not given
+  --light               light effects only (at most 1.5x the screen's plain file)
+  --weight light|medium no heavier than this
   --bbs ID              amiexpress, mystic, pcboard, synchronet, tempest or none: the
                         board whose pause codes the files get (default: My BBS in Settings)
   --copies LIST         also a copy for these boards beside each file (name-<board>.ext)
@@ -978,6 +1154,38 @@ func animateCLI(args []string, stdout, stderr *os.File) int {
 					}
 					s.Types[x] = true
 				}
+			}
+		case "--detail":
+			var v string
+			if v, ok = val(); ok {
+				if v == "" || detailByID(v) < 0 {
+					return bad("--detail is small, medium or large")
+				}
+				s.Detail = detailIDs[detailByID(v)]
+			}
+		case "--max-kb":
+			s.MaxKB, ok = num(1)
+		case "--max-seconds":
+			s.MaxSeconds, ok = num(1)
+		case "--at":
+			var v string
+			if v, ok = val(); ok {
+				if strings.EqualFold(v, "telnet") {
+					s.AtBps = telnet
+				} else if _, err := fmt.Sscan(v, &s.AtBps); err != nil || s.AtBps < 300 {
+					return bad("--at wants a speed in bits per second (2400, 14400 ...) or telnet")
+				}
+			}
+		case "--light":
+			s.MaxWeight, ok = "light", true
+		case "--weight":
+			var v string
+			if v, ok = val(); ok {
+				v = strings.ToLower(v)
+				if v != "light" && v != "medium" {
+					return bad("--weight is light or medium")
+				}
+				s.MaxWeight = v
 			}
 		case "--subfolders":
 			s.Subfolders, ok = true, true

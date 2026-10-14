@@ -594,12 +594,12 @@ func (a *App) drawBar(u *UI) int {
 	var baudNames []string
 	bcur := 2
 	for i, b := range bauds {
-		baudNames = append(baudNames, strconv.Itoa(b))
+		baudNames = append(baudNames, speedLabel(b))
 		if b == a.baud {
 			bcur = i
 		}
 	}
-	u.choice("baud", fl.place(choiceW(baudNames)), baudNames, bcur, "Play speed (bits per second)", func(i int) {
+	u.choice("baud", fl.place(choiceW(baudNames)), baudNames, bcur, "Play speed: a caller's modem (bits per second), or telnet (only a board's pauses)", func(i int) {
 		a.baud = bauds[i]
 		savePrefs()
 	})

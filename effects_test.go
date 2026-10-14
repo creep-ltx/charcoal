@@ -322,6 +322,10 @@ func TestAnimateRequesterEffects(t *testing.T) {
 	randomPage(a, rand.New(rand.NewSource(6)), 80, 25)
 	openAnimate()
 	d := a.dialog.(*AnimReq)
+	if d.detail != detailMedium {
+		t.Errorf("the requester starts at %s", detailNames[d.detail])
+	}
+	d.detail = detailLarge
 	d.pat = patDecrypt
 	d.syncDefaults()
 	if d.length.String() != "55" || d.hold.String() != "40" {

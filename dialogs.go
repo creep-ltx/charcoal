@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -1001,13 +1002,21 @@ func loadSTDownloaded() (string, error) {
 
 // ---------------------------------------------------------------- settings
 
-type SettingsReq struct{ err string }
+type SettingsReq struct {
+	err  string
+	warn Field // Animate's warning, seconds (animcost.go)
+}
 
-func openSettings() { a.dialog = &SettingsReq{} }
+func openSettings() {
+	d := &SettingsReq{warn: Field{max: 4}}
+	d.warn.set(strconv.Itoa(animWarnMs() / 1000))
+	d.warn.enter = func() { ui.focus = nil }
+	a.dialog = d
+}
 
 func (d *SettingsReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(660, 480), "Settings")
+	in := u.window(centre(660, 520), "Settings")
 	y := in.y
 	fb.text(in.x, y+3, "Window size", cText)
 	sizes := []string{"1x (normal)", "2x (big screens)", "3x", "4x"} // as many as main allows (maxUIScale)
@@ -1044,6 +1053,15 @@ func (d *SettingsReq) draw(u *UI) {
 		fb.text(in.x, y, l, cText)
 		y += lineH
 	}
+	y += 6
+	x := fb.text(in.x, y+3, "Animate warns when a file plays longer than", cText) + 8
+	u.field(Rect{x, y, 4*charW + 16, gadH}, &d.warn, "Seconds at the caller's speed chosen in Animate (the speed in the bar)")
+	fb.text(x+4*charW+24, y+3, "s", cText)
+	if v, err := strconv.Atoi(d.warn.String()); err == nil && v > 0 && v != prefs.AnimWarn && v <= 9999 {
+		prefs.AnimWarn = v
+		savePrefs()
+	}
+	y += gadH + 4
 	y += 12
 	fb.text(in.x, y, "Commodore character sets (PETSCII)", cHi)
 	y += lineH + 4

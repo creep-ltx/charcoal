@@ -29,14 +29,16 @@ type Prefs struct {
 	ViewAuto  bool                `json:"view_auto_scroll"`
 	ViewStep  bool                `json:"view_step_scroll"`
 	ViewSpeed float64             `json:"view_scroll_speed"`
-	C64Asked  bool                `json:"c64asked"`             // the first-run question about the C64 character set
-	NoBackup  bool                `json:"no_backup"`            // saving over a file does not keep the old one as .bak
-	NoStart   bool                `json:"no_start_screen"`      // start on an empty page, not the start screen
-	Recent    []string            `json:"recent"`               // the last files opened or saved, newest first
-	Refs      map[string]*RefPref `json:"references,omitempty"` // each art file's reference picture (refimage.go)
-	Shades    map[string][]int    `json:"shades,omitempty"`     // the shade brush's characters per page type, lightest first
-	ArtFonts  map[string]ArtFont  `json:"art_fonts"`            // art file -> the font CharEdit keeps for it (fontfile.go)
-	MyBBS     string              `json:"my_bbs,omitempty"`     // the board whose pause codes animated saves get ("": none; bbspause.go)
+	C64Asked  bool                `json:"c64asked"`                    // the first-run question about the C64 character set
+	NoBackup  bool                `json:"no_backup"`                   // saving over a file does not keep the old one as .bak
+	NoStart   bool                `json:"no_start_screen"`             // start on an empty page, not the start screen
+	Recent    []string            `json:"recent"`                      // the last files opened or saved, newest first
+	Refs      map[string]*RefPref `json:"references,omitempty"`        // each art file's reference picture (refimage.go)
+	Shades    map[string][]int    `json:"shades,omitempty"`            // the shade brush's characters per page type, lightest first
+	ArtFonts  map[string]ArtFont  `json:"art_fonts"`                   // art file -> the font CharEdit keeps for it (fontfile.go)
+	MyBBS     string              `json:"my_bbs,omitempty"`            // the board whose pause codes animated saves get ("": none; bbspause.go)
+	AnimWarn  int                 `json:"anim_warn_seconds,omitempty"` // Animate warns past this many seconds at the chosen speed (0: 30; animcost.go)
+	AnimLevel string              `json:"anim_detail,omitempty"`       // Animate's last detail level ("": medium)
 	Width     int                 `json:"width"`
 	Height    int                 `json:"height"`
 }

@@ -92,7 +92,7 @@ func defaultFkeys() map[string][][]int {
 	}
 }
 
-var bauds = []int{2400, 9600, 14400, 28800, 57600, 115200}
+var bauds = []int{2400, 9600, 14400, 33600, 57600, 115200, telnet} // telnet: no speed limit, only a board's pauses
 
 type Info struct {
 	title, author, group string
@@ -127,6 +127,10 @@ type Play struct {
 	lowers []int // PETSCII case of each, -1 not said
 	fi     int
 	next   time.Time // when the next frame comes
+	// A board's pauses in the stream (Animate's board): waited for at any speed.
+	pauses []pause
+	pi     int
+	wait   time.Time
 }
 
 // Tab is one open page with everything that belongs to it.
@@ -2559,7 +2563,7 @@ func (a *App) play() {
 	if a.st() {
 		em = newSTTerm(d, a.res())
 	}
-	a.playing = &Play{bytes: b, term: em, saved: a.snapshot(), last: time.Now()}
+	a.playing = &Play{bytes: b, term: em, saved: a.snapshot(), last: time.Now(), pauses: a.playPauses(b)}
 	a.doc, a.sel, a.float = d, nil, nil
 	a.scrollY = 0
 }
@@ -2572,11 +2576,25 @@ func (a *App) playStepAt(now time.Time) {
 		a.frameStep(now)
 		return
 	}
+	if now.Before(p.wait) {
+		p.last = now
+		return
+	}
 	n := max(1, int(now.Sub(p.last).Seconds()*float64(a.baud)/10+0.5))
+	if a.baud <= 0 { // telnet: everything up to the next pause at once
+		n = len(p.bytes)
+	}
 	p.last = now
 	end := min(len(p.bytes), p.pos+n)
+	if p.pi < len(p.pauses) {
+		end = min(end, max(p.pos, p.pauses[p.pi].at))
+	}
 	p.term.write(p.bytes[p.pos:end])
 	p.pos = end
+	if p.pi < len(p.pauses) && p.pos >= p.pauses[p.pi].at {
+		p.wait = now.Add(time.Duration(p.pauses[p.pi].ms) * time.Millisecond)
+		p.pi++
+	}
 	x, y := p.term.cursor()
 	a.cx, a.cy = min(x, a.doc.cols-1), max(0, min(y, maxRowsFor(a.doc.cols)-1))
 	a.doc.ensureRows(a.cy + 1)

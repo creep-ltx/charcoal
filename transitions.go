@@ -1334,7 +1334,7 @@ func (a *App) animCuts(d, e *Doc, order []int, s animSpec) (cuts, holds []int) {
 			}
 		}
 	}
-	baud := max(300, s.baud)
+	baud := lineBps(s.baud)
 	offs := make([]int, len(order))
 	if f := a.pageStreamFormat(); f != "" {
 		steps := make([]drawStep, len(order))

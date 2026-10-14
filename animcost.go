@@ -10,6 +10,7 @@ package main
 // board's pauses; over telnet only the pauses count).
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"strings"
@@ -96,10 +97,34 @@ func (o *drawOrder) detail() int {
 // ---------------------------------------------------------------- speeds and time
 
 // telnet is the speed list's "telnet (fast)": the bytes take no time, only the pauses.
-const telnet = 0
+const telnet = -1
 
 // costSpeeds are the speeds the cost of an animation is shown at.
 var costSpeeds = []int{2400, 9600, 14400, 33600, 57600, telnet}
+
+// speedLabel is a speed in a short list: 14400, telnet.
+func speedLabel(bps int) string {
+	if bps <= 0 {
+		return "telnet"
+	}
+	return fmt.Sprint(bps)
+}
+
+// lineBps is a speed to count bytes by: telnet as the fastest modem.
+func lineBps(bps int) int {
+	if bps <= 0 {
+		return 115200
+	}
+	return bps
+}
+
+// animWarnMs is how long an animation may play at the chosen speed before Animate warns (Settings).
+func animWarnMs() int {
+	if prefs.AnimWarn <= 0 {
+		return 30000
+	}
+	return prefs.AnimWarn * 1000
+}
 
 func speedName(bps int) string {
 	if bps <= 0 {
@@ -146,20 +171,19 @@ type animCost struct {
 	sent    int // what the caller's terminal gets (the board takes its codes out)
 	pauseMs int // the board's pauses in all
 	plain   int // the page saved row by row, no animation
-	used    int // the cells that show something
 }
 
 // at is how long it plays at bps.
 func (c animCost) at(bps int) int { return playMs(c.sent, c.pauseMs, bps) }
 
-// perCell is the bytes the animation takes per cell that shows something.
-func (c animCost) perCell() float64 { return float64(c.sent) / float64(max(1, c.used)) }
+// ratio is the animation's bytes against the plain file's (the page saved row by row).
+func (c animCost) ratio() float64 { return float64(c.sent) / float64(max(1, c.plain)) }
 
-// The weight classes, by bytes per cell that shows something (a plain ANSI
-// screen takes about 2 to 5).
+// The weight classes, by what the animation adds to the plain file: light
+// costs about what the screen costs anyway, heavy several times more.
 const (
-	lightPerCell  = 7.0
-	mediumPerCell = 20.0
+	lightRatio  = 1.5
+	mediumRatio = 4.0
 )
 
 const (
@@ -171,10 +195,10 @@ const (
 var weightNames = []string{"light", "medium", "heavy"}
 
 func (c animCost) weight() int {
-	switch p := c.perCell(); {
-	case p <= lightPerCell:
+	switch r := c.ratio(); {
+	case r <= lightRatio:
 		return weightLight
-	case p <= mediumPerCell:
+	case r <= mediumRatio:
 		return weightMedium
 	}
 	return weightHeavy
@@ -201,6 +225,32 @@ func (a *App) costOf(fmtID string, o *drawOrder, board string) animCost {
 	for _, p := range ps {
 		c.pauseMs += p.ms
 	}
-	c.used = len(a.cellsInOrder(a.doc, a.paperOf(a.doc), patTop, false, false))
 	return c
+}
+
+// playPauses are the page's board's pauses in b, what Play sends (nil: no
+// board, or b is not the page's animation): Play waits them at any speed, as
+// the board would.
+func (a *App) playPauses(b []byte) []pause {
+	f := a.pageStreamFormat()
+	board := boardByID(a.pageBoard())
+	if board == nil || !board.shows(f) {
+		return nil
+	}
+	var out []byte
+	var ps []pause
+	switch {
+	case a.nFrames() > 1:
+		out, ps = a.writeStreamFramesPaced(f, a.allDocs(), false)
+	case a.order != nil && a.order.pat() >= 0 && !framesOnly(a.order.pat(), false):
+		d := a.doc
+		if limit := map[string]int{"seq": a.mach().cols, "ata": 40}[f]; limit > 0 && d.cols > limit {
+			d = d.withCols(limit)
+		}
+		out, ps = a.writeOrderedPaced(f, d, false)
+	}
+	if !bytes.Equal(out, b) {
+		return nil
+	}
+	return ps
 }

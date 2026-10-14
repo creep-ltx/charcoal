@@ -119,7 +119,7 @@ func (a *App) streamSplit() splitInfo {
 	if a.source == nil || a.srcKind != "" || a.sourceBin || a.zx() || a.tt() {
 		return splitInfo{}
 	}
-	docs, _, homes := splitStream(a.source, a.mode, a.doc.cols, a.amiga(), a.res(), false, a.baud)
+	docs, _, homes := splitStream(a.source, a.mode, a.doc.cols, a.amiga(), a.res(), false, lineBps(a.baud))
 	return splitInfo{len(docs), homes}
 }
 
@@ -127,7 +127,7 @@ func (a *App) streamSplit() splitInfo {
 // home), as one undo step.
 func (a *App) splitFrames(atHome bool) {
 	a.endPlay()
-	docs, holds, _ := splitStream(a.source, a.mode, a.doc.cols, a.amiga(), a.res(), atHome, a.baud)
+	docs, holds, _ := splitStream(a.source, a.mode, a.doc.cols, a.amiga(), a.res(), atHome, lineBps(a.baud))
 	if len(docs) < 2 {
 		a.msg("The file shows only one picture")
 		return
@@ -146,7 +146,7 @@ func (a *App) splitFrames(atHome bool) {
 	if atHome {
 		how = "cursor home"
 	}
-	a.msg(fmt.Sprintf("Split at each %s: %d frames, each held as long as it took at %d bps (%s undoes it)", how, len(docs), a.baud, keyName("undo")))
+	a.msg(fmt.Sprintf("Split at each %s: %d frames, each held as long as it took at %d bps (%s undoes it)", how, len(docs), lineBps(a.baud), keyName("undo")))
 }
 
 // writeStreamFrames writes every frame as one stream: a clear before every frame after the first.

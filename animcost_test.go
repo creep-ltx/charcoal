@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -202,5 +203,101 @@ func TestCostWeights(t *testing.T) {
 	}
 	if durWords(260000) != "4 min 20 s" || durWords(12400) != "12 s" || durWords(300) != "0.3 s" {
 		t.Errorf("words: %s %s %s", durWords(260000), durWords(12400), durWords(300))
+	}
+}
+
+// Animate a folder with a budget: every version keeps it (its file's size,
+// its time at the speed: bytes x 10 / bps with no board), lower levels are
+// taken where the asked one does not fit, a screen nothing fits is skipped
+// with the reason, and light only takes light effects.
+func TestBatchBudget(t *testing.T) {
+	testApp(t, "pc")
+	src := artFolder(t, 8)
+	out := filepath.Join(t.TempDir(), "o")
+	r := runBatch(t, batchSpec{Inputs: []string{src}, Effect: "random", NoRepeat: true, Seed: 5, Board: "none", Detail: "large",
+		MaxKB: 16, MaxSeconds: 10, AtBps: 14400, Out: out})
+	lowered := 0
+	for _, it := range r.items {
+		if it.skipped != "" {
+			t.Fatalf("%s skipped: %s", it.rel, it.skipped)
+		}
+		for i, o := range it.outs {
+			b, _ := os.ReadFile(filepath.Join(out, o))
+			if len(b) > 16*1024 || int64(len(b)) != it.sizes[i] {
+				t.Fatalf("%s: %d bytes (report %d)", o, len(b), it.sizes[i])
+			}
+			if it.times[i] != playMs(len(b), 0, 14400) || it.times[i] > 10000 {
+				t.Fatalf("%s: %d ms, the file says %d", o, it.times[i], playMs(len(b), 0, 14400))
+			}
+			if it.orders[i].detail() != detailLarge {
+				lowered++
+			}
+		}
+	}
+	if lowered == 0 {
+		t.Error("no effect was played at a lower level")
+	}
+	// One heavy effect, fixed: lowered to fit, or the screen skipped with the reason.
+	r = runBatch(t, batchSpec{Inputs: []string{src}, Effect: "assemble", Seed: 5, Board: "none", Detail: "large", MaxKB: 30,
+		Out: filepath.Join(t.TempDir(), "p")})
+	for _, it := range r.items {
+		if it.skipped == "" && it.orders[0].detail() == detailLarge {
+			t.Errorf("%s: a large Assemble in 30 KB", it.rel)
+		}
+	}
+	r = runBatch(t, batchSpec{Inputs: []string{src}, Effect: "random", Seed: 5, Board: "none", MaxKB: 1, Out: filepath.Join(t.TempDir(), "q")})
+	for _, it := range r.items {
+		if it.skipped == "" || !strings.Contains(it.skipped, "nothing fits the budget") {
+			t.Fatalf("%s: %q", it.rel, it.skipped)
+		}
+	}
+	// Light only.
+	r = runBatch(t, batchSpec{Inputs: []string{src}, Effect: "random", Seed: 6, Board: "none", Detail: "large", MaxWeight: "light", Variants: 3,
+		Out: filepath.Join(t.TempDir(), "l")})
+	n := 0
+	for _, it := range r.items {
+		withScratch(func() {
+			p := filepath.Join(src, it.rel)
+			b, _ := os.ReadFile(p)
+			a.loadBytes(b, filepath.Base(p), p, "auto")
+			for _, o := range it.orders {
+				if c := a.costOf("ansi", o, ""); c.weight() != weightLight {
+					t.Errorf("%s: %s is %s", it.rel, o, weightNames[c.weight()])
+				}
+				n++
+			}
+		})
+	}
+	if n == 0 {
+		t.Fatal("nothing animated")
+	}
+	if !strings.Contains(r.reportText(), "light effects only") || !strings.Contains(r.commandLine(), "--light") {
+		t.Error("the report does not say light only")
+	}
+}
+
+// The command line takes the detail and the budget, and refuses bad values.
+func TestBatchBudgetCommandLine(t *testing.T) {
+	testApp(t, "pc")
+	src := artFolder(t, 3)
+	out := filepath.Join(t.TempDir(), "o")
+	devnull, _ := os.Open(os.DevNull)
+	defer devnull.Close()
+	so, _ := os.Create(filepath.Join(t.TempDir(), "stdout"))
+	defer so.Close()
+	if st := animateCLI([]string{src, "--seed", "3", "--bbs", "none", "--detail", "small", "--max-kb", "40", "--max-seconds", "60", "--at", "2400", "--light", "--out", out}, so, so); st != 0 {
+		b, _ := os.ReadFile(so.Name())
+		t.Fatalf("exit %d: %s", st, b)
+	}
+	rep, _ := os.ReadFile(filepath.Join(out, "animate-report.txt"))
+	for _, want := range []string{"Detail:   Small", "at most 40 KB", "at most 60 s at 2400 bps", "--detail small", "--max-kb 40", "--max-seconds 60", "--at 2400", "--light"} {
+		if !strings.Contains(string(rep), want) {
+			t.Errorf("the report has no %q:\n%s", want, rep)
+		}
+	}
+	for _, bad := range [][]string{{"--detail", "huge"}, {"--max-kb", "0"}, {"--at", "fast"}, {"--weight", "heavy"}} {
+		if st := animateCLI(append([]string{src}, bad...), so, so); st != 2 {
+			t.Errorf("%v: exit %d", bad, st)
+		}
 	}
 }
