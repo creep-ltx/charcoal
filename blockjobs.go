@@ -98,13 +98,14 @@ func (a *App) cropToSel() {
 		return
 	}
 	a.endPlay()
-	a.pushUndo()
-	d := a.doc
-	b := d.copyRect(r.x, r.y, r.w, r.h)
-	n := newDoc(r.w, r.h)
-	n.bg, n.border, n.ink, n.glyph0 = d.bg, d.border, d.ink, d.glyph0
-	copy(n.cells, b.cells)
-	a.doc = n
+	a.withEveryFrame(func(d *Doc) *Doc { // every frame: they keep one width
+		h := max(1, min(r.h, d.rows-r.y))
+		b := d.copyRect(r.x, r.y, r.w, h)
+		n := newDoc(r.w, h)
+		n.bg, n.border, n.ink, n.glyph0 = d.bg, d.border, d.ink, d.glyph0
+		copy(n.cells, b.cells)
+		return n
+	})
 	a.sel, a.cx, a.cy, a.scrollX, a.scrollY = nil, 0, 0, 0, 0
 	a.msg(fmt.Sprintf("Cropped to %dx%d (%s undoes it)", r.w, r.h, keyName("undo")))
 }

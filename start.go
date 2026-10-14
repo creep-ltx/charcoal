@@ -142,7 +142,7 @@ func (a *App) showStart() {
 // untouched: an untitled page nothing was done to, which the start screen
 // may stand in for. (Not pristine: an empty Spectrum page has paper colours.)
 func (t *Tab) untouched() bool {
-	return t.path == "" && !t.dirty && t.source == nil && len(t.undo) == 0
+	return t.path == "" && !t.dirty && t.source == nil && t.frames == nil && len(t.undo) == 0
 }
 
 // The start screen's items for the keyboard: the tiles, then the recent

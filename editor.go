@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -107,7 +108,11 @@ type Hover struct {
 type Snap struct {
 	doc    *Doc
 	cx, cy int
-	gen    int // the page's generation (see nextGen)
+	gen    int     // the page's generation (see nextGen)
+	cur    int     // the frame it belongs to
+	whole  bool    // a step of the frame list (new, delete, move ...): frames is the list
+	frames []Frame // with whole: the list as it was (nil: a page of one picture)
+	cost   int     // the cells the step keeps, for undoBudget
 }
 type Play struct {
 	bytes []byte
@@ -156,6 +161,9 @@ type Tab struct {
 	autoID              string      // its autosave's name, "" when it has none
 	autoGen             int         // the generation the autosave holds
 	start               bool        // the start screen is shown instead of the (empty) page
+	frames              []Frame     // the page's pictures when it has several (nil: one, the doc); see frames.go
+	cur                 int         // the frame being worked on: doc is it
+	restructured        bool        // frames were added, deleted or moved since the file was read or saved
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -465,21 +473,28 @@ var genSeq int
 
 func nextGen() int { genSeq++; return genSeq }
 
-func (a *App) snapshot() Snap { return Snap{a.doc.clone(), a.cx, a.cy, a.gen} }
+func (a *App) snapshot() Snap {
+	d := a.doc.clone()
+	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells)}
+}
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
 // keeps fewer steps instead of eating the memory.
 const undoBudget = 16 << 20
 
-func (a *App) pushUndo() {
-	a.undo = append(a.undo, a.snapshot())
+func (a *App) pushUndo() { a.pushSnap(a.snapshot()) }
+
+// pushSnap puts an undo step on the stack, letting go of the oldest ones past
+// 300 steps or undoBudget cells.
+func (a *App) pushSnap(s Snap) {
+	a.undo = append(a.undo, s)
 	total := 0
 	for _, s := range a.undo {
-		total += len(s.doc.cells)
+		total += s.cost
 	}
 	drop := 0
 	for len(a.undo)-drop > 1 && (len(a.undo)-drop > 300 || total > undoBudget) {
-		total -= len(a.undo[drop].doc.cells)
+		total -= a.undo[drop].cost
 		drop++
 	}
 	if drop > 0 { // move the rest down and let go of the dropped pages
@@ -502,7 +517,19 @@ func (a *App) markSaved() {
 }
 
 func (a *App) restore(s Snap) {
+	switch {
+	case s.whole:
+		a.frames, a.cur = slices.Clone(s.frames), s.cur
+		a.sel, a.float = nil, nil
+	case a.frames != nil && s.cur != a.cur && s.cur < len(a.frames):
+		// An edit of another frame: undoing it goes there, to show what was undone.
+		a.keepCase()
+		a.frames[a.cur].doc = a.doc
+		a.cur = s.cur
+		a.sel, a.float = nil, nil
+	}
 	a.doc, a.cx, a.cy, a.gen = s.doc, s.cx, s.cy, s.gen
+	a.showCase()
 	a.dirty = a.gen != a.savedGen
 	a.inRun = false
 }
@@ -512,7 +539,7 @@ func (a *App) doUndo() {
 		a.msg("Nothing to undo")
 		return
 	}
-	a.redo = append(a.redo, a.snapshot())
+	a.redo = append(a.redo, a.snapshotLike(a.undo[len(a.undo)-1]))
 	a.restore(a.undo[len(a.undo)-1])
 	a.undo[len(a.undo)-1] = Snap{}
 	a.undo = a.undo[:len(a.undo)-1]
@@ -522,7 +549,7 @@ func (a *App) doRedo() {
 		a.msg("Nothing to redo")
 		return
 	}
-	a.undo = append(a.undo, a.snapshot())
+	a.undo = append(a.undo, a.snapshotLike(a.redo[len(a.redo)-1]))
 	a.restore(a.redo[len(a.redo)-1])
 	a.redo[len(a.redo)-1] = Snap{}
 	a.redo = a.redo[:len(a.redo)-1]
@@ -1070,6 +1097,7 @@ func (a *App) textBlock(text string) *Block {
 // ---------------------------------------------------------------- loading
 
 func (a *App) reparse() {
+	a.frames, a.cur, a.restructured = nil, 0, false
 	switch a.srcKind {
 	case "pcb", "avt":
 		cols := a.forceCols
@@ -1612,8 +1640,7 @@ func (a *App) setMachine(id string) {
 				cut = true
 			}
 		}
-		a.pushUndo()
-		a.doc = a.doc.withCols(m.cols)
+		a.withEveryFrame(func(d *Doc) *Doc { return d.withCols(m.cols) })
 		a.cx = min(a.cx, m.cols-1)
 		if cut {
 			a.msg(fmt.Sprintf("The %s has %d columns: what was further right is cut (%s undoes it)", m.name, m.cols, keyName("undo")))
@@ -1644,8 +1671,7 @@ func (a *App) setSTRes(id string) {
 	case a.source == nil && !a.dirty && a.doc.empty():
 		a.doc = newSTDoc(r)
 	case a.doc.cols != r.cols:
-		a.pushUndo()
-		a.doc = a.doc.withCols(r.cols)
+		a.withEveryFrame(func(d *Doc) *Doc { return d.withCols(r.cols) })
 		a.cx = min(a.cx, r.cols-1)
 	}
 	savePrefs()
@@ -1683,8 +1709,7 @@ func (a *App) setCols(n int) {
 		a.forceCols = n
 		a.reparse()
 	} else {
-		a.pushUndo()
-		a.doc = a.doc.withCols(n)
+		a.withEveryFrame(func(d *Doc) *Doc { return d.withCols(n) })
 	}
 	a.cx = min(a.cx, n-1)
 }
@@ -1750,7 +1775,7 @@ func (a *App) makeTab(mode string) *Tab {
 
 // pristine: an untitled tab nobody has touched, which an opened file may take over.
 func (t *Tab) pristine() bool {
-	return t.path == "" && !t.dirty && t.source == nil && t.doc.empty() && len(t.undo) == 0
+	return t.path == "" && !t.dirty && t.source == nil && t.frames == nil && t.doc.empty() && len(t.undo) == 0
 }
 
 // focusTab makes t the tab being worked on, and shows it in the active pane.
@@ -2353,7 +2378,16 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	if strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") { // the page's own file; the others are exports
+	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ")
+	if own && a.nFrames() > 1 && !framesFormats[fmtID] {
+		// One picture: written as an export, so the page is not taken for saved.
+		a.lastDir = filepath.Dir(path)
+		savePrefs()
+		a.msg(fmt.Sprintf("%s holds one picture: frame %d written; the other %d are only here (%s)",
+			filepath.Base(path), a.cur+1, a.nFrames()-1, a.keepFramesHint()))
+		return true
+	}
+	if own { // the page's own file; the others are exports
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
 		wasTTI, wasKind := a.srcKind == "tti", a.srcKind

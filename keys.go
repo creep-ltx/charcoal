@@ -171,6 +171,18 @@ func init() {
 		{"fill_block", "Alt+F", "Fill the selection with the brush (nothing selected: the Fill tool)", func() { a.fillSel() }},
 		{"crop", "Ctrl+K", "Crop the page to the selection (Amiga and PC pages)", func() { a.cropToSel() }},
 
+		{"frame_next", "Alt+PageDown, Alt+.", "Next frame", func() { a.goFrame(a.cur + 1) }},
+		{"frame_previous", "Alt+PageUp, Alt+Comma", "Previous frame", func() { a.goFrame(a.cur - 1) }},
+		{"frame_first", "Alt+Home", "First frame", func() { a.goFrame(0) }},
+		{"frame_last", "Alt+End", "Last frame", func() { a.goFrame(a.nFrames() - 1) }},
+		{"frame_new", "Alt+N", "New empty frame after this one", func() { a.newFrame() }},
+		{"frame_duplicate", "Ctrl+Shift+D", "Copy the frame: a new frame after it, the same picture", func() { a.dupFrame() }},
+		{"frame_delete", "Alt+Delete", "Delete the frame", func() { a.deleteFrame() }},
+		{"frame_earlier", "Alt+Shift+PageUp", "Move the frame earlier", func() { a.moveFrame(-1) }},
+		{"frame_later", "Alt+Shift+PageDown", "Move the frame later", func() { a.moveFrame(1) }},
+		{"frame_hold_less", "Alt+[, Alt+Keypad -", "Show the frame a shorter time when played", func() { a.stepHold(-1) }},
+		{"frame_hold_more", "Alt+], Alt+Keypad +", "Show the frame a longer time when played", func() { a.stepHold(1) }},
+
 		{"select_left", "Shift+Left", "Select with the keyboard: from the cursor, growing as it moves (Esc lets go)", func() { a.selectKey("Left") }},
 		{"select_right", "Shift+Right", "", func() { a.selectKey("Right") }},
 		{"select_up", "Shift+Up", "", func() { a.selectKey("Up") }},
