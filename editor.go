@@ -113,6 +113,7 @@ type Snap struct {
 	whole  bool    // a step of the frame list (new, delete, move ...): frames is the list
 	frames []Frame // with whole: the list as it was (nil: a page of one picture)
 	cost   int     // the cells the step keeps, for undoBudget
+	order  *drawOrder
 }
 type Play struct {
 	bytes []byte
@@ -175,6 +176,7 @@ type Tab struct {
 	strip               int         // the frame strip: 0 while the page has several frames, 1 on, -1 off
 	split               splitInfo   // the pictures the page's file (a stream) shows, offered as frames
 	ref                 *RefImage   // the reference picture to trace over (refimage.go), nil: none
+	order               *drawOrder  // the order Save draws a stream file in (transitions.go); nil: row by row
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -495,7 +497,7 @@ func nextGen() int { genSeq++; return genSeq }
 
 func (a *App) snapshot() Snap {
 	d := a.doc.clone()
-	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells)}
+	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order}
 }
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
@@ -548,7 +550,7 @@ func (a *App) restore(s Snap) {
 		a.cur = s.cur
 		a.sel, a.float = nil, nil
 	}
-	a.doc, a.cx, a.cy, a.gen = s.doc, s.cx, s.cy, s.gen
+	a.doc, a.cx, a.cy, a.gen, a.order = s.doc, s.cx, s.cy, s.gen, s.order
 	a.showCase()
 	a.dirty = a.gen != a.savedGen
 	a.inRun = false
@@ -2232,6 +2234,13 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		}
 		return out, nil
 	}
+	if a.orderedSave(fmtID) { // the page's draw order (transitions.go)
+		out := a.writeOrdered(fmtID, d, info.writeSauce)
+		if fmtID == "ansi" {
+			out = withSauce(out, 1)
+		}
+		return out, nil
+	}
 	switch fmtID {
 	case "ansi":
 		return withSauce(writeAnsi(d, am, true, info.clear, info.writeSauce), 1), nil
@@ -2483,6 +2492,9 @@ type emulator interface {
 // playBytes is what Play sends: the file as read, or the page written out
 // (a changed page, or a file whose format is not a stream of codes).
 func (a *App) playBytes() []byte {
+	if b := a.orderedPlayBytes(); b != nil {
+		return b
+	}
 	if a.source != nil && !a.dirty && a.srcKind == "" {
 		return a.source
 	}

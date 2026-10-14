@@ -46,6 +46,9 @@ against each platform's best editor. Each step says what it wins.
    hold time, playback; ANSImation built frame by frame or split from a file, PETSCII/ATASCII/VT52 animations,
    teletext carousels; export GIF and APNG (and the stream for real time). Multi-screen .c/.petmate open as
    frames, not tabs. Later: delta streams, CharView playing frames, onion of the next frame.
+   - [x] **Animation templates (TheDraw's scan patterns)** (done 2026-10-14, transitions.go): a request from the
+     Ami-Express sysops; TheDraw's 14 Easy Animation patterns + Reverse/Flip and Charcoal's own fades, typewriter
+     and scroll, as a stream file's draw order or as frames.
 2. [x] **Reference image** to trace over (done 2026-10-14): open (Ref gadget, Ctrl+Shift+I, or drop a PNG / JPEG
    / GIF / BMP / WebP), move (drag, arrows, Ctrl+drag), scale (fit width, fit page, 1:1, steps), fade, greys,
    hide, under the art or faintly over it; remembered per art file and in the autosave; never converted into
@@ -95,4 +98,4 @@ against each platform's best editor. Each step says what it wins.
 - Palette editing beyond 16 colours.
 - Not planned: Shift-JIS AA (proportional, scene gone), RIPscrip (vector, not text).
 
-Last updated 2026-10-14 (steps 2.1 frames, 2.2 reference picture and 2.4 shapes and brushes done; 0.1b3 released).
+Last updated 2026-10-14 (steps 2.1 frames and animation templates, 2.2 reference picture, 2.3 own fonts and 2.4 shapes and brushes done; 0.1b3 released).

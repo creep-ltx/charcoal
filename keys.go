@@ -188,6 +188,7 @@ func init() {
 		{"play", "Ctrl+P", "Play the frames (one frame: play it as if it came over a modem); again or Esc stops", func() { a.playKey() }},
 		{"onion", "Alt+O", "Onion skin on / off: the frame before, faint, under the empty cells", func() { a.toggleOnion() }},
 		{"frames_strip", "Ctrl+Shift+F", "Show / hide the frame strip", func() { a.toggleStrip() }},
+		{"animate", "Alt+J", "Animate: TheDraw's scan patterns (and fades, typewriter, scroll) as the saved file's draw order or as frames", openAnimate},
 
 		// The reference picture (refimage.go).
 		{"ref_open", "Ctrl+Shift+I", "Open a picture as the page's reference, to trace over (never saved with the art)", openRefRequester},

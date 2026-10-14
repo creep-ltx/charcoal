@@ -221,6 +221,23 @@ empty cells; Alt+O), **Play** (Ctrl+P, at 1/2x to 4x, looping or once). Undo cov
   built-in font makes a copy, the page's own. *Save font...* writes it as `.psf`, `.f08/.f14/.f16`, `.64c`, `.fnt`,
   `.ch8` or `.udg`.
 
+## Animation templates
+
+![TheDraw's Clock pattern on ansilove's test art, made into frames and saved as a GIF](docs/screenshots/animate.gif)
+
+TheDraw 4.63 could turn any finished screen into an animation by drawing it cell by cell in a pattern. CharEdit
+does the same (Alt+J, **Animate**): TheDraw's fourteen patterns (Top, Left, Clock, Circles, Checkerboard, Angle,
+Gate, Pyramid, Squares, Scramble, Door, Diamond, Wiggle, Wiggle out) with its two toggles **Reverse** and **Flip**,
+and a few of Charcoal's own (Fade in / out through the palette, Typewriter, Scroll in). A preview plays the effect.
+
+- **Draw order**: saving as `.ans`, `.seq`, `.ata` or `.vt` writes the picture in that order: a clear screen, then
+  each cell with a cursor move where it does not follow the one before (ANSI `ESC[row;colH`, PETSCII cursor keys
+  and HOME, ATASCII cursor keys, VT52 `ESC Y`), colours only where they change, empty cells left out. Any BBS
+  terminal plays it at modem speed; opened again it is exactly the same picture. The order stays with the page
+  until changed or cleared; Ctrl+P (and CharView's `m`) plays it.
+- **Frames**: one every N cells (or every N ms at the modem speed), for the strip, Play, GIF and APNG. Erase makes
+  the picture go away instead (TheDraw's Fadeout). Teletext and Spectrum pages make frames only.
+
 ## Keys
 
 Every shortcut can be changed in `~/.config/charcoal/keys` (`action = key, key`; written with the defaults and

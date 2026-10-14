@@ -54,8 +54,9 @@ type autosaveMeta struct {
 	Cur          int             `json:"frame,omitempty"`       // the frame being worked on
 	Frames       []autosaveFrame `json:"frames,omitempty"`      // a page of several frames: their cells follow one another in .cells
 	Restructured bool            `json:"restructured,omitempty"`
-	Ref          *RefPref        `json:"reference,omitempty"` // the page's reference picture
-	OwnFont      *ArtFont        `json:"own_font,omitempty"`  // the page's own font, in id.font (fontfile.go)
+	Ref          *RefPref        `json:"reference,omitempty"`  // the page's reference picture
+	OwnFont      *ArtFont        `json:"own_font,omitempty"`   // the page's own font, in id.font (fontfile.go)
+	Order        *drawOrder      `json:"draw_order,omitempty"` // the order Save draws a stream file in
 }
 
 // autosaveFrame is one frame of an autosaved page.
@@ -108,7 +109,7 @@ func writeAutosave(t *Tab) error {
 		Cols: d.cols, Rows: d.rows, Bg: d.bg, Border: d.border, Ink: d.ink, Glyph0: d.glyph0,
 		Title: t.info.title, Author: t.info.author, Group: t.info.group, WriteSauce: t.info.writeSauce,
 		Clear: t.info.clear, Notes: t.info.notes}
-	m.SrcKind = t.srcKind
+	m.SrcKind, m.Order = t.srcKind, t.order
 	if t.ref != nil {
 		m.Ref = t.ref.pref()
 	}
@@ -323,6 +324,9 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 		a.doc = docs[0]
 	}
 	a.restoreRef(m.Ref)
+	if m.Order != nil && m.Order.pat() >= 0 {
+		a.order = m.Order
+	}
 	a.gen = nextGen() // changed, not saved
 	a.dirty = true
 	a.cx, a.cy = 0, 0

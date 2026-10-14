@@ -108,6 +108,33 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   charset (Petmate's form has none), fonts on ST/teletext pages, more than the first screen's custom font in a
   Petmate file.
 
+## Animation templates (2026-10-14, branch transitions)
+
+- TheDraw 4.63's "Easy Animation" (manual: The Animation System, Fadeout): `transitions.go` (logic),
+  `transitions_ui.go` (the Animate requester, Alt+J `animate`, with a live preview: ~40 frames of the page's first
+  50 rows through `renderDoc`, scaled by `blitScaled`; main.go redraws while it is open, `dialogAnimates`).
+- `scanOrder(pat, scanOpts{reverse, flip, aspect}, cols, rows, used)`: cells sorted by a pattern key (`scanKey`;
+  aspect = cellH/cellW so circles look round), Flip = the key of (x, rows-1-y), Reverse = the order turned round,
+  Scramble a fixed seed (same file every save). Interpretations of the one-line descriptions: Gate = columns from
+  both sides inward, Door = rows from top and bottom inward with both ends of each row at once, Checkerboard =
+  8-column squares, even ones first, Squares = rings clockwise from the upper-left corner.
+- `usedCell(mode, v, paper)`: only cells that show something are drawn (spaces only with their own background;
+  teletext: letters/mosaics only, the codes always stay).
+- Draw order: `Tab.order *drawOrder` (pattern id, Reverse, Flip), part of `Snap` (undo), autosave (`draw_order`),
+  status line "Draws: ...". `encode` writes it for ansi/seq/ata/vt52 when the page has one frame
+  (`orderedSave`, `writeOrdered`), `playBytes` sends it. `writeDrawSteps` + one `cursorWriter` per format: ANSI
+  (shortest of CSI H / A-D / CR LF), PETSCII (cursor keys, HOME, RETURN; a quote turns on quote mode: closed
+  with a second quote on a cell drawn later, or RETURN, or past the last row quote + DEL), ATASCII (cursor keys,
+  left/right wrap in the row, EOL), VT52 (ESC Y within the screen's rows, ESC B below). The stream ends with
+  the cursor on the last row so the file opens as tall as the page. Fade in = 4 passes. Fade out / scroll / Erase:
+  frames only (the file's last picture would not be the page).
+- Frames: `transitionFrames` (every n cells, or every ms at the baud through the stream's byte offsets), replace
+  the current frame as one undo step (`applyFrames`); the finished picture holds at least 2 s.
+- Tests: `transitions_test.go` (coverage of every pattern/toggle, shapes, round trip of every pattern through
+  parseArt/parseSeq/parseAta/parseVT52 on random pages, PETSCII quotes, undo/save/play/autosave, frames).
+- Not done: reading a draw order back from a file (it opens as the picture; the order is not recognised), Amiga
+  real-terminal check, TheDraw's own animation editing (limiting, markers, include files, pauses).
+
 ## Keys and safety (2026-10-13, evening)
 
 - `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's
@@ -201,4 +228,4 @@ The goal and the plan: docs/roadmap.md (the go-to editor for text artists on eve
 - ~/Projects/Knowledge/bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
 - ~/Projects/Knowledge/go/sdl2-desktop-gui.md: the GUI approach and headless testing.
 
-Last updated 2026-10-14 (reference picture, shapes and brushes; own fonts and the font editor; frames and animation before).
+Last updated 2026-10-14 (reference picture, shapes and brushes; own fonts and the font editor; animation templates; frames and animation before).
