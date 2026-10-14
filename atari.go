@@ -329,5 +329,5 @@ func looksAtascii(b []byte) bool {
 	if moves >= 16 && ways >= 2 && ansi*4 < moves && lf < moves {
 		return true
 	}
-	return eol >= 2 && eol > 4*csi && lf < eol
+	return eol >= 2 && eol > 4*csi && lf < eol && ansi*2 < eol // PC art draws ¢ (0x9B) between its ESC [ codes
 }

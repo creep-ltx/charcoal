@@ -739,8 +739,12 @@ FONTS
 The Font gadget picks the page's font: on PC pages IBM VGA, EGA 8x14, VGA 8x8 (80 x 50) and the code pages 850 and 866 (VileR's Ultimate Oldschool PC Font Pack); a SAUCE font name (IBM VGA, IBM EGA, IBM VGA50, IBM VGA 850 ...) chooses it when a file opens and is written when it is saved. "Load a font..." (` + keyName("font_load") + `, or drop the file on the window) takes a font of your own for the page: PC raw fonts (.fnt .f08 .f14 .f16, 256 characters of 8, 14 or 16 rows), PSF, an XBin's font; C64, VIC-20 and PET character sets (.64c, .bin: 2048 bytes a set, 4096 both); Atari 8-bit .fnt (1024 bytes); Spectrum sets (768 bytes) and UDGs (168 bytes). The font is named after its file. XBin and Petmate files keep the font inside; for every other format CharEdit remembers the font with the file (the status line says so) and so do the autosaves.
 The font editor (` + keyName("font_editor") + `, or "Edit the font..."): the brush character's pixels in a grid; left click or drag sets them (a set pixel clicked clears), right clears; Invert (I), Flip H (H), Flip V (V), Clear (Delete), Move (Shift+arrows), Copy and Paste (Ctrl+C, Ctrl+V), Undo and Redo (Ctrl+Z, Ctrl+Y); arrows or a click in the character map pick another character. The page shows every change at once. Editing a built-in font makes a copy of it, the page's own. Save font... writes it as a file: the name's ending says the kind (.psf, .f08/.f14/.f16, .64c, .fnt, .ch8, .udg).
 
+COMING FROM MOEBIUS, PABLODRAW, THEDRAW OR ACIDDRAW
+Settings > Keys like puts CharEdit's actions on that editor's keys (the keys file gets a "preset = moebius" line; your own lines still win; the file before is kept as keys.bak). The KEYS list above shows the keys in use. All of them: F-key sets on Alt+F1-F10 (set 4 on Ctrl+F4: Alt+F4 closes windows). Moebius: Ctrl+F 9-pixel font, Ctrl+, / Ctrl+. previous / next set, Ctrl+Tab reference picture, Alt+B select, Ctrl+Alt+M mirror. PabloDraw: Alt+P / Alt+B draw, Alt+L / R / O line, box, ellipse, Alt+I pick, Alt+E select, Ctrl+PgUp / PgDn top / bottom. TheDraw: Alt+L load, Alt+S save, Alt+X quit, Alt+H help, Alt+R undo, Alt+I / Alt+Y insert / delete a row, Alt+P fill, Alt+- colour, Alt+B block, Ctrl+Up foreground +1. ACiDDraw: the same but Ctrl+I / Ctrl+Y for rows. An action the other editor has not got keeps CharEdit's key unless that key went to another action; then it has none until you give it one in the keys file.
+Not the same: those editors' block keys (M, C, F, R, X, Y ... while a block is up) and Moebius's tool letters are plain letters, which type here: use the block buttons or Alt+H / V / R. Moebius files open as Moebius shows them: its width (1 column and up), its height (the empty rows at the end), iCE, 9-pixel letter spacing (` + keyName("ninepx") + `), its font name, SAUCE text in UTF-8; saving keeps all of it. Characters 0, 7, 8 and 9 (• ◘ ○) are drawn in a file with SAUCE and saved as they were; on new pages they are saved as spaces, since a BBS terminal beeps, backs up and tabs on them.
+
 SETTINGS
-Kept in ` + shownDir(configDir()) + `prefs.json (a broken one is put aside as prefs.json.bad); the keys in ` + shownDir(configDir()) + `keys. Settings: the window size (1x to 4x for big screens), keeping the old version of a file as name.bak when a save writes over it (on unless switched off), and the downloads, which run while you work on.
+Kept in ` + shownDir(configDir()) + `prefs.json (a broken one is put aside as prefs.json.bad); the keys in ` + shownDir(configDir()) + `keys. Settings: the window size (1x to 4x for big screens), keys like another editor's (above), keeping the old version of a file as name.bak when a save writes over it (on unless switched off), and the downloads, which run while you work on.
 
 SAFETY
 Every two minutes, pages with changes are kept aside (in ` + shownDir(autosaveDir()) + `). If CharEdit stops without saving them (a crash, the power), the next start offers to open them again in tabs. Saving a page or closing it on purpose lets go of its copy. The Open requester's "Recent files" lists the last 10 files opened or saved.`
@@ -977,7 +981,7 @@ func openSettings() { a.dialog = &SettingsReq{} }
 
 func (d *SettingsReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(660, 480), "Settings")
+	in := u.window(centre(660, 480+gadH+8), "Settings")
 	y := in.y
 	fb.text(in.x, y+3, "Window size", cText)
 	sizes := []string{"1x (normal)", "2x (big screens)", "3x", "4x"} // as many as main allows (maxUIScale)
@@ -986,6 +990,7 @@ func (d *SettingsReq) draw(u *UI) {
 		savePrefs()
 	})
 	y += gadH + 8
+	y = drawKeysLike(u, in, y) // keypresets.go
 	if v, _ := u.check(in.x, y, "Keep the old version as name.bak when saving over a file", !prefs.NoBackup, ""); v == prefs.NoBackup {
 		prefs.NoBackup = !v
 		savePrefs()

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,18 +33,77 @@ func TestParseCombo(t *testing.T) {
 }
 
 func TestDefaultKeysHaveNoClashes(t *testing.T) {
-	seen := map[combo]string{}
-	for id, keys := range defaultKeys() {
-		for _, c := range keys {
-			if o, ok := seen[c]; ok {
-				t.Errorf("%s is the default of both %s and %s", c, o, id)
+	for _, p := range keyPresets { // CharEdit's own keys and every preset (keypresets.go)
+		seen := map[combo]string{}
+		for id, keys := range presetKeys(p.id) {
+			if actionByID[id] == nil {
+				t.Errorf("%s: no action called %s", p.id, id)
 			}
-			seen[c] = id
-			if c.mods&modAlt != 0 && c.key == "F4" {
-				t.Errorf("%s binds Alt+F4", id)
+			for _, c := range keys {
+				if o, ok := seen[c]; ok {
+					t.Errorf("%s: %s is the key of both %s and %s", p.id, c, o, id)
+				}
+				seen[c] = id
+				if c.mods&modAlt != 0 && c.key == "F4" {
+					t.Errorf("%s: %s binds Alt+F4", p.id, id)
+				}
 			}
 		}
 	}
+}
+
+// A preset in the keys file: its keys, the user's own lines over it, lines that only
+// repeat CharEdit's defaults not; the help lists the keys in use.
+func TestKeyPresets(t *testing.T) {
+	a := testApp(t, "pc")
+	_ = a
+	k, problems := applyKeyFile("preset = moebius\n" + keyFileText())
+	if len(problems) > 0 {
+		t.Fatalf("problems %q", problems)
+	}
+	setKeys(k)
+	for id, want := range map[string]string{"fkeys_1": "Alt+F1", "fkeys_4": "Ctrl+F4", "fkeys_next": "Ctrl+.", "ninepx": "Ctrl+F",
+		"ref_show": "Ctrl+Tab", "tool_select": "Alt+B", "undo": "Ctrl+Z", "fg_previous": "Ctrl+Up"} {
+		if got := keyName(id); got != want {
+			t.Errorf("moebius %s: %s, want %s", id, got, want)
+		}
+	}
+	if keyName("tool_half") != "(no key)" || keyName("next_page") != "Ctrl+PageDown" {
+		t.Errorf("clashing keys: tool_half %s, next_page %s", keyName("tool_half"), keyName("next_page"))
+	}
+	if h := keysHelp(); !strings.Contains(h, "Alt+F1") || !strings.Contains(h, "Ctrl+F: 9-pixel") {
+		t.Errorf("help does not list the preset's keys:\n%s", h)
+	}
+	// The user's own line wins over the preset.
+	k, _ = applyKeyFile("preset = thedraw\nundo = Ctrl+U\n")
+	setKeys(k)
+	if keyName("undo") != "Ctrl+U" || keyName("insert_row") != "Alt+I" || keyName("fg_next") != "Ctrl+Up" {
+		t.Errorf("thedraw: undo %s insert_row %s fg_next %s", keyName("undo"), keyName("insert_row"), keyName("fg_next"))
+	}
+	if _, problems := applyKeyFile("preset = nonesuch\n"); len(problems) != 1 {
+		t.Errorf("an unknown preset: %q", problems)
+	}
+	// Settings > Keys like: the line on top, the user's lines kept, the old file in keys.bak.
+	os.MkdirAll(filepath.Dir(keysPath()), 0o755)
+	os.WriteFile(keysPath(), []byte("undo = Ctrl+U\n"), 0o644)
+	if err := setKeyPreset("pablodraw"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(keysPath())
+	bak, _ := os.ReadFile(keysPath() + ".bak")
+	if !strings.HasPrefix(string(b), "preset = pablodraw\n") || !strings.Contains(string(b), "undo = Ctrl+U") || string(bak) != "undo = Ctrl+U\n" {
+		t.Errorf("keys file %q, backup %q", b, bak)
+	}
+	if keyName("shape_line") != "Alt+L" || keyName("undo") != "Ctrl+U" {
+		t.Errorf("pablodraw in use: shape_line %s undo %s", keyName("shape_line"), keyName("undo"))
+	}
+	if err := setKeyPreset("charedit"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(keysPath()); strings.Contains(string(b), "preset") || keyName("shape_line") != "Alt+Shift+L" {
+		t.Errorf("back to CharEdit: %q, shape_line %s", b, keyName("shape_line"))
+	}
+	setKeys(defaultKeys())
 }
 
 func TestKeyFile(t *testing.T) {

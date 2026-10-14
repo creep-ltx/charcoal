@@ -104,7 +104,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Built-in PC fonts: `fonts/IBM_EGA_8x14.f14`, `IBM_VGA_8x8.f08`, `IBM_VGA_8x16_850.f16`, `_866.f16`, made by
   `tools/pcfonts.py` from the pack's **.otb** bitmap fonts (the Px .ttf moves capitals' accents by a row);
   checked byte for byte against DOSBox's ROM tables. `fontBySauce` with aliases (IBM VGA 437, IBM EGA43 ...).
-- Not done: 9-pixel cells and the 4:3 preview (step 4), 8x8/8x14 sets of other code pages, a .prg that carries a
+- Not done: the 4:3 preview (step 4; 9-pixel cells done on branch moebius), 8x8/8x14 sets of other code pages, a .prg that carries a
   charset (Petmate's form has none), fonts on ST/teletext pages, more than the first screen's custom font in a
   Petmate file.
 
@@ -174,6 +174,43 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   quit. At start, autosaves of CharEdits no longer running are offered back. The page's own font goes in
   `<id>.font` (since 2026-10-14).
 - `.bak` on saving over a file (`prefs.no_backup` switches it off; Settings). Recent files: `prefs.recent`.
+
+## Moebius files and key presets (2026-10-14, branch moebius)
+
+- Corpus: `tools/moebius/gen.js` builds pages and writes them with Moebius's own encoders (a separate checkout of
+  github.com/blocktronics/moebius, `app/libtextmode/{ansi,binary_text,xbin,textmode,palette,encodings}.js`, pure
+  JS, run with node from another folder; never `npm install`), then reads each back with Moebius's decoder into
+  `testdata/moebius/<file>.json` (cells as base64 char + BIOS attribute; SAUCE fields; XBin palette/font).
+  `moebius_test.go`: every file opens as that page (`TestMoebiusFilesOpen`), saves and reopens the same with the
+  same SAUCE (`TestMoebiusRoundTrip`), 9-pixel drawing (`TestNinePixelCells`). The other way round:
+  `CHARCOAL_MOEBIUS_SAVE=/tmp/x go test -run TestMoebiusSaveBack .` then `node tools/moebius/check.js
+  <moebius>/app testdata/moebius /tmp/x` (all 69 read back in Moebius as the page, 2026-10-14).
+- What changed in reading (core.go `parseArt`, `Term`): SAUCE width from 1 column (was 8); the SAUCE height when
+  the record has the aspect-ratio bits (Moebius always sets 0x10) and is taller than the stream (only those: older
+  editors wrote 25 or one row too many, 599 PabloDraw-flag files would grow); `glyphCtl`: with a SAUCE record
+  (DataType 1, FileType 0/1) on PC pages 0x00 0x07 0x08 0x09 are glyphs (real files: MM-ERRORIN0RDERRZ.ANS's 2305
+  NULs now line up); `sauceText` reads UTF-8 fields, `utf8Comments` finds a COMNT block whose lines are 64
+  characters of UTF-8 (Moebius) and `Sauce.utf8` makes `makeSauce` write it back so; XBin's SAUCE is read
+  (`finishLoad`) and written (`SauceInfo.dataType` 6); UTF-8 files (`Tab.sourceUTF8`, `ParseOpts.utf8`):
+  `lateWrap` (VT wrap), width = longest line up to 256, real tabs become spaces and ○ ◘ • stay glyphs
+  (`fromUtf8`), SGR 38/48;5;n and 38/48;2 as the nearest of 16 (`xterm256`, `nearest16`, `hiBg` so 49 ends a
+  bright background), ice on for 48;5/100-107; `utf8LooksPc` counts only characters one set lacks; `looksAtascii`
+  is not fooled by ¢ (0x9B) in a file full of ESC [.
+- Kept on save: `Tab.sauceFlags` (TFlags bits 1-4, letter spacing and aspect) for .ans and .bin; a SAUCE font
+  name CharEdit lacks (`Info.font`/`fontID`, `sauceFont()`) while the page shows the stand-in; `fontBySauce` gives
+  stand-ins for other code pages (IBM VGA50 866 -> VGA50, IBM VGA25G -> VGA). 0x00/07/08/09 are saved raw only when
+  the file had them so (`Tab.rawCtl`, `rawControls`; writeAnsi's second keep flag), else as spaces (a BBS terminal
+  acts on them; draw-order streams always write spaces). Big check after all this: 29 issues, the same as before.
+- 9-pixel cells: `cellW()` 9 on a PC page with `ninePx()`; `drawCell` repeats column 8 for 0xC0-0xDF; PNG export
+  too. `ninepx` action (Alt+9; Moebius preset Ctrl+F) toggles and dirties the page. The aspect-ratio (4:3) preview
+  is not done; its bits are kept.
+- Key presets (`keypresets.go`): `keyPresets` (charedit, moebius, pablodraw, thedraw, aciddraw), each a map of
+  action -> keys from the editor's source/manual; `presetKeys` (the preset's keys, the rest CharEdit's minus keys
+  the preset took); the keys file's `preset = id` line (`keyFilePreset`, read by `applyKeyFile`; lines that only
+  repeat a CharEdit default do not override a preset, since the first-run file lists every default);
+  `setKeyPreset` (Settings > Keys like, `drawKeysLike`) rewrites the line, keeps the rest, old file in keys.bak.
+  Tests: `TestDefaultKeysHaveNoClashes` runs every preset, `TestKeyPresets`.
+- Moebius facts (verified by running its code): ~/Projects/Knowledge/bbs/moebius-file-format.md.
 
 ## Start screen (2026-10-14)
 
@@ -253,4 +290,4 @@ The goal and the plan: docs/roadmap.md (the go-to editor for text artists on eve
 - ~/Projects/Knowledge/bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
 - ~/Projects/Knowledge/go/sdl2-desktop-gui.md: the GUI approach and headless testing.
 
-Last updated 2026-10-14 (reference picture, shapes and brushes; own fonts and the font editor; animation templates; frames and animation before).
+Last updated 2026-10-14 (Moebius files and key presets; reference picture, shapes and brushes; own fonts and the font editor; animation templates; frames and animation before).

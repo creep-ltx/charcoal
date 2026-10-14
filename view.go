@@ -65,7 +65,8 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 		ch = 32
 	}
 	cl := fb.clip
-	inside := px >= cl.x && py >= cl.y && px+a.cellW()*z <= cl.x+cl.w && py+H*z <= cl.y+cl.h
+	W := a.cellW()
+	inside := px >= cl.x && py >= cl.y && px+W*z <= cl.x+cl.w && py+H*z <= cl.y+cl.h
 	for r := 0; r < H; r++ {
 		bits := int(f.bits[ch*16+r*skip])
 		r8 := r * 8 / H // the row of an 8-row cell (italic, underline)
@@ -78,9 +79,16 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 		if ul && r8 == 7 {
 			bits = 0xFF
 		}
-		for b := 0; b < 8; b++ {
+		if W == 9 { // VGA's ninth column: the line characters 0xC0-0xDF repeat their eighth
+			ninth := 0
+			if ch >= 0xC0 && ch <= 0xDF {
+				ninth = bits & 1
+			}
+			bits = bits<<1 | ninth
+		}
+		for b := 0; b < W; b++ {
 			c := bgc
-			if bits&(0x80>>b) != 0 {
+			if bits&(1<<(W-1-b)) != 0 {
 				c = fgc
 			}
 			if inside {

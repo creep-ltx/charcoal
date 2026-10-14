@@ -98,6 +98,9 @@ type Info struct {
 	title, author, group string
 	writeSauce, clear    bool
 	notes                []string // SAUCE comment lines, kept from the file
+	utf8                 bool     // the file's record was in UTF-8 (Moebius): written back so
+	font                 string   // the file's SAUCE font name when CharEdit has no such font
+	fontID               string   // the font shown for it: while it is, the name is written back
 }
 
 type Sel struct{ x0, y0, x1, y1 int }
@@ -141,7 +144,10 @@ type Tab struct {
 	dirty               bool
 	source              []byte // the file as read (or last saved), to read again with other rules
 	sourceBin           bool
+	sourceUTF8          bool // source was decoded from a UTF-8 file
 	sauce               *Sauce
+	sauceFlags          int  // the file's SAUCE letter spacing and aspect ratio bits (TFlags 1-4), written back
+	rawCtl              bool // the file (with SAUCE) held ○ ◘ • or character 0 as glyphs: saved so again
 	saveFmt             string
 	forceCols           int
 	info                Info
@@ -242,6 +248,9 @@ func (a *App) ttBlack() bool { return a.ttMeta&8 != 0 }
 func (a *App) cellW() int {
 	if a.tt() {
 		return ttW
+	}
+	if a.pc() && a.ninePx() {
+		return 9 // VGA's 9-dot cells (SAUCE letter spacing)
 	}
 	return 8
 }
@@ -1010,6 +1019,26 @@ func (a *App) toggleIce() {
 	a.msg(map[bool]string{true: "iCE colours on: backgrounds 8-15", false: "iCE colours off: backgrounds 8-15 blink"}[a.ice])
 }
 
+// toggleNinePx switches a PC page between 8- and 9-pixel letter spacing (the
+// SAUCE flag Moebius's "Use 9px Font" sets): the line characters 0xC0-0xDF
+// stretch into the ninth column, the others get a gap.
+func (a *App) toggleNinePx() {
+	if !a.pc() {
+		a.msg("9-pixel letter spacing is for PC pages")
+		return
+	}
+	nine := !a.ninePx()
+	a.sauceFlags &^= 6
+	if nine {
+		a.sauceFlags |= 4
+	} else {
+		a.sauceFlags |= 2
+	}
+	a.info.writeSauce = true
+	a.gen = nextGen()
+	a.msg(map[bool]string{true: "9-pixel letter spacing (VGA): saved in the SAUCE record", false: "8-pixel letter spacing"}[a.ninePx()])
+}
+
 // pickFset makes F-key set n (0-based) the active one, if the page has it.
 func (a *App) pickFset(n int) {
 	if sets := a.fkeys[a.mode]; n >= len(sets) {
@@ -1201,7 +1230,7 @@ func (a *App) reparse() {
 			a.setCase(lower == 1)
 		}
 	} else {
-		d, _, fr := parseArt(a.source, ParseOpts{amiga: a.amiga(), binary: a.sourceBin, forceCols: a.forceCols})
+		d, _, fr := parseArt(a.source, ParseOpts{amiga: a.amiga(), binary: a.sourceBin, forceCols: a.forceCols, utf8: a.sourceUTF8})
 		a.doc = d
 		if fr >= 0 {
 			for _, f := range fonts {
@@ -1249,7 +1278,8 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		if info.pal != nil {
 			a.ownPal, a.paletteFor["pc"] = info.pal, "file"
 		}
-		a.finishLoad(b, name, path, nil, "xbin")
+		sauce, _ := readSauce(b) // Moebius writes one after an XBin: title, author, group, comments
+		a.finishLoad(b, name, path, sauce, "xbin")
 		return
 	}
 	// PCBoard and Avatar: text with their own colour codes.
@@ -1365,12 +1395,15 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		mode = "pc"
 	}
 	a.mode = mode
-	src := b
+	src, fromUTF8 := b, false
 	if utf && mode != "c64" && mode != "atari" && mode != "st" && mode != "zx" && mode != "tt" {
-		src = fromUtf8(b, mode == "amiga")
+		src, fromUTF8 = fromUtf8(b, mode == "amiga"), true
 		a.msg("Read as UTF-8 text")
 	}
 	a.ice = false
+	if fromUTF8 && regexp.MustCompile(`\x1b\[(\d*;)*(48;5;|10[0-7]m)`).Match(b) {
+		a.ice = true // bright backgrounds in a file for today's terminals, which do not blink
+	}
 	if sauce != nil {
 		if f := fontBySauce(sauce.font, mode); f != nil {
 			a.fontFor[mode] = f.id
@@ -1378,9 +1411,17 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		a.ice = sauce.flags&1 != 0
 	}
 	a.source, a.sourceBin, a.sauce, a.forceCols = src, binary && mode == "pc", sauce, 0
+	a.sourceUTF8, a.sauceFlags, a.rawCtl = fromUTF8, 0, mode == "pc" && rawControls(b)
+	if sauce != nil && (sauce.dataType == 1 || sauce.dataType == 5) {
+		a.sauceFlags = sauce.flags & 0x1E // letter spacing and aspect ratio, kept for saving
+	}
 	a.info = Info{writeSauce: sauce != nil}
 	if sauce != nil {
 		a.info.title, a.info.author, a.info.group, a.info.notes = sauce.title, sauce.author, sauce.group, sauce.notes
+		a.info.utf8 = sauce.utf8
+		if f := a.font(); sauce.font != "" && !strings.EqualFold(f.sauce, sauce.font) {
+			a.info.font, a.info.fontID = sauce.font, f.id // IBM VGA25G, other code pages: kept
+		}
 	}
 	a.path, a.name = path, name
 	head := b[:min(len(b), 4096)]
@@ -1515,7 +1556,11 @@ func (a *App) readScreens(b []byte, kind string) ([]PetScreen, error) {
 // finishLoad is the end of loading for files that are not streams of codes.
 func (a *App) finishLoad(b []byte, name, path string, sauce *Sauce, fmtID string) {
 	a.source, a.sourceBin, a.sauce, a.forceCols = b, false, sauce, 0
+	a.sourceUTF8, a.sauceFlags, a.rawCtl = false, 0, false
 	a.info = Info{}
+	if sauce != nil {
+		a.info = Info{writeSauce: true, title: sauce.title, author: sauce.author, group: sauce.group, notes: sauce.notes}
+	}
 	a.path, a.name, a.saveFmt = path, name, fmtID
 	a.undo, a.redo = nil, nil
 	a.reparse()
@@ -2213,12 +2258,12 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		if !info.writeSauce {
 			return art
 		}
-		flags := 0
+		flags := a.sauceFlags & 0x1E // letter spacing and aspect ratio, as the file had them
 		if a.ice {
-			flags = 1
+			flags |= 1
 		}
 		return append(art, makeSauce(SauceInfo{title: info.title, author: info.author, group: info.group, notes: info.notes,
-			cols: d.cols, rows: max(1, d.rows), font: a.font().sauce, fileType: fileType, flags: flags}, len(art))...)
+			cols: d.cols, rows: max(1, d.rows), font: a.sauceFont(), fileType: fileType, flags: flags, utf8: info.utf8}, len(art))...)
 	}
 	nl := "\r\n"
 	if !a.pc() {
@@ -2258,9 +2303,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	}
 	switch fmtID {
 	case "ansi":
-		return withSauce(writeAnsi(d, am, true, info.clear, info.writeSauce), 1), nil
+		return withSauce(writeAnsi(d, am, true, info.clear, info.writeSauce, info.writeSauce && a.rawCtl), 1), nil
 	case "text":
-		return withSauce(writeAnsi(d, am, false, false, info.writeSauce), 0), nil
+		return withSauce(writeAnsi(d, am, false, false, info.writeSauce, info.writeSauce && a.rawCtl), 0), nil
 	case "seq":
 		return writeSeq(d, a.lower(), info.clear), nil
 	case "ata":
@@ -2289,12 +2334,18 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 			return art, nil // 160 is what a .bin without a record is taken to be
 		}
 		return append(art, makeSauce(SauceInfo{title: info.title, author: info.author, group: info.group, notes: info.notes,
-			cols: d.cols, font: a.font().sauce, binaryText: true, flags: map[bool]int{true: 1}[a.ice]}, len(art))...), nil
+			cols: d.cols, font: a.sauceFont(), binaryText: true, flags: map[bool]int{true: 1}[a.ice] | a.sauceFlags&0x1E, utf8: info.utf8}, len(art))...), nil
 	case "xbin":
 		if err := xbinSaveError(d); err != nil {
 			return nil, err
 		}
-		return writeXBin(d, a.pal, a.font(), a.cellH(), a.ice), nil
+		out := writeXBin(d, a.pal, a.font(), a.cellH(), a.ice)
+		if info.writeSauce && (info.title != "" || info.author != "" || info.group != "" || len(info.notes) > 0) {
+			// A record for the title, author, group and comments (Moebius writes one too).
+			out = append(out, makeSauce(SauceInfo{title: info.title, author: info.author, group: info.group, notes: info.notes,
+				cols: d.cols, rows: max(1, d.rows), dataType: 6, utf8: info.utf8}, len(out))...)
+		}
+		return out, nil
 	case "pcb":
 		return writePCBoard(d, info.clear), nil
 	case "avt":
@@ -2610,4 +2661,16 @@ func (a *App) endPlay() {
 	p := a.playing
 	a.playing = nil
 	a.restore(p.saved)
+}
+
+// ninePx: the page's SAUCE asks for 9-pixel letter spacing (VGA's 9-dot cells).
+func (t *Tab) ninePx() bool { return t.sauceFlags&6 == 4 }
+
+// sauceFont is the SAUCE font name to save: the file's own when CharEdit showed
+// it in a font of another name (IBM VGA25G, a code page it lacks) and it was not changed.
+func (a *App) sauceFont() string {
+	if a.info.font != "" && a.font().id == a.info.fontID {
+		return a.info.font
+	}
+	return a.font().sauce
 }

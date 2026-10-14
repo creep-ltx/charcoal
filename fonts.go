@@ -82,6 +82,15 @@ func fontBySauce(name, mode string) *Font {
 			return f
 		}
 	}
+	// Names of fonts CharEdit lacks (Moebius has a set per code page, and the 19-row
+	// IBM VGA25G): the same size in CP437, so the page keeps its shape.
+	l := strings.ToLower(name)
+	for _, p := range []struct{ prefix, to string }{{"ibm vga50 ", "IBM VGA50"}, {"ibm ega43 ", "IBM VGA50"},
+		{"ibm ega ", "IBM EGA"}, {"ibm vga25g", "IBM VGA"}, {"ibm vga ", "IBM VGA"}} {
+		if strings.HasPrefix(l, p.prefix) && !strings.EqualFold(name, p.to) {
+			return fontBySauce(p.to, mode)
+		}
+	}
 	return nil
 }
 

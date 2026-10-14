@@ -316,7 +316,48 @@ Delete, Insert, Esc. The defaults, the PC ANSI editors' (Moebius, PabloDraw, The
 | Alt+Shift+S, Alt+Shift+H / V, Alt+Shift+K / C | shade brush, mirror left-right / top-bottom, colour only / character only |
 | Ctrl+Shift+I, Ctrl+Shift+R, Ctrl+[ / Ctrl+], Ctrl+Shift+M, Ctrl+Alt+= / - | reference: open, show / hide, fainter / stronger, move, bigger / smaller |
 
-Dragging inside a selection with the Select tool moves it (one undo step).
+Dragging inside a selection with the Select tool moves it (one undo step). Alt+9 switches a PC page to
+9-pixel letter spacing (VGA's 9-dot cells; kept in the SAUCE record).
+
+### Coming from Moebius, PabloDraw, TheDraw or ACiDDraw
+
+Settings > **Keys like** puts CharEdit's actions on that editor's keys. It writes `preset = moebius` (or
+`pablodraw`, `thedraw`, `aciddraw`) at the top of the keys file and keeps the file as it was in `keys.bak`; your
+own lines in the file still win over the preset. The help (F12) lists the keys in use.
+
+| Action | CharEdit | Moebius | PabloDraw | TheDraw | ACiDDraw |
+|---|---|---|---|---|---|
+| F-key set 1-10 | Ctrl+F1-F10 | Alt+F1-F10 | Alt+F1-F10 | Alt+F1-F10 | Alt+F1-F10 |
+| next / previous set | Ctrl+Shift+Up / Down | Ctrl+. / Ctrl+, | same as CharEdit | same | same |
+| foreground +1 / -1 | Ctrl+Down / Ctrl+Up | Ctrl+Down / Ctrl+Up | Ctrl+Down / Ctrl+Up | **Ctrl+Up / Ctrl+Down** | **Ctrl+Up / Ctrl+Down** |
+| insert / delete a row | Alt+Down / Alt+Up | Alt+Down / Alt+Up | Alt+Down / Alt+Up | Alt+I / Alt+Y | Ctrl+I / Ctrl+Y |
+| open, save, quit, help | Ctrl+O, Ctrl+S, Ctrl+Q, F12 | the same | the same | Alt+L, Alt+S, Alt+X, Alt+H (Ctrl ones too) | as TheDraw |
+| undo | Ctrl+Z | Ctrl+Z | Ctrl+Z | Alt+R, Ctrl+Z | Alt+R, Ctrl+Z |
+| select | Alt+S (tool) | Alt+B | Alt+E | Alt+B | Alt+B |
+| draw, pick, fill tools | Alt+D, Alt+P, Alt+L | Alt+D, Alt+P, Alt+L | Alt+P / Alt+B, Alt+I, - | Alt+D, -, Alt+P | Alt+D, Alt+P, - |
+| line, box, ellipse | Alt+Shift+L, R, O | as CharEdit | Alt+L, Alt+R, Alt+O | as CharEdit | as CharEdit |
+| 9-pixel letter spacing | Alt+9 | Ctrl+F | Alt+9 | Alt+9 | Alt+9 |
+| reference picture on / off | Ctrl+Shift+R | Ctrl+Tab | Ctrl+Shift+R | Ctrl+Shift+R | Ctrl+Shift+R |
+
+The colour keys (Ctrl+0-7, Alt+0-7, Alt+U, Ctrl+D, Ctrl+Shift+X, Ctrl+E), Ctrl+arrows for the background, Alt+Left /
+Right for columns, Ctrl+K crop and Ctrl+I info are the same in all of them. An action the other editor does not
+have keeps CharEdit's key unless the preset gave that key to another action; then it has no key until the keys
+file gives it one: Moebius: Half; PabloDraw: Turn, Invert, Onion, Fill, Half, shape style; TheDraw: Mirror, Turn,
+Invert, Pick, Half; ACiDDraw: Info (the Info button stays), Mirror, Turn, Fill, Half. What cannot be matched: the plain-letter block keys of Moebius and PabloDraw (M move, C
+copy, F fill, R rotate, X / Y flip, S stamp ... while a block is up) and Moebius's tool letters (K B I P), because
+plain letters type in CharEdit (use the block buttons or Alt+H / V / R); Alt+F4 stays the window manager's, so
+F-key set 4 is Ctrl+F4 in every preset.
+
+Moebius files open as Moebius shows them, checked cell for cell against Moebius's own reader on files written
+by Moebius's own save code (`testdata/moebius`, `tools/moebius/`): widths from 1 column, the height in the SAUCE
+record (Moebius writes nothing for empty rows at the end), iCE colours, 9-pixel letter spacing, the font name (also
+ones CharEdit draws with a near font: IBM VGA25G, other code pages), the SAUCE title and comments in UTF-8 as
+Moebius writes them, XBin's own font and palette and its SAUCE record, and Export As UTF-8 files (256-colour codes,
+VT-style wrap, their width). CharEdit's saves read back in Moebius as the same page, with the same SAUCE. Not the
+same: characters 0, 7, 8 and 9 (• ◘ ○) are drawn when the file has SAUCE, as Moebius and PabloDraw draw them,
+and saved as they were; on a new page CharEdit saves them as spaces, because a BBS terminal beeps, backs up and
+tabs on them. Without SAUCE they act as a terminal's controls (text and NFO files use tabs). Moebius pads a page without SAUCE to 25 rows; CharEdit
+opens it as tall as it is.
 
 ## Tested
 
@@ -367,6 +408,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | go-sdl2, the Go binding to SDL2 | github.com/veandco/go-sdl2 | BSD 3-clause, `third_party/go-sdl2-LICENSE.txt` |
 | BMP and WebP readers (reference pictures) | golang.org/x/image, The Go Authors | BSD 3-clause, `third_party/x-image-LICENSE.txt` |
 | Test art in `testdata/alove` | ansilove's tests | BSD 2-clause, `testdata/alove/LICENSE-ansilove.txt` |
+| Test files in `testdata/moebius` | written and read back by Moebius's own save and load code (github.com/blocktronics/moebius, `app/libtextmode`), run from a separate checkout by `tools/moebius/gen.js` and `check.js`; no Moebius code is copied | Moebius is Apache-2.0; the generated files are Charcoal's (MIT) |
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE
 project) and the EmuTOS font sources (GPL), for PETSCII and Atari ST pages.

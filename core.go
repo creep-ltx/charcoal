@@ -258,11 +258,15 @@ type Sauce struct {
 	comments, flags            int
 	font                       string
 	notes                      []string
+	utf8                       bool // the text fields are UTF-8 (Moebius), not CP437
 }
 
 // sauceText reads a SAUCE text field: CP437, padded with spaces or zeros.
 func sauceText(b []byte) string {
 	b = bytes.TrimRight(b, "\x00 ")
+	if utf8.Valid(b) && utf8.RuneCount(b) < len(b) {
+		return string(b) // Moebius writes the fields in UTF-8
+	}
 	r := make([]rune, len(b))
 	for i, c := range b {
 		if c < 0x80 {
@@ -285,8 +289,31 @@ func sauceStart(b []byte) int {
 		if c := o - 5 - k*64; c >= 0 && string(b[c:c+5]) == "COMNT" {
 			return c
 		}
+		if c := utf8Comments(b, o, k); c >= 0 {
+			return c
+		}
 	}
 	return o
+}
+
+// utf8Comments finds a COMNT block written in UTF-8 (Moebius pads each line to 64
+// characters, so a line with letters outside ASCII takes more than 64 bytes);
+// -1 if there is none.
+func utf8Comments(b []byte, o, k int) int {
+	from := max(0, o-5-k*64*4)
+	to := o - k*64 // COMNT ends here or before
+	if to-5 <= from {
+		return -1
+	}
+	c := bytes.LastIndex(b[from:to], []byte("COMNT"))
+	if c < 0 {
+		return -1
+	}
+	c += from
+	if blk := b[c+5 : o]; utf8.Valid(blk) && utf8.RuneCount(blk) == k*64 {
+		return c
+	}
+	return -1
 }
 
 // dataEnd is where the data of a binary file (a .bin, iCEDraw, ArtWorx, TundraDraw)
@@ -313,10 +340,24 @@ func readSauce(b []byte) (*Sauce, int) {
 			dataType: int(b[o+94]), fileType: int(b[o+95]), tinfo1: u16(96), tinfo2: u16(98),
 			comments: int(b[o+104]), flags: int(b[o+105]), font: sauceText(b[o+106 : o+128]),
 		}
+		for _, f := range [][]byte{b[o+7 : o+82]} {
+			if utf8.Valid(f) && utf8.RuneCount(f) < len(f) {
+				s.utf8 = true
+			}
+		}
 		end = sauceStart(b)
 		if end < o {
-			for i := 0; i < s.comments; i++ {
-				s.notes = append(s.notes, sauceText(b[end+5+i*64:end+69+i*64]))
+			blk := b[end+5 : o]
+			if len(blk) != s.comments*64 { // UTF-8: 64 characters a line
+				s.utf8 = true
+				r := []rune(string(blk))
+				for i := 0; i < s.comments; i++ {
+					s.notes = append(s.notes, strings.TrimRight(string(r[i*64:i*64+64]), " \x00"))
+				}
+			} else {
+				for i := 0; i < s.comments; i++ {
+					s.notes = append(s.notes, sauceText(blk[i*64:i*64+64]))
+				}
 			}
 		}
 	}
@@ -345,7 +386,24 @@ type SauceInfo struct {
 	font                 string
 	fileType, flags      int
 	binaryText           bool     // DataType 5 (a .bin): the width goes in FileType, in pairs of columns
+	dataType             int      // another DataType than Character (1): 6 for XBin
+	utf8                 bool     // write the text in UTF-8, as the file had it (Moebius), not CP437
 	notes                []string // comment lines, kept from the file (a COMNT block of 64 characters each)
+}
+
+// sauceUTF8 writes s into b as UTF-8 (whole characters that fit), padded with pad.
+func sauceUTF8(b []byte, s string, pad byte) {
+	n := 0
+	for _, r := range s {
+		if l := utf8.RuneLen(r); l > 0 && n+l <= len(b) {
+			n += utf8.EncodeRune(b[n:], r)
+		} else {
+			break
+		}
+	}
+	for ; n < len(b); n++ {
+		b[n] = pad
+	}
 }
 
 // sauceBytes writes s into b as CP437, padded with pad.
@@ -375,6 +433,12 @@ func makeSauce(info SauceInfo, artSize int) []byte {
 	if len(notes) > 0 {
 		out = append(out, "COMNT"...)
 		for _, n := range notes {
+			if info.utf8 { // as Moebius: 64 characters, however many bytes
+				r := []rune(n)
+				r = r[:min(len(r), 64)]
+				out = append(out, string(r)+strings.Repeat(" ", 64-len(r))...)
+				continue
+			}
 			line := make([]byte, 64)
 			sauceBytes(line, n, 32)
 			out = append(out, line...)
@@ -382,6 +446,9 @@ func makeSauce(info SauceInfo, artSize int) []byte {
 	}
 	b := make([]byte, 128)
 	put := func(i int, s string, n int, pad byte) { sauceBytes(b[i:i+n], s, pad) }
+	if info.utf8 {
+		put = func(i int, s string, n int, pad byte) { sauceUTF8(b[i:i+n], s, pad) }
+	}
 	put(0, "SAUCE00", 7, 32)
 	put(7, info.title, 35, 32)
 	put(42, info.author, 20, 32)
@@ -399,6 +466,9 @@ func makeSauce(info SauceInfo, artSize int) []byte {
 		b[94] = 5 // DataType: BinaryText
 	} else {
 		b[94] = 1 // DataType: Character
+		if info.dataType > 0 {
+			b[94] = byte(info.dataType)
+		}
 		b[95] = byte(info.fileType)
 		u16(96, info.cols)
 		u16(98, info.rows)
@@ -425,6 +495,10 @@ type Term struct {
 	beforeHome                                 func() // the cursor is sent home (CSI H, CSI 1;1H)
 	fg, bg                                     int
 	bold, blink, ital, under, reverse, conceal bool
+	glyphCtl                                   bool // 0x00, 0x07, 0x08 and 0x09 are glyphs, not controls
+	lateWrap                                   bool // wrap when the next character comes (VT), not at once (ANSI.SYS)
+	screens                                    int  // clear screens seen
+	hiBg                                       bool // blink stands for a bright background colour (48;5;n, 100-107)
 }
 
 func newTerm(d *Doc, amiga bool) *Term {
@@ -435,7 +509,7 @@ func newTerm(d *Doc, amiga bool) *Term {
 
 func (t *Term) resetAttrs() {
 	t.fg, t.bg = 7, 0
-	t.bold, t.blink, t.ital, t.under, t.reverse, t.conceal = false, false, false, false, false, false
+	t.bold, t.blink, t.ital, t.under, t.reverse, t.conceal, t.hiBg = false, false, false, false, false, false, false
 }
 
 func (t *Term) attr() uint32 {
@@ -477,7 +551,7 @@ func (t *Term) put(ch byte) {
 	d.set(t.x, t.y, uint32(ch)|t.attr())
 	// Wrap at once, like ANSI.SYS and the Amiga console.
 	t.x++
-	if t.x >= d.cols {
+	if t.x >= d.cols && !t.lateWrap {
 		t.x, t.y = 0, t.y+1
 	}
 }
@@ -526,6 +600,10 @@ func (t *Term) byte(c byte) {
 			t.clearAll(blank)
 			return
 		}
+	}
+	if t.glyphCtl && (c == 0x00 || c == 0x07 || c == 0x08 || c == 0x09) {
+		t.put(c)
+		return
 	}
 	switch c {
 	case 0x0A:
@@ -758,15 +836,30 @@ func (t *Term) sgr(p []int) {
 			t.bg = v - 40
 		case v == 49:
 			t.bg = 0
+			if t.hiBg {
+				t.blink, t.hiBg = false, false // the bright background was a colour, not blink
+			}
 		case v >= 90 && v <= 97:
 			t.fg, t.bold = v-90, true
 		case v >= 100 && v <= 107:
-			t.bg, t.blink = v-100, true
+			t.bg, t.blink, t.hiBg = v-100, true, true
 		case v == 38 || v == 48:
-			if i+1 < len(p) && p[i+1] == 5 {
+			// 256 colours (Moebius's UTF-8 export writes its 16 as 38;5;n) and 24-bit
+			// colours, as the nearest of the 16.
+			c := -1
+			if i+2 < len(p) && p[i+1] == 5 {
+				c = nearest16(xterm256(p[i+2]))
 				i += 2
-			} else if i+1 < len(p) && p[i+1] == 2 {
+			} else if i+4 < len(p) && p[i+1] == 2 {
+				c = nearest16(uint32(min(255, max(0, p[i+2])))<<16 | uint32(min(255, max(0, p[i+3])))<<8 | uint32(min(255, max(0, p[i+4]))))
 				i += 4
+			} else {
+				i = len(p)
+			}
+			if c >= 0 && v == 38 {
+				t.fg, t.bold = c&7, c > 7
+			} else if c >= 0 {
+				t.bg, t.blink, t.hiBg = c&7, c > 7, c > 7
 			}
 		}
 	}
@@ -781,6 +874,7 @@ func (t *Term) fill(start, to int) {
 }
 
 func (t *Term) clearAll(b uint32) {
+	t.screens++
 	if t.beforeClear != nil {
 		t.beforeClear()
 	}
@@ -946,8 +1040,34 @@ func fromUtf8(b []byte, amiga bool) []byte {
 		return nil
 	}
 	out := make([]byte, 0, len(b))
+	col, esc := 0, 0 // the column in the line, for tabs; esc: in an escape sequence
 	for _, r := range s {
 		switch {
+		case esc == 1:
+			esc = 0
+			if r == '[' {
+				esc = 2
+			}
+		case esc == 2:
+			if r >= 0x40 && r <= 0x7E {
+				esc = 0
+			}
+		case r == 0x1B:
+			esc = 1
+		case r == '\n' || r == '\r':
+			col = 0
+		default:
+			col++
+		}
+		switch {
+		case r == '\t' && esc == 0:
+			// The page reads the bytes below 32 that stand for ○ ◘ • as glyphs:
+			// a real tab becomes the spaces it stands for.
+			n := 8 - (col-1)%8
+			out = append(out, bytes.Repeat([]byte{' '}, n)...)
+			col += n - 1
+		case (r == 0 || r == 7 || r == 8) && esc == 0:
+			col-- // nothing to draw
 		case r < 0x80:
 			out = append(out, byte(r))
 		case amiga && r <= 0xFF:
@@ -974,10 +1094,16 @@ func utf8LooksPc(b []byte) bool {
 	}
 	pc, am := 0, 0
 	for _, r := range string(b) {
-		if (r >= 0x2500 && r <= 0x259F) || r == 0x25A0 {
+		_, inPC := cp437Rev[r]
+		switch {
+		case (r >= 0x2500 && r <= 0x259F) || r == 0x25A0:
 			pc++
-		} else if r >= 0xA0 && r <= 0xFF {
-			am++
+		case r > 0xFF && inPC:
+			pc++ // only CP437 has it (Latin-1 cannot hold it at all)
+		case r >= 0xA0 && r <= 0xFF && !inPC:
+			am++ // only Latin-1 has it (¯ ¸ ´ ¨ ...)
+		case r >= 0xA0 && r <= 0xFF:
+			// in both sets: says nothing
 		}
 	}
 	return pc > am
@@ -987,6 +1113,44 @@ type ParseOpts struct {
 	amiga     bool
 	forceCols int
 	binary    bool
+	utf8      bool // the bytes came from a UTF-8 file (fromUtf8)
+}
+
+// rawControls: the art (a file with a SAUCE record, read with glyphCtl) holds
+// 0x00, 0x07, 0x08 or 0x09 as characters; saving it again keeps them so.
+func rawControls(b []byte) bool {
+	s, end := readSauce(b)
+	return sauceArt(s) && bytes.ContainsAny(b[:end], "\x00\x07\x08\x09")
+}
+
+// sauceArt: the record says the file is character art (ASCII or ANSI) of its own size.
+func sauceArt(s *Sauce) bool { return s != nil && s.dataType == 1 && s.fileType <= 1 }
+
+// longestLine counts the characters of the longest line (escape codes left out).
+func longestLine(b []byte) int {
+	most, n, esc := 0, 0, 0
+	for _, c := range b {
+		switch {
+		case esc == 1:
+			esc = 0
+			if c == '[' {
+				esc = 2
+			}
+		case esc == 2:
+			if c >= 0x40 && c <= 0x7E {
+				esc = 0
+			}
+		case c == 0x1B:
+			esc = 1
+		case c == '\n':
+			n = 0
+		case c == '\r':
+		default:
+			n++
+			most = max(most, n)
+		}
+	}
+	return most
 }
 
 // parseArt reads art into a Doc. b = the whole file (with or without SAUCE).
@@ -1007,8 +1171,8 @@ func parseArt(b []byte, o ParseOpts) (*Doc, *Sauce, int) {
 		}
 		art = b[:n]
 	}
-	if sauce != nil && sauce.dataType == 1 && sauce.tinfo1 >= 8 && sauce.tinfo1 <= 1000 {
-		cols = sauce.tinfo1
+	if sauce != nil && sauce.dataType == 1 && sauce.tinfo1 >= 1 && sauce.tinfo1 <= 1000 {
+		cols = sauce.tinfo1 // Moebius saves pages from 1 column wide
 	}
 	if sauce != nil && sauce.dataType == 5 && sauce.fileType > 0 {
 		cols = sauce.fileType * 2
@@ -1027,14 +1191,30 @@ func parseArt(b []byte, o ParseOpts) (*Doc, *Sauce, int) {
 		}
 		return d, sauce, fontRequest
 	}
+	if o.utf8 && sauce == nil && o.forceCols == 0 {
+		if n := longestLine(art); n > cols && n <= 256 {
+			cols = n // a UTF-8 file has no record to say its width (longer lines are prose: they wrap)
+		}
+	}
 	d := newDoc(cols, 25)
 	t := newTerm(d, o.amiga)
+	// An art editor's file (it has a SAUCE record) holds every character as a glyph:
+	// Moebius and PabloDraw write ○ (9), ◘ (8), • (7) and character 0 as they are.
+	t.glyphCtl = (sauceArt(sauce) || o.utf8) && !o.amiga // fromUtf8 left only glyphs there
+	t.lateWrap = o.utf8                                  // UTF-8 art is for today's terminals, which wrap at the next character
 	var f fullest
 	t.beforeClear = func() { f.look(t.doc) }
 	writeWatching(t, art, &f)
 	fontRequest = t.fontRequest
 	if d = f.pick(t.doc); d == t.doc {
 		d.fit(cursorRows(t.x, t.y))
+		if sauceArt(sauce) && sauce.flags&0x18 != 0 && sauce.tinfo2 > d.rows && sauce.tinfo2 <= maxRowsFor(d.cols) && t.screens <= 1 {
+			// The record's height: empty rows at the end that the file has no line
+			// ends for (Moebius writes nothing for them). Only from editors that
+			// write the aspect ratio bits, as Moebius always does: older ones often
+			// wrote 25 (the screen) or one row more for the last line end.
+			d.ensureRows(sauce.tinfo2)
+		}
 	} else {
 		d.fit(0)
 	}
@@ -1056,6 +1236,7 @@ type attrs struct {
 // where the art ends, so it cannot be taken for the end of the file.
 func writeAnsi(d *Doc, amiga, colours, clear bool, keep1A ...bool) []byte {
 	raw1A := len(keep1A) > 0 && keep1A[0]
+	rawCtl := len(keep1A) > 1 && keep1A[1] && !amiga // keep1A[1]: 0x00, 0x07, 0x08, 0x09 as they are
 	var out []byte
 	nl := "\r\n"
 	if amiga {
@@ -1109,9 +1290,16 @@ func writeAnsi(d *Doc, amiga, colours, clear bool, keep1A ...bool) []byte {
 				}
 			}
 			ch := byte(cellCh(v))
-			// Bytes a terminal would take as controls cannot be stored as glyphs.
+			// Bytes a terminal would take as controls cannot be stored as glyphs:
+			// art editors (Moebius, PabloDraw) write ○ ◘ • and character 0 as they
+			// are, but a BBS terminal tabs, backs up and beeps on them. Only a file
+			// that had them so (rawCtl) keeps them so.
 			switch ch {
-			case 0, 0x1B, 0x0A, 0x0D, 0x08, 0x09, 0x07:
+			case 0, 0x08, 0x09, 0x07:
+				if !rawCtl {
+					ch = 32
+				}
+			case 0x1B, 0x0A, 0x0D:
 				ch = 32
 			case 0x1A:
 				if !raw1A {
@@ -1280,4 +1468,45 @@ func binWidth(art []byte) int {
 		return 80
 	}
 	return 160
+}
+
+// vga16 are the 16 colours of a PC's text mode, in ANSI order (1 red, 4 blue).
+var vga16 = [16]uint32{0x000000, 0xAA0000, 0x00AA00, 0xAA5500, 0x0000AA, 0xAA00AA, 0x00AAAA, 0xAAAAAA,
+	0x555555, 0xFF5555, 0x55FF55, 0xFFFF55, 0x5555FF, 0xFF55FF, 0x55FFFF, 0xFFFFFF}
+
+// xterm256 is the RGB of colour n of the 256: the 16 first, a 6x6x6 cube, 24 greys.
+func xterm256(n int) uint32 {
+	switch {
+	case n < 0 || n > 255:
+		return 0
+	case n < 16:
+		return vga16[n]
+	case n < 232:
+		n -= 16
+		l := func(v int) uint32 {
+			if v == 0 {
+				return 0
+			}
+			return uint32(55 + v*40)
+		}
+		return l(n/36)<<16 | l(n/6%6)<<8 | l(n%6)
+	}
+	g := uint32(8 + (n-232)*10)
+	return g<<16 | g<<8 | g
+}
+
+// nearest16 is the one of the 16 colours closest to rgb.
+func nearest16(rgb uint32) int {
+	best, bd := 0, -1
+	for i, c := range vga16 {
+		d := 0
+		for _, sh := range []uint{0, 8, 16} {
+			x := int(rgb>>sh&255) - int(c>>sh&255)
+			d += x * x
+		}
+		if bd < 0 || d < bd {
+			best, bd = i, d
+		}
+	}
+	return best
 }

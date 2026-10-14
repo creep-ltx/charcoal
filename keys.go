@@ -263,6 +263,7 @@ func init() {
 		{"default_colours", "Ctrl+D", "Default colours (7 on 0; the machine's own on other pages)", func() { a.defaultColours() }},
 		{"swap_colours", "Ctrl+Shift+X", "Swap foreground and background", func() { a.swapColours() }},
 		{"ice", "Ctrl+E", "iCE colours on / off (PC and Amiga: backgrounds 8-15 instead of blink)", func() { a.toggleIce() }},
+		{"ninepx", "Alt+9", "9-pixel letter spacing on / off (PC pages: VGA's 9-dot cells, kept in the SAUCE record)", func() { a.toggleNinePx() }},
 		{"fkeys_1", "Ctrl+F1", "F-key set 1-10", set(0)},
 		{"fkeys_2", "Ctrl+F2", "", set(1)},
 		{"fkeys_3", "Ctrl+F3", "", set(2)},
@@ -348,8 +349,12 @@ func runKey(c combo) bool {
 // action all its keys; a key it takes is taken away from any other action.
 // Lines that are not understood are skipped and named in problems.
 func applyKeyFile(text string) (map[string][]combo, []string) {
-	k := defaultKeys()
+	preset := keyFilePreset(text)
+	k := presetKeys(preset) // a "preset = moebius" line: another editor's keys (keypresets.go)
 	var problems []string
+	if preset != "" && presetByID(preset) == nil {
+		problems = append(problems, fmt.Sprintf("no key preset called %q", preset))
+	}
 	given := map[combo]string{}
 	for n, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
@@ -362,9 +367,15 @@ func applyKeyFile(text string) (map[string][]combo, []string) {
 			problems = append(problems, fmt.Sprintf("line %d has no =", n+1))
 			continue
 		}
+		if id == "preset" {
+			continue
+		}
 		if actionByID[id] == nil {
 			problems = append(problems, fmt.Sprintf("line %d: no action called %q", n+1, id))
 			continue
+		}
+		if preset != "" && sameKeys(list, actionByID[id].keys) {
+			continue // the file only repeats CharEdit's default: the preset's keys stay
 		}
 		var keys []combo
 		bad := false
@@ -417,6 +428,8 @@ func keyFileText() string {
 # defaults back (it is written again at the next start).
 # Fixed, not set here: typing, F1-F10 (the F-key set), the arrows, Home, End, PgUp, PgDn, Return, Tab,
 # Backspace, Delete, Insert and Esc. Alt+F4 is the window manager's.
+# A line "preset = moebius" (or pablodraw, thedraw, aciddraw) takes that editor's keys; the lines below
+# still win where they differ from CharEdit's own. Settings > Keys like writes it.
 `)
 	last := ""
 	for _, ac := range actions {
@@ -526,4 +539,27 @@ func groupKeys(g []*Action) string {
 		return "(no key)"
 	}
 	return strings.Join(names, ", ")
+}
+
+// sameKeys: the two key lists name the same keys (in any order and case).
+func sameKeys(a, b string) bool {
+	norm := func(s string) map[combo]bool {
+		m := map[combo]bool{}
+		for _, p := range strings.Split(s, ",") {
+			if c, err := parseCombo(p); err == nil {
+				m[c] = true
+			}
+		}
+		return m
+	}
+	x, y := norm(a), norm(b)
+	if len(x) != len(y) {
+		return false
+	}
+	for c := range x {
+		if !y[c] {
+			return false
+		}
+	}
+	return true
 }
