@@ -53,8 +53,9 @@ Settings, keys and autosaves are kept in `%AppData%\Charcoal` on Windows,
 An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw),
 Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens and teletext
 (BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
-1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA on a PC page
-(CP437), the C64's two character sets on a C64 page.
+1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA, EGA 8x14,
+VGA 8x8 (80x50) and the code pages 850 and 866 on a PC page (CP437), the C64's two character sets on a C64 page;
+or a font of your own, drawn in its font editor.
 
     charedit [FILE...]     # the editor: its own window, one tab per file
 
@@ -179,6 +180,27 @@ empty cells; Alt+O), **Play** (Ctrl+P, at 1/2x to 4x, looping or once). Undo cov
 - Save as **Animation (.gif)** or **Animation, APNG (.png)** writes every frame for its hold time. A format that
   holds one picture (`.scr`, `.png`, `.xb` ...) writes the frame on show and says the others are only in CharEdit.
 
+## Fonts
+
+![The font editor: the character ░ redrawn, the page beside it showing the change](docs/screenshots/fonteditor.png)
+
+- **Built-in PC fonts**: IBM VGA, EGA 8x14, VGA 8x8 (80x50 pages), VGA with code page 850 and 866, from VileR's
+  *Ultimate Oldschool PC Font Pack*. A SAUCE font name (`IBM VGA`, `IBM EGA`, `IBM VGA50`, `IBM EGA43`,
+  `IBM VGA 850` ...) picks the font when a file opens; saving writes the font's name.
+- **Your own font** for a page: the Font gadget's *Load a font...* (Ctrl+Shift+L), or drop the file on the window
+  (it asks: font or art?). PC raw fonts (`.fnt .f08 .f14 .f16`: 256 characters of 8, 14 or 16 rows), PSF 1 and 2,
+  an XBin's font; C64, VIC-20 and PET character sets (`.64c` with its load address, `.bin` of 2048 bytes a set or
+  4096 for both); Atari 8-bit `.fnt` (1024 bytes); ZX Spectrum sets (768 bytes, codes 32-127) and UDGs
+  (168 bytes). The font is named after its file.
+- **Kept with the art**: XBin holds the font inside, a Petmate workspace as its custom font (Petmate reads it).
+  Formats that cannot hold a font (ANSI, `.seq`, `.ata`, `.scr`, `.prg` ...) say so when saved, and CharEdit
+  remembers the font for that file: it comes back when the file opens again. Autosaves keep it too.
+- **Font editor** (Ctrl+Shift+E, or *Edit the font...*): the brush character's pixels in a grid. Click or drag
+  sets pixels (a set pixel clicked clears), right click clears; Invert, Flip, Move (Shift+arrows), Clear, Copy,
+  Paste, Undo; arrows or the character map pick another character. The page shows every change at once. Editing a
+  built-in font makes a copy, the page's own. *Save font...* writes it as `.psf`, `.f08/.f14/.f16`, `.64c`, `.fnt`,
+  `.ch8` or `.udg`.
+
 ## Keys
 
 Every shortcut can be changed in `~/.config/charcoal/keys` (`action = key, key`; written with the defaults and
@@ -230,6 +252,7 @@ come back cell for cell after saving in their own format.
 | `dialogs.go` | open/save, info, colour, help, yes/no requesters |
 | `ui.go`, `gfx.go` | the gadgets and the pixel drawing |
 | `fonts.go`, `fonts/` | the embedded fonts and their mirror tables; `cp437.go` the CP437 table |
+| `fontfile.go`, `fontedit.go` | a page's own font: font files read and written, kept with the art; the font editor (`fontfile_test.go`); `tools/pcfonts.py` makes the built-in EGA/VGA fonts |
 | `viewer.go` | CharView |
 | `export.go` | `.prg`, the `.c` array, XBin, HTML (`export_test.go` runs the `.prg` in a small 6502 emulator) |
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
@@ -251,6 +274,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 |---|---|---|
 | Amiga fonts (Topaz 1/1+/2/2+, MicroKnight/+, P0T-NOoDLE, mO'sOul) | TrueSchool's *Multi Platform Amiga Fonts* raw conversions, dMG/t!s^dS!, github.com/rewtnull/amigafonts (256 glyphs × 16 rows, each row of the 8×8 original doubled) | GPL with the font exception, `fonts/amigafonts-NOTICE.txt` |
 | IBM VGA 8×16 | rendered from Px437_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` |
+| IBM EGA 8×14, IBM VGA 8×8, IBM VGA 8×16 code pages 850 and 866 (`fonts/IBM_*.f08/.f14/.f16`) | drawn from Bm437_IBM_EGA_8x14, Bm437_IBM_VGA_9x8 and BmPlus_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* v2.2 (int10h.org), by `tools/pcfonts.py` | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` (the pack's licence) |
 | Atari 8-bit fonts | AltirraOS, from the Altirra emulator | all-permissive, `fonts/AltirraOS-LICENSE.txt` |
 | ZX Spectrum font | the 48K ROM's character set | © Amstrad, who allow passing it on, `fonts/zx-spectrum-NOTICE.txt` |
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |

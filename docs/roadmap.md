@@ -48,8 +48,10 @@ against each platform's best editor. Each step says what it wins.
    frames, not tabs. Later: delta streams, CharView playing frames, onion of the next frame.
 2. **Reference image** to trace over: open, move, scale, fade, hide (not converted into characters: the
    scene bans conversions, so this stays a tracing aid).
-3. **Own fonts and character sets**: load .fnt/.psf/.f16 (PC), Atari .fnt, C64 .64c/charset .bin,
-   Spectrum 768-byte sets and UDGs, kept with the art (XBin, .prg); a small font editor.
+3. [x] **Own fonts and character sets** (done 2026-10-14): load .fnt/.f08/.f14/.f16/.psf (PC), Atari .fnt,
+   C64 .64c/charset .bin, Spectrum 768-byte sets and UDGs (file requester, or a dropped file that asks), kept with
+   the art (XBin, Petmate customFonts; a .prg in Petmate's form cannot hold one, so it and the stream formats have
+   CharEdit remember the font per file), autosaved; a small font editor that saves the font as a file.
 4. **Shapes and brushes**: line (drag), rectangle, ellipse (filled or not), a shade brush (░▒▓█),
    symmetry drawing, colour-only / character-only painting.
 
@@ -63,7 +65,9 @@ against each platform's best editor. Each step says what it wins.
 ## Step 4: PC artists feel at home (the biggest group)
 
 - 9-pixel VGA cells and the 4:3 aspect preview (from SAUCE flags).
-- More PC fonts: EGA 8x14, VGA50 8x8 (80x50), other code pages; SAUCE font names honoured.
+- [x] More PC fonts (done 2026-10-14): EGA 8x14, VGA50 8x8 (80x50), code pages 850 and 866; SAUCE font names
+  honoured on opening and written on saving (IBM VGA, IBM EGA, IBM VGA50, IBM EGA43, IBM VGA 850 ...). Not yet:
+  other code pages' 8x8/8x14 sets, the 9-pixel cells and 4:3 aspect above.
 - TheDraw fonts (logo typing), select by character or colour, fill limited to a colour.
 - Layers (later: they touch everything, so after frames).
 
