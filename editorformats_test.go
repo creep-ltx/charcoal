@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -916,5 +917,85 @@ func TestXterm256ANSIOrder(t *testing.T) {
 		if got := xterm256(n); got != want {
 			t.Errorf("xterm256(%d) = %06x, want %06x", n, got, want)
 		}
+	}
+}
+
+// A .tnd of more than 16 colours is read with the VGA's numbers (the nearest);
+// saved again it has only VGA colours, and those must come back with the same
+// numbers, not numbered in the order they first appear (the big check's
+// avg-thebatman.tnd: cell 0,0 came back as colours 0/1 instead of 8/6).
+func TestRGBColoursKeepVGANumbers(t *testing.T) {
+	vga := paletteByID("vga").colors
+	tnd := append([]byte{24}, "TUNDRA24"...)
+	be := func(c uint32) []byte { return []byte{0, byte(c >> 16), byte(c >> 8), byte(c)} }
+	for i := 0; i < 160; i++ {
+		fg, bg := vga[(8+i)%16]&0xFFFFFF^1, vga[(6+i*3)%16]&0xFFFFFF
+		if i == 40 {
+			fg = 0x123456 // the 17th colour, nearest of VGA's
+		}
+		tnd = append(append(append(tnd, 6, byte('A'+i%26)), be(fg)...), be(bg)...)
+	}
+	d, info, err := parseTundra(tnd)
+	if err != nil || info.pal != nil {
+		t.Fatalf("tnd: %v, own palette %v", err, info.pal != nil)
+	}
+	if v := d.cells[0]; cellFg(v) != 8 || cellBg(v) != 6 {
+		t.Fatalf("tnd cell 0: %08x", v)
+	}
+	out, _ := writeTundra(d, vga, true)
+	back, info, err := parseTundra(out)
+	if err != nil || info.pal == nil {
+		t.Fatalf("tnd again: %v", err)
+	}
+	for i, v := range d.cells {
+		if back.cells[i] != v {
+			t.Fatalf("tnd again cell %d: %08x became %08x", i, v, back.cells[i])
+		}
+	}
+	// REXPaint: VGA colours keep their numbers, others take the free ones.
+	x := newDoc(4, 1)
+	x.cells[0] = makeCell('a', 9, 12, 0)
+	x.cells[1] = makeCell('b', 0, 3, 0)
+	pal := vga
+	pal[3] = 0xFF102030 // not a VGA colour: takes the first free number
+	xd, xinfo, err := parseXP(writeXP(x, pal, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := xd.cells[0]; cellFg(v) != 9 || cellBg(v) != 12 {
+		t.Fatalf("xp cell 0: %08x", v)
+	}
+	if v := xd.cells[1]; cellFg(v) != 0 || xinfo.pal[cellBg(v)]&0xFFFFFF != 0x102030 {
+		t.Fatalf("xp cell 1: %08x", v)
+	}
+}
+
+// Playscii charsets CharEdit has no table of its own never stop a file opening:
+// jpetscii (the big check's om-untitled.psci) is matched to the C64's sets, any
+// other opens as a PC page with a note.
+func TestPsciOtherCharsets(t *testing.T) {
+	psci := func(charset string, chars ...int) []byte {
+		var tiles []string
+		for _, c := range chars {
+			tiles = append(tiles, `{"char":`+strconv.Itoa(c)+`,"fg":2,"bg":1,"xform":0}`)
+		}
+		return []byte(`{"active_frame":0,"active_layer":0,"camera":[0,0,0],"charset":"` + charset +
+			`","palette":"c64_original","width":` + strconv.Itoa(len(chars)) + `,"height":1,"frames":[{"delay":0.1,"layers":[{"z":0,"visible":1,"name":"l","tiles":[` +
+			strings.Join(tiles, ",") + `]}]}]}`)
+	}
+	// jpetscii: 1-26 are the upper set's A-Z, 29 is a glyph of its own.
+	art, err := parsePsci(psci("jpetscii", 1, 2, 3, 29))
+	if err != nil || art.mode != "c64" || art.lower {
+		t.Fatalf("jpetscii: %v %+v", err, art)
+	}
+	if got := []int{cellCh(art.docs[0].cells[0]), cellCh(art.docs[0].cells[1])}; got[0] != 1 || got[1] != 2 {
+		t.Fatalf("jpetscii glyphs read as %v", got)
+	}
+	if !strings.Contains(art.note, "nearest") {
+		t.Fatalf("jpetscii note %q", art.note)
+	}
+	art, err = parsePsci(psci("apple2", 65, 66))
+	if err != nil || art.mode != "pc" || !strings.Contains(art.note, `"apple2"`) || cellCh(art.docs[0].cells[0]) != 65 {
+		t.Fatalf("apple2: %v %+v", err, art)
 	}
 }

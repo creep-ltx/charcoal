@@ -389,29 +389,12 @@ func parseTundra(b []byte) (*Doc, XBinInfo, error) {
 		}
 	}
 	// The colours: their own palette if they fit in 16, else the nearest of the VGA's.
-	index := map[uint32]int{}
-	for _, c := range cells {
-		for _, col := range []uint32{c.fg, c.bg} {
-			if _, ok := index[col]; !ok && len(index) <= 16 {
-				index[col] = len(index)
-			}
-		}
+	rc := make([]rgbCell, len(cells))
+	for i, c := range cells {
+		rc[i] = rgbCell{c.ch, c.fg, c.bg}
 	}
-	var pal [16]uint32
-	own := len(index) <= 16
-	if own {
-		for col, i := range index {
-			pal[i] = 0xFF000000 | col
-		}
-		info.pal = &pal
-	}
-	vga := paletteByID("vga").colors
-	pick := func(col uint32) int {
-		if own {
-			return index[col]
-		}
-		return nearestOf(col, vga)
-	}
+	pick, own := rgbColours(rc)
+	info.pal = own
 	rows := max(1, (len(cells)+cols-1)/cols)
 	d := newDoc(cols, rows)
 	for i, c := range cells {

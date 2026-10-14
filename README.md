@@ -175,7 +175,7 @@ open again become the page's file (Save writes the same format again).
 | TundraDraw | `.tnd` | PC, Amiga, 80 columns | cells with 24-bit colours (no font) | yes | ansilove (colours; it cannot draw characters 1, 2, 4, 6), IcyDraw's reader; files IcyDraw wrote |
 | IcyDraw | `.icy` | PC, Amiga | one layer, font, palette, iCE or blink; a picture of the first 80 rows | yes (version 1 with or without zstd, and the older version 0; layers put together, picture layers and effects left out) | IcyDraw's reader; files IcyDraw 0.6 wrote |
 | REXPaint | `.xp` | PC | one layer, 24-bit colours | yes (layers put together) | IcyDraw's reader |
-| Playscii | `.psci` | PC (dos), Amiga (amiga_topaz), PETSCII (c64_real_*, commodore_pet), Atari (atari) | every frame with its hold, one layer; Playscii's own charset and palette by name | yes, also c64_petscii and c64_edscii (Playscii's defaults); layers put together | Playscii's own loader (art.py); its glyph order compared with the ROM fonts |
+| Playscii | `.psci` | PC (dos), Amiga (amiga_topaz), PETSCII (c64_real_*, commodore_pet), Atari (atari) | every frame with its hold, one layer; Playscii's own charset and palette by name | yes, also c64_petscii, c64_edscii (Playscii's defaults) and jpetscii; other charsets open as a PC page; layers put together | Playscii's own loader (art.py); its glyph order compared with the ROM fonts |
 | Marq's PETSCII editor | `.pet` | C64 | screen codes, colours, border, background, case | yes | its source (m_c64.pde) |
 | Marq's PETSCII editor | `.bas`, `.s` | C64 | a BASIC listing (for petcat) and an ACME program of a 40x25 screen (data only for other sizes) | no | its source |
 | Petmate | `.json` | PETSCII | every screen (Petmate's JSON export) | yes | its source (exporters/json.ts) |

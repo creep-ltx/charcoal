@@ -123,7 +123,9 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 	a.tabs, a.Tab = nil, nil
 	a.focusTab(a.newTab(mode))
 	name := "again" + map[string]string{"tti": ".tti", "ep1": ".ep1", "tturl": ".url", "scr": ".scr", "vt52": ".vt", "pcb": ".pcb", "avt": ".avt", "ansi": ".ans", "text": ".asc", "bin": ".bin", "xbin": ".xb", "seq": ".seq",
-		"ata": ".ata", "marq": ".c", "petmate": ".petmate", "prg": ".prg"}[fmtID]
+		"ata": ".ata", "marq": ".c", "petmate": ".petmate", "prg": ".prg",
+		// other editors' files: .adf and .xp are known by their name only, as in the app
+		"idf": ".idf", "adf": ".adf", "tnd": ".tnd", "icy": ".icy", "xp": ".xp", "psci": ".psci", "pet": ".pet", "pmjson": ".json"}[fmtID]
 	as := mode
 	if fmtID == "xbin" || fmtID == "marq" || fmtID == "petmate" || fmtID == "prg" {
 		as = "auto"

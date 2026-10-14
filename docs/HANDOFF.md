@@ -169,9 +169,10 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   read), `writeXP` (gzip, column-major), `writePsci` (Playscii JSON, one layer per frame, charset/palette by
   name), `writeMarqPet` / `writeMarqBas` / `writeMarqAsm` (Marq's C64 exports), `writePetmateJSON`. Readers:
   `parseIcyDraw` (v1 with zstd via klauspost/compress, and v0 base64 tEXt/zTXt) + `icyPage` (layers put
-  together as IcyDraw's merge_layer_char, bold -> bright, blink -> background 8-15), `parseXP`, `parsePsci`
-  (charsets dos, amiga_topaz, atari, c64_real_shifted/unshifted, commodore_pet, c64_petscii/c64_edscii through
-  `psciC64Sets`; a C64/Atari page's background is the commonest, reversed cells from swapped colours),
+  together as IcyDraw's merge_layer_char, bold -> bright, blink -> background 8-15), `parseXP` and `parseTundra` (24-bit colours numbered by `rgbColours`: a VGA colour keeps
+  its VGA number, so a page saved with VGA colours reads back with the same numbers), `parsePsci`
+  (charsets dos, amiga_topaz, atari, c64_real_shifted/unshifted, commodore_pet, c64_petscii/c64_edscii/jpetscii through
+  `psciC64Sets`; any other charset opens as a PC page with the glyph numbers and a note, never refused; a C64/Atari page's background is the commonest, reversed cells from swapped colours),
   `parseMarqPet`, `parsePetmateJSON`. Hostile sizes: IcyDraw pages/layers <= 4M cells, 256 MB unpacked; a
   Playscii picture must fit its file (w*h <= len/16); Petmate JSON needs w*h screencodes.
 - Glue (the only edits to shared files): entries at the end of `formats` ("For other editors: ..."),

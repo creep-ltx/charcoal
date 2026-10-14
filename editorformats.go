@@ -61,33 +61,64 @@ type rgbCell struct {
 	fg, bg uint32
 }
 
-// rgbDoc makes a page from cells with 24-bit colours: their own palette when
-// they use 16 colours or fewer, else each the nearest of the VGA's.
-func rgbDoc(cols, rows int, cells []rgbCell) (*Doc, *[16]uint32) {
+// rgbColours numbers the 24-bit colours of cells: own is their palette when they
+// use 16 colours or fewer, else nil and each is the nearest of the VGA's.
+//
+// A colour that is one of the VGA's keeps the VGA's number (the rest take the free
+// numbers in the order they first appear), so a page CharEdit wrote with the VGA
+// colours comes back with the same colour numbers even when the file it came from
+// was read with other numbers (a .tnd of more than 16 colours, matched to the VGA).
+func rgbColours(cells []rgbCell) (pick func(uint32) int, own *[16]uint32) {
+	vga := paletteByID("vga").colors
+	var seen []uint32
 	index := map[uint32]int{}
 	for _, c := range cells {
-		for _, col := range []uint32{c.fg, c.bg} {
-			if _, ok := index[col]; !ok && len(index) <= 16 {
-				index[col] = len(index)
+		for _, col := range []uint32{c.fg & 0xFFFFFF, c.bg & 0xFFFFFF} {
+			if _, ok := index[col]; !ok && len(seen) <= 16 {
+				index[col] = -1
+				seen = append(seen, col)
 			}
 		}
 	}
+	if len(seen) > 16 {
+		return func(col uint32) int { return nearestOf(col, vga) }, nil
+	}
 	var pal [16]uint32
-	own := len(index) <= 16
-	vga := paletteByID("vga").colors
+	taken := [16]bool{}
+	for _, col := range seen {
+		for i, v := range vga {
+			if v&0xFFFFFF == col && !taken[i] {
+				index[col], taken[i] = i, true
+				break
+			}
+		}
+	}
+	free := 0
+	for _, col := range seen {
+		if index[col] >= 0 {
+			continue
+		}
+		for taken[free] {
+			free++
+		}
+		index[col], taken[free] = free, true
+	}
 	for i := range pal {
-		pal[i] = vga[i]
+		pal[i] = 0xFF000000 | vga[i]
 	}
-	if own {
-		for col, i := range index {
-			pal[i] = 0xFF000000 | col
-		}
+	for col, i := range index {
+		pal[i] = 0xFF000000 | col
 	}
-	pick := func(col uint32) int {
-		if own {
-			return index[col]
-		}
-		return nearestOf(col, vga)
+	return func(col uint32) int { return index[col&0xFFFFFF] }, &pal
+}
+
+// rgbDoc makes a page from cells with 24-bit colours (rgbColours); the palette is
+// the VGA's when they use more than 16.
+func rgbDoc(cols, rows int, cells []rgbCell) (*Doc, *[16]uint32) {
+	pick, pal := rgbColours(cells)
+	if pal == nil {
+		vga := paletteByID("vga").colors
+		pal = &vga
 	}
 	d := newDoc(cols, max(1, rows))
 	for i, c := range cells {
@@ -96,7 +127,7 @@ func rgbDoc(cols, rows int, cells []rgbCell) (*Doc, *[16]uint32) {
 		}
 		d.cells[i] = makeCell(int(c.ch), pick(c.fg), pick(c.bg), 0)
 	}
-	return d, &pal
+	return d, pal
 }
 
 // ---------------------------------------------------------------- iCEDraw
@@ -1230,12 +1261,16 @@ var psciPalettes = map[string][]uint32{
 }
 
 // psciC64Sets: the C64 screen code (upper set, lower set) of each glyph of Playscii's
-// c64_petscii and c64_edscii charsets, found by comparing their pictures with the
-// C64's character ROM; -1-n is not in that set, n the nearest.
+// c64_petscii, c64_edscii and jpetscii charsets, found by comparing their pictures with the
+// C64's character ROM (codes 128-255 are the reversed glyphs); -1-n is not in that set, n the nearest.
 var psciC64Sets = map[string][2][]int{
 	"c64_petscii": {
 		{32, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 112, 114, 110, 82, 70, 64, 32, 68, 69, 85, 73, 87, 81, 79, 119, 80, 107, 91, 115, 78, 77, 86, 121, 120, 230, 74, 75, 108, 123, 101, 160, 103, 109, 113, 125, 95, 105, 118, 117, 104, 92, 127, 98, 124, 126, 76, 111, 122, 32, 84, 71, 66, 32, 72, 89, 32, 99, 100, 94, 97, 88, 118, 90, 65, -54, -55, -13, -95, -32, -44, -88, -2, -10, -90, -13, -10, -2, -2, -88, -88, -88, -85, -62, -50, -16, -23, -95, -48, -88, -48, 102, 83, -103, -231, 32, 32},
 		{32, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 27, 28, 29, 30, 31, 0, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 112, 114, 110, -122, -33, 64, 32, -46, -121, -113, -111, -16, -6, -102, 119, -104, 107, 91, 115, -48, -128, -89, 121, 120, 94, -110, -126, 108, 123, 101, 160, 103, 109, 113, 125, -252, -237, 118, 117, 104, 92, 127, 98, 124, 126, -102, 111, -104, 32, -77, -28, 93, 32, -30, -11, 32, 99, 100, -5, 97, -10, 118, -31, -32, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 102, -250, 105, 95, 32, 32},
+	},
+	"jpetscii": { // a PETSCII-like set of its own: half its glyphs are the ROM's, the rest shown as the nearest
+		{32, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 29, -41, -42, 28, 34, -54, -55, -13, -95, -32, -44, -88, -2, -10, -90, -13, -10, -2, -2, -88, -88, -88, -85, -62, -50, -16, -23, -95, -48, -88, -48, 65, 88, 90, 83, 94, 49, 50, 51, 52, 53, 54, 55, 56, 57, 48, 45, 61, 100, 43, 58, 59, 33, 0, 35, 36, 37, -33, 38, 42, 40, 41, 60, 47, 62, 44, 46, 63, 112, 114, 110, 79, 119, 80, -109, 248, -124, -79, 69, -78, 85, -33, 73, 64, 107, 91, 115, 101, -172, 103, 245, 81, 246, 84, -161, 89, -45, -44, -34, 66, 109, 113, 125, 76, 111, 122, -125, 249, -127, -78, 82, -48, 74, -33, 75, -33, -208, 227, -209, 30, -234, -224, 78, 77, -65, -65, -21, -83, -50, -50, -33, -33, -161, 87, -161, -67, 95, 105, -33, -33, -90, -85, -50, -26, -26, -26, -33, -35, -205, 228, -251, -67, 31, -65, -48, 86, 102, 104, -93, -103, -105, -93, -35, -25, -102, -120, -120, -104, -205, -98, -112, -99, -178, -2, 108, 98, 123, -59, -33, -210, -112, -104, -102, -109, -104, -102, -120, -84, -11, -240, 225, 255, 97, -33, -33, -50, -86, -74, -109, -124, -33, -33, -6, -66, -24, -62, 124, 226, 126, -210, -33, -161, -75, -76, -125, -127, -40, -33, -47, -2, -67, -56, -11, -130, -161, -33, -91, 160},
+		{32, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 27, 29, -41, -42, 28, 34, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, -32, -10, -31, -250, -5, 49, 50, 51, 52, 53, 54, 55, 56, 57, 48, 45, 61, 100, 43, 58, 59, 33, 0, 35, 36, 37, -33, 38, 42, 40, 41, 60, 47, 62, 44, 46, 63, 112, 114, 110, -102, 119, -104, -109, 248, -124, -48, -121, -9, -113, -33, -111, 64, 107, 91, 115, 101, -153, 103, 245, -6, 246, -77, -161, -11, -45, -25, -34, 93, 109, 113, 125, -102, 111, -104, -125, 249, -127, -12, -122, -48, -110, -33, -126, -33, -230, 227, -232, 30, -255, -253, -48, -128, -65, -65, -56, -99, -50, -50, -33, -33, -161, -16, -161, -94, -252, -237, -33, -33, -119, -98, -50, -90, -7, -31, -33, -35, -230, 228, -232, -94, 31, -65, -25, -89, 102, 104, -93, 105, -105, -106, -35, -25, -102, -120, -120, -104, -226, -98, -112, -99, -153, -66, 108, 98, 123, -59, -23, -33, -112, -104, -102, -109, -104, -102, -120, -227, -75, -240, 225, 255, 97, -33, -33, -50, -113, -111, -109, -124, -33, -33, -70, -4, -24, -62, 124, 226, 126, -59, -33, -161, -110, -126, -125, -127, -40, -33, -23, -66, -94, -56, -75, -131, -161, -33, -152, 160},
 	},
 	"c64_edscii": {
 		{32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 0, -54, -55, -13, -95, -32, -44, -88, -2, -10, -90, -13, -10, -2, -2, -88, -88, -88, -85, -62, -50, -16, -23, -95, -48, -88, -48, 27, 28, 29, -48, 94, 160, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 65, 83, 88, 90, 81, 98, 121, 111, 100, 82, 70, 64, 68, 69, 120, 119, 99, 124, 123, 126, 108, 97, 84, 72, 112, 110, 109, 125, 85, 73, 74, 75, 105, 95, 77, 78, 86, 117, 71, 89, 127, 230, 104, 92, 102, 79, 76, 80, 122, 113, 107, 114, 115, 101, 66, 103, 118, 30, 31, -103, -231, 91, 87, -78, 32, 32, 32, 32, 32},
@@ -1451,7 +1486,7 @@ func parsePsci(b []byte) (*psciArt, error) {
 	}
 	art := &psciArt{}
 	var glyph func(i int) (ch int, ok bool) // the page's character for a Playscii glyph
-	set := 0
+	set, unknownCharset := 0, ""
 	switch cs := f.Charset; cs {
 	case "dos", "dos40":
 		art.mode = "pc"
@@ -1468,7 +1503,7 @@ func parsePsci(b []byte) (*psciArt, error) {
 	case "commodore_pet":
 		art.mode, art.machine = "c64", "pet"
 		glyph = func(i int) (int, bool) { return psciPETIndex(i & 127), i < 128 }
-	case "c64_petscii", "c64_edscii":
+	case "c64_petscii", "c64_edscii", "jpetscii":
 		art.mode, art.machine = "c64", "c64"
 		t := psciC64Sets[cs]
 		// The set most of the used glyphs are in.
@@ -1500,7 +1535,10 @@ func parsePsci(b []byte) (*psciArt, error) {
 			}
 		}
 	default:
-		return nil, fmt.Errorf("Playscii's charset %q has no CharEdit page (CharEdit reads dos, amiga_topaz, atari, c64_real_shifted, c64_real_unshifted, c64_petscii, c64_edscii, commodore_pet)", cs)
+		// A charset of a machine CharEdit has no page for: opened as a PC page with
+		// the glyph numbers as characters, never refused.
+		art.mode, unknownCharset = "pc", cs
+		glyph = func(i int) (int, bool) { return i & 255, i < 256 }
 	}
 	// colour: a Playscii colour (1..) as the page's colour number.
 	pal, known := psciPalettes[f.Palette]
@@ -1645,6 +1683,9 @@ func parsePsci(b []byte) (*psciArt, error) {
 		art.holds = append(art.holds, int(math.Round(math.Min(math.Max(fr.Delay, 0), 3600)*1000)))
 	}
 	var notes []string
+	if unknownCharset != "" {
+		notes = append(notes, fmt.Sprintf("Playscii's charset %q has no page here: opened as a PC page, the characters by number", unknownCharset))
+	}
 	if n := len(f.Frames[0].Layers); n > 1 {
 		notes = append(notes, fmt.Sprintf("its %d layers are put together", n))
 	}
