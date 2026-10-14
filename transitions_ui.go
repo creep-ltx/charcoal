@@ -32,6 +32,9 @@ type AnimReq struct {
 	prevHolds            []int
 	prevFB               []*FB
 	prevAt               time.Time
+	detail, shownDet     int                 // the detail level (animcost.go), and the one the fields hold
+	costs                map[string]animCost // what each template costs on this page (animcost_ui.go)
+	sp                   *speedPreview       // the preview as a caller sees it at the chosen speed
 }
 
 // newSeed is a fresh seed for a frame effect's random parts.
@@ -40,7 +43,7 @@ func newSeed() int64 { return 1 + rand.Int63n(1<<31-1) }
 // dialogAnimates: the Animate requester is open (its preview plays).
 func dialogAnimates() bool {
 	_, ok := a.dialog.(*AnimReq)
-	return ok
+	return ok || batchBusy() // Animate a folder moves on while drawn (batch_ui.go)
 }
 
 func openAnimate() {
@@ -50,7 +53,11 @@ func openAnimate() {
 		return
 	}
 	d := &AnimReq{pat: patClock, cells: Field{max: 6}, ms: Field{max: 6}, steps: Field{max: 3}, rows: Field{max: 4}, hold: Field{max: 5},
-		length: Field{max: 3}, seed: newSeed(), shown: -1, every: Field{max: 5}, pauseMs: Field{max: 5}}
+		length: Field{max: 3}, seed: newSeed(), shown: -1, every: Field{max: 5}, pauseMs: Field{max: 5}, costs: map[string]animCost{}}
+	d.detail = detailByID(prefs.AnimLevel)
+	if prefs.AnimLevel == "" || d.detail < 0 {
+		d.detail = detailMedium
+	}
 	d.cells.set("40")
 	d.ms.set("100")
 	d.steps.set("8")
@@ -62,10 +69,10 @@ func openAnimate() {
 		f.enter = d.apply
 	}
 	if o := a.order; o != nil && o.pat() >= 0 {
-		d.pat, d.reverse, d.flip = o.pat(), o.Reverse, o.Flip
+		d.pat, d.reverse, d.flip, d.detail = o.pat(), o.Reverse, o.Flip, o.detail()
 		if isEffect(d.pat) {
 			d.syncDefaults()
-			d.length.set(strconv.Itoa(effectLength(d.pat, o.Frames)))
+			d.length.set(strconv.Itoa(effectLengthAt(d.pat, o.Frames, d.detail)))
 			if o.Seed != 0 {
 				d.seed = o.Seed
 			}
@@ -92,19 +99,20 @@ func (d *AnimReq) makesFrames() bool {
 	return d.frames || framesOnly(d.pat, d.erase) || a.pageStreamFormat() == ""
 }
 
-// syncDefaults puts a frame effect's own length and hold in the fields when it is chosen.
+// syncDefaults puts a frame effect's own length and hold (at the detail
+// level) in the fields when it or the level is chosen.
 func (d *AnimReq) syncDefaults() {
-	if d.pat == d.shown {
+	if d.pat == d.shown && d.detail == d.shownDet {
 		return
 	}
 	if isEffect(d.pat) {
-		def := effectDefaults[d.pat]
-		d.length.set(strconv.Itoa(def[0]))
-		d.hold.set(strconv.Itoa(def[1]))
+		frames, hold := effectOwn(d.pat, d.detail)
+		d.length.set(strconv.Itoa(frames))
+		d.hold.set(strconv.Itoa(hold))
 	} else if d.shown < 0 || isEffect(d.shown) {
 		d.hold.set("60")
 	}
-	d.shown = d.pat
+	d.shown, d.shownDet = d.pat, d.detail
 }
 
 func fieldInt(f *Field, def, lo, hi int) int {
@@ -117,13 +125,14 @@ func fieldInt(f *Field, def, lo, hi int) int {
 
 func (d *AnimReq) spec() animSpec {
 	s := animSpec{pat: d.pat, reverse: d.reverse, flip: d.flip, erase: d.erase && hasToggles(d.pat),
-		hold: fieldInt(&d.hold, 60, 20, 99000), baud: a.baud}
+		hold: fieldInt(&d.hold, 60, 20, 99000), baud: a.baud, detail: d.detail}
 	if !hasToggles(d.pat) {
 		s.reverse, s.flip = false, false
 	}
 	switch {
 	case isEffect(d.pat):
-		s.n = fieldInt(&d.length, effectDefaults[d.pat][0], 2, maxEffectFrames)
+		own, _ := effectOwn(d.pat, d.detail)
+		s.n = fieldInt(&d.length, own, 2, maxEffectFrames)
 		s.seed = d.seed
 	case d.pat == patFadeIn, d.pat == patFadeOut:
 		s.n = fieldInt(&d.steps, 8, 2, 64)
@@ -141,6 +150,10 @@ func (d *AnimReq) spec() animSpec {
 func (d *AnimReq) apply() {
 	s := d.spec()
 	closeDialog()
+	if prefs.AnimLevel != detailIDs[d.detail] {
+		prefs.AnimLevel = detailIDs[d.detail]
+		savePrefs()
+	}
 	if d.makesFrames() {
 		a.applyFrames(s)
 		return
@@ -151,22 +164,35 @@ func (d *AnimReq) apply() {
 			return
 		}
 	}
-	o := &drawOrder{Pattern: patterns[d.pat].id, Reverse: s.reverse, Flip: s.flip, BBS: d.bbs, Copies: d.copies}
-	if isEffect(d.pat) {
-		o.Seed, o.Frames = s.seed, s.n
-		if s.hold != effectDefaults[d.pat][1] {
-			o.Hold = s.hold
+	a.applyOrder(d.orderFor(d.pat))
+}
+
+// orderFor is the draw order Apply would give the page with pattern pat
+// (the chosen one with the fields' frames and hold; another with its own).
+func (d *AnimReq) orderFor(pat int) *drawOrder {
+	s := d.spec()
+	o := &drawOrder{Pattern: patterns[pat].id, Reverse: s.reverse, Flip: s.flip, BBS: d.bbs, Copies: d.copies, Detail: detailIDs[d.detail]}
+	if !hasToggles(pat) {
+		o.Reverse, o.Flip = false, false
+	}
+	if isEffect(pat) {
+		o.Seed = s.seed
+		if pat == d.pat {
+			o.Frames = s.n
+			if _, own := effectOwn(pat, d.detail); s.hold != own {
+				o.Hold = s.hold
+			}
 		}
 	} else if every, ms := fieldInt(&d.every, 40, 1, 1<<20), fieldInt(&d.pauseMs, 40, 20, 99000); every != 40 || ms != 40 {
 		o.Every, o.Pause = every, ms
 	}
-	a.applyOrder(o)
+	return o
 }
 
 // preview: the effect on the page's first screen, about 40 frames.
 func (d *AnimReq) preview() []*Doc {
 	s := d.spec()
-	key := fmt.Sprint(d.pat, d.reverse, d.flip, d.erase, a.gen, a.cur, a.mode, a.machine, a.stres, a.doc.cols, a.doc.rows, s.seed, s.n, s.hold)
+	key := fmt.Sprint(d.pat, d.reverse, d.flip, d.erase, a.gen, a.cur, a.mode, a.machine, a.stres, a.doc.cols, a.doc.rows, s.seed, s.n, s.hold, s.detail)
 	if key == d.prevKey {
 		return d.prev
 	}
@@ -188,7 +214,7 @@ func (d *AnimReq) preview() []*Doc {
 		s.n = max(1, rows/30)
 	default:
 		e := a.paperOf(c)
-		n := len(a.cellsInOrder(c, e, d.pat, s.reverse, s.flip))
+		n := len(a.cellsInOrderAt(c, e, d.pat, s.reverse, s.flip, s.detail))
 		s.n = max(1, (n+39)/40)
 	}
 	docs, holds, _ := a.transitionFrames(c, s, 4<<20)
@@ -252,8 +278,13 @@ func blitScaled(dst *FB, r Rect, src *FB) {
 func (d *AnimReq) draw(u *UI) {
 	fb := u.fb
 	d.syncDefaults()
-	in := u.window(centre(980, 660), "Animate")
-	// The patterns: TheDraw's, and Charcoal's own beside them.
+	in := u.window(centre(1000, 740), "Animate")
+	file := !d.makesFrames()
+	if file {
+		d.fillCosts()
+	}
+	// The patterns: TheDraw's, and Charcoal's own beside them, each with its
+	// weight on this page at this level when it is the saved file.
 	ly := in.y
 	listW := 150
 	lx := in.x
@@ -272,19 +303,30 @@ func (d *AnimReq) draw(u *UI) {
 			col = cHi
 		}
 		fb.text(r.x+8, r.y+2, patterns[i].name, col)
-		u.setHint(r, patterns[i].help)
+		hint := patterns[i].help
+		if c, ok := d.cost(i, false); ok && file {
+			w := c.weight()
+			weightBars(fb, r.x+r.w-22, r.y+4, w)
+			hint += fmt.Sprintf(" (%s here: %s, %s at %s)", weightNames[w], kbWords(c.size), durWords(c.at(a.baud)), speedName(a.baud))
+		}
+		u.setHint(r, hint)
 		if u.take(r) != nil {
 			d.pat = i
 		}
 		ly += lineH + 4
 	}
+	// Under the lists: the weights' legend and what the chosen one costs.
+	cy := in.y + (nPatterns-nTheDraw+1)*(lineH+4) + 10
+	d.drawCost(u, Rect{in.x, cy, 2*listW + 8, in.y + in.h - gadH - 12 - cy}, file)
 	// The preview, and what the pattern does.
 	px := in.x + 2*listW + 24
 	pw := in.x + in.w - px
-	pv := Rect{px, in.y, pw, 270}
-	d.drawPreview(fb, pv)
+	pv := Rect{px, in.y, pw, 250}
+	caption := d.drawPreviewAt(fb, pv, file)
 	fb.frame(pv, cEdgeDk)
-	y := pv.y + pv.h + 8
+	y := pv.y + pv.h + 2
+	fb.text(px, y, caption, cDim)
+	y += lineH + 6
 	help := patterns[d.pat].help
 	if d.pat < nTheDraw {
 		help = "TheDraw: " + help
@@ -305,6 +347,36 @@ func (d *AnimReq) draw(u *UI) {
 		d.erase, _ = u.check(x, y, "Erase", d.erase, "Frames: the picture goes away in this order instead of coming (TheDraw's Fadeout)")
 		y += gadH + 8
 	}
+	// The detail level and the caller's speed.
+	x = fb.text(px, y+3, "Detail", cText) + 8
+	var levels []string
+	cur := 0
+	for i, l := range detailsUp {
+		levels = append(levels, detailNames[l])
+		if l == d.detail {
+			cur = i
+		}
+	}
+	u.choice("animdetail", Rect{x, y, choiceW(levels), gadH}, levels, cur,
+		"Small: fewer frames and changes, a draw order in runs of cells (for modems); Large: the full look (D)",
+		func(i int) { d.detail = detailsUp[i] })
+	x += choiceW(levels) + 20
+	x = fb.text(x, y+3, "Caller's speed", cText) + 8
+	var speeds []string
+	scur := 2
+	for i, b := range bauds {
+		speeds = append(speeds, speedName(b))
+		if b == a.baud {
+			scur = i
+		}
+	}
+	u.choice("animspeed", Rect{x, y, choiceW(speeds), gadH}, speeds, scur,
+		"The preview and Play ("+keyName("play")+") play at this speed, as a caller sees it (the speed in the bar)",
+		func(i int) {
+			a.baud = bauds[i]
+			savePrefs()
+		})
+	y += gadH + 8
 	// The result.
 	fb.text(px, y+3, "Make", cText)
 	if a.pageStreamFormat() == "" || framesOnly(d.pat, d.erase && hasToggles(d.pat)) {
@@ -344,9 +416,9 @@ func (d *AnimReq) draw(u *UI) {
 			field(&d.rows, 4, "How many rows the picture moves up each frame")
 		default:
 			if a.pageStreamFormat() != "" {
-				items := []string{"A frame every N cells", fmt.Sprintf("A frame every N ms at %d bps", a.baud)}
+				items := []string{"A frame every N cells", fmt.Sprintf("A frame every N ms at %d bps", lineBps(a.baud))}
 				u.choice("animstep", Rect{x, y, choiceW(items), gadH}, items, map[bool]int{true: 1}[d.byTime],
-					"Cut the frames by cells, or by the time the file takes over a modem (the speed in the bar)",
+					"Cut the frames by cells, or by the time the file takes over a modem (the caller's speed)",
 					func(i int) { d.byTime = i == 1 })
 				x += choiceW(items) + 8
 			} else {
@@ -380,14 +452,15 @@ func (d *AnimReq) draw(u *UI) {
 			x := px + 7*charW + 8
 			u.field(Rect{x, y, 3*charW + 16, gadH}, &d.length, "How many frames the effect takes")
 			d.shuffleButton(u, x+3*charW+24, y)
+			fb.text(x+3*charW+32+buttonW("Shuffle"), y+3, "The file draws each frame's changes only.", cText)
 			y += gadH + 8
-			fb.text(px, y, "The file draws each frame's changes only.", cText)
-			y += lineH + 6
 		}
 		y = d.drawPauses(u, px, y, pw)
-		fb.text(px, y, fmt.Sprintf("Play (%s) shows it at %d bps, the speed in the bar.", keyName("play"), a.baud), cText)
-		y += lineH
-		fb.text(px, y, "Kept with the page until changed or cleared.", cText)
+		for _, l := range wrap(fmt.Sprintf("Play (%s) shows it at %s%s. Kept with the page until changed or cleared.", keyName("play"), speedName(a.baud),
+			map[bool]string{true: ", with the board's pauses"}[d.board() != ""]), pw/charW) {
+			fb.text(px, y, l, cText)
+			y += lineH
+		}
 	}
 	labels := []string{"Cancel", "Apply"}
 	if a.order != nil {
@@ -429,6 +502,11 @@ func (d *AnimReq) key(k string, ctrl, shift bool) bool {
 			return false
 		}
 		d.seed = newSeed()
+	case "D":
+		if ui.focus != nil {
+			return false
+		}
+		d.detail = (d.detail + nDetails - 1) % nDetails // Large, Small, Medium, Large ...
 	case "R", "F", "E":
 		if ui.focus != nil || !hasToggles(d.pat) {
 			return false

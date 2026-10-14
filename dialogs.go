@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -122,6 +123,7 @@ type FileReq struct {
 	title   string            // and its title
 	note    string            // and the line where the format choice would be
 	back    Dialog            // and the requester to go back to afterwards
+	pickDir bool              // pick takes a folder: the one listed (Animate a folder, batch_ui.go)
 }
 
 var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "tt", "c64"}
@@ -308,6 +310,11 @@ func (d *FileReq) ok() {
 		p = filepath.Join(d.dir, p)
 	}
 	if st, err := os.Stat(p); err == nil && st.IsDir() {
+		if d.pickDir && filepath.Clean(p) == d.dir {
+			closeDialog()
+			d.pick(p)
+			return
+		}
 		d.list(p)
 		return
 	}
@@ -467,11 +474,23 @@ func (d *FileReq) draw(u *UI) {
 			names = names[:7]
 		}
 		u.choice("as", Rect{in.x + 72, y, choiceW(names), gadH}, names, d.choice, "", func(i int) { d.choice = i })
+		bx := in.x + 72 + choiceW(names) + 16
 		if len(prefs.Recent) > 0 {
-			r := Rect{in.x + 72 + choiceW(names) + 16, y, buttonW("Recent files"), gadH}
+			r := Rect{bx, y, buttonW("Recent files"), gadH}
 			if u.button(r, "Recent files", false, "The last files opened or saved ("+keyName("open_recent")+" opens the newest again)") != nil {
 				d.recentPopup(u, r)
 			}
+			bx += r.w + 8
+		}
+		if u.button(Rect{bx, y, buttonW("Animate a folder..."), gadH}, "Animate a folder...", false,
+			"Every screen of a folder animated for your BBS at once ("+keyName("animate_folder")+")") != nil {
+			dir := d.dir
+			closeDialog()
+			openAnimateFolder()
+			if b, ok := a.dialog.(*BatchReq); ok && dir != "" {
+				b.folder.set(dir)
+			}
+			return
 		}
 	}
 	if d.err != "" {
@@ -480,6 +499,9 @@ func (d *FileReq) draw(u *UI) {
 	label := "Open"
 	if d.save {
 		label = "Save"
+	}
+	if d.pickDir {
+		label = "Choose"
 	}
 	switch buttonRow(u, in, "Parent", rootsLabel(), "Home", label, "Cancel") {
 	case 0:
@@ -491,7 +513,15 @@ func (d *FileReq) draw(u *UI) {
 	case 3:
 		d.enter()
 	case 4:
-		closeDialog()
+		d.cancel()
+	}
+}
+
+// cancel closes the requester (a folder requester goes back to the one that asked).
+func (d *FileReq) cancel() {
+	closeDialog()
+	if d.pickDir && d.back != nil {
+		a.dialog = d.back
 	}
 }
 
@@ -529,7 +559,7 @@ func (d *FileReq) key(k string, ctrl, shift bool) bool {
 	case "Return", "Keypad Enter":
 		d.enter()
 	case "Escape":
-		closeDialog()
+		d.cancel()
 	default:
 		return false
 	}
@@ -733,7 +763,9 @@ A page can hold several frames: ` + keyName("frame_new") + ` adds an empty one, 
 Saved as .c, .petmate or .tti every frame is kept (a .tti keeps each subpage's other lines; its hold is the CT line). ANSI, .seq, .ata and .vt save the frames as one stream with a clear screen between them; their speed is the modem's, so the hold times are not kept (in an .ans, My BBS's pauses keep them: see BBS pauses). A file that clears the screen between pictures opens as one picture and says so: ` + keyName("frames_strip") + ` shows the strip with Split (at each clear, or at each cursor home). Formats of one picture (.scr, .xb, .png ...) write the frame on show, and the page stays unsaved. Save as .gif or APNG for an animation.
 ANIMATION TEMPLATES
 ` + keyName("animate") + ` (TheDraw's Easy Animation) puts a picture on the screen cell by cell in a pattern: TheDraw's Top, Left, Clock, Circles, Checkerboard, Angle, Gate, Pyramid, Squares, Scramble, Door, Diamond, Wiggle and Wiggle out, with Reverse (the whole order backwards) and Flip (rows mirrored top to bottom), and Charcoal's own Fade in / out (the colours come up out of the paper), Typewriter, Scroll in, Matrix rain, Decrypt, Spiral, Drop, Assemble, Blinds, Shine, Shade in, Melt in and Power on. A preview plays it; the effects' random parts come from a seed kept with the page (Shuffle or S picks another). The frame effects (Matrix rain to Power on but Spiral and Blinds) saved as the file write a delta stream: each frame's changed cells only. Make "the draw order of the saved file": saving as .ans, .seq, .ata or .vt writes the picture in that order (a clear screen, then each cell with a cursor move where it does not follow the one before; only cells that show something), so any terminal plays it at the modem's speed; Play shows it at the speed in the bar; the order stays with the page (status line "Draws:") until changed or cleared. Or make frames: one every N cells (or every N ms at the modem's speed), each held so long; Erase makes the picture go away instead (TheDraw's Fadeout). Teletext and Spectrum pages make frames only.
+Size and cost: an animated file is paced by the caller's line (each byte is 10 bits), so Detail (D) has three levels: Small (for modems: a draw order puts down runs of up to 8 cells together and costs about a tenth more than the plain file; the frame effects take fewer frames, held longer, with little or no glyph churn, short trails and short flights), Medium (the default) and Large (the full look). The lists mark each template light, medium or heavy on this page at that level (one, two, three bars: up to 1.5x, up to 4x, more than 4x the plain file). Under them: the saved file's size and how long it plays at 2400, 9600, 14400, 33600 and 57600 bps and over telnet (bytes x 10 / bps plus the board's pauses; telnet only the pauses), with a warning past the time set in Settings (30 s) at the caller's speed. The preview plays the saved file as a caller at that speed sees it, with the board's pauses; Play does the same. The caller's speed is the speed in the bar.
 BBS pauses: over telnet with no speed limit an animated file arrives at once and the effect flashes past. Settings' My BBS (default none) puts that board's own pause codes into every animated .ans you save (a draw order, a frame effect, or the strip's frames with their holds); Animate can choose another board, or none, for one page, and tick boxes save one copy per board beside the file (name-amiexpress.ans ...). A draw order pauses N ms every N cells, a frame effect after each frame. Ami-Express (/X): ~NS| first, ~<n>w| (n/50 s); Mystic: |PO first, |DE (half a second); PCBoard: @POFF@ first, @DELAY:n@ (n/10 s); Synchronet: Ctrl-A , ; . (0.1, 0.5, 2 s); Tempest: ~DELAY(n) (n/50 s, from its manual). Each board's code character in the art is written the board's way. None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text. PETSCII, ATASCII and VT52 files get none (no board's codes known).
+Animate a folder (` + keyName("animate_folder") + `, or the Open requester's button): every screen of a folder (and its subfolders, if ticked) animated for your board at once, without opening each, into a new folder (the folder's name + "-animated"; the names kept; files of other kinds such as .bin, .xb, .pcb are written as .ans). The originals are never touched, unless "Replace the originals" is ticked: then each is kept as .bak. The effect: one for all, or Random, a different one for each file, from all or the ticked ones, never the same twice in a row; Reverse and Flip at random; the seed is shown and can be typed, so a run can be repeated exactly. The pace and the board as in Animate (My BBS, None, or a board; copies for other boards). Versions of each screen: N animations of every screen, each with its own effect, named the way the board picks one at random: Ami-Express 001.NAME.TXT ... with NAME.TXT holding ~<n>SR_<screens folder>NAME|; Mystic name.ans, name.an1 ... name.an8; Synchronet name.ans, name1.ans ... (shown at random by a menu name with * in it); PCBoard and Tempest have no random screens known, so NAME-2 ... are just numbered. Files that are not art, teletext and Spectrum pages, files that are already animations and PETSCII/ATASCII/VT52 files on a board with codes for .ans only are skipped and the report says why. Detail as in Animate (Medium by default); Effects: any weight, light only or light and medium (weighed on each screen); a budget: at most N KB a screen and/or plays in under N s at a speed. With a budget each version takes an effect that fits: the chosen level, then lower ones, then another effect; a screen nothing fits is skipped with the reason. A progress bar with Cancel, then the report (each file, the effect and seed, each output's size and play time at the speed, what was skipped), saved as animate-report.txt in the output folder. On the command line: charedit --animate FOLDER (charedit --help for the options).
 The Commodore character sets are the machines' ROMs and do not come with the program: the first run offers to download them from the VICE emulator project (each checked by its SHA-1), and so does Settings.
 
 FONTS
@@ -976,13 +1008,21 @@ func loadSTDownloaded() (string, error) {
 
 // ---------------------------------------------------------------- settings
 
-type SettingsReq struct{ err string }
+type SettingsReq struct {
+	err  string
+	warn Field // Animate's warning, seconds (animcost.go)
+}
 
-func openSettings() { a.dialog = &SettingsReq{} }
+func openSettings() {
+	d := &SettingsReq{warn: Field{max: 4}}
+	d.warn.set(strconv.Itoa(animWarnMs() / 1000))
+	d.warn.enter = func() { ui.focus = nil }
+	a.dialog = d
+}
 
 func (d *SettingsReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(660, 480+gadH+8), "Settings")
+	in := u.window(centre(660, 520+gadH+8), "Settings")
 	y := in.y
 	fb.text(in.x, y+3, "Window size", cText)
 	sizes := []string{"1x (normal)", "2x (big screens)", "3x", "4x"} // as many as main allows (maxUIScale)
@@ -1020,6 +1060,15 @@ func (d *SettingsReq) draw(u *UI) {
 		fb.text(in.x, y, l, cText)
 		y += lineH
 	}
+	y += 6
+	x := fb.text(in.x, y+3, "Animate warns when a file plays longer than", cText) + 8
+	u.field(Rect{x, y, 4*charW + 16, gadH}, &d.warn, "Seconds at the caller's speed chosen in Animate (the speed in the bar)")
+	fb.text(x+4*charW+24, y+3, "s", cText)
+	if v, err := strconv.Atoi(d.warn.String()); err == nil && v > 0 && v != prefs.AnimWarn && v <= 9999 {
+		prefs.AnimWarn = v
+		savePrefs()
+	}
+	y += gadH + 4
 	y += 12
 	fb.text(in.x, y, "Commodore character sets (PETSCII)", cHi)
 	y += lineH + 4

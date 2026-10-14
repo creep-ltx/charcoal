@@ -189,6 +189,7 @@ func init() {
 		{"onion", "Alt+O", "Onion skin on / off: the frame before, faint, under the empty cells", func() { a.toggleOnion() }},
 		{"frames_strip", "Ctrl+Shift+F", "Show / hide the frame strip", func() { a.toggleStrip() }},
 		{"animate", "Alt+J", "Animate: TheDraw's scan patterns (and fades, typewriter, scroll) as the saved file's draw order or as frames", openAnimate},
+		{"animate_folder", "Alt+Shift+J", "Animate a folder: every screen of a folder animated for your BBS at once, into a new folder (also: charedit --animate)", openAnimateFolder},
 
 		// The reference picture (refimage.go).
 		{"ref_open", "Ctrl+Shift+I", "Open a picture as the page's reference, to trace over (never saved with the art)", openRefRequester},

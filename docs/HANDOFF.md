@@ -192,6 +192,81 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   folders); Petmate custom charsets in its JSON; PabloDraw / TheDraw / ACiDDraw / Moebius have no own art file
   beyond ANSI, BIN, XBin (TheDraw .tdf are fonts).
 
+## Animate a folder (2026-10-14, branch batch)
+
+- For sysops (not artists): every screen of a folder animated for the board at once. `batch.go` (logic + the
+  command line), `batch_ui.go` (the requester `BatchReq`: setup, progress, report; Alt+Shift+J `animate_folder`,
+  and a button in the Open requester). `batchSpec` -> `newBatchRun` (checks, lists files sorted, refuses an
+  output that is the originals' folder unless Replace) -> `step()` one file at a time (the GUI runs steps for
+  40 ms per drawn frame; `dialogAnimates` is also true while `batchBusy`) -> `reportText` / `writeReport`
+  (`animate-report.txt` in the output folder, with the command line that repeats the run).
+- Each file is read by the normal `loadBytes` in a **scratch tab** (`withScratch`: a.Tab swapped for a
+  `makeTab`, the tab, tool, F-key set, requester and message put back afterwards), given `a.order` and written by
+  `encodeFor(fmt, board, nil)`: exactly what Save would write. Non-stream sources (.bin .xb .pcb .avt .idf .adf
+  .tnd, one-screen .petmate) are written as the page's stream (.ans/.seq), `name-bin.ans` if the name is taken.
+- Random: one `rand.Rand` from the seed, used in file order only for files that get animated (`pick`): the
+  pattern (from the ticked pool, not the last one with NoRepeat; Fade in left out on pages that cannot fade),
+  Reverse/Flip (Toggles), the effect's seed. So the same seed and the same folder give the same bytes (test).
+- Versions (`variantNames`, `randomScreens`): Ami-Express `001.NAME.ext` ... + `NAME.ext` = `~<n>SR_<AEPath>NAME|`;
+  Mystic `name.ans`, `name.an1`..`.an8` (9 at most); Synchronet `name.ans`, `name1.ans` ...; others `NAME-2.ext`.
+  How each was established: ~/Projects/Knowledge/bbs/screens-variants-utf8-wide.md. Copies for other boards are
+  named their board's way + `-<id>` (copyPath).
+- Skipped with a reason: not art (`batchNotArt`: notArt's magics, Amiga icons, .bak, C source, no art ending and
+  no ESC[), unreadable, ROMs missing for PETSCII, teletext/Spectrum, several screens, already an animation
+  (`split.clears >= 2`, `fullest`), kind not ticked, a board with no codes for that format, too large, nothing drawn.
+- Tests: `batch_test.go` (seed repeatability, no repeats, ticked pool, names per board, every output through
+  bbspause_test's board models reads back as the original picture, skip reasons, originals untouched, replace +
+  .bak, command-line exit codes 0/1/2, a real-art run over /tmp/bigcheck when it is there).
+- Not done: the stub for a board copy of Ami-Express names the copy's versions only if renamed; Mystic needs the
+  base name asked without an ending (as its menus do); PETSCII/ATASCII/VT52 versions have no board naming.
+
+## Animation size, detail levels and cost (2026-10-14, branch batch)
+
+- Why: a 15 KB screen became ~630 KB with Matrix rain: minutes at 14400 bps. Measure with
+  `CHARCOAL_MEASURE=1 go test -run TestMeasure -v` (animsize_test.go: every template at every level on real screens
+  from /tmp/bigcheck and testdata; byte kinds: moves / SGR / characters).
+- Writer trims (transitions.go, every level): `ansiWriter` keeps `screen` (what the terminal shows) and crosses a
+  gap of <= 3 cells by reprinting them when no colour change is needed (`reprint`); BS for 1-3 steps left; a space
+  keeps the pen's fg/bold/italic (`attrsOf`; only bg/blink/underline show). **No bare CR**: PCBoard ends a line at
+  a CR and sends CR LF (the test model caught it). `stepStream` (write / cost / finish) replaced the loop of
+  `writeStepsIn`; `writeDeltaFrames` writes each frame row-major, column-major (`byColumn`) or by colour
+  (`byColour`), whichever `cost` says is shortest (writers have `clone()`). PCBoard: an art line starting with
+  % ! $ gets `@DELAY:0@` first (layoutPCB; a latent bug the reordering exposed).
+- Levels (animcost.go): `detailLarge` = 0 (zero value: old pages keep their look), Medium, Small; `drawOrder.Detail`
+  ("" = large), `animSpec.detail`, `fx.detail`. Draw orders: `scanOpts.run` (`scanRun`: 1/3/8 cells of a row
+  together, keyed at the run's middle cell; Reverse turns the run order, runs stay left to right) via
+  `cellsInOrderAt`; Fade in `fadePassesAt` (4/3/2). Effects: `effectOwn(pat, detail)` frames (`effectFramesAt`)
+  with holds scaled so frames x hold stays ~ Large's; Matrix churn 1/3, 1/8, none, trail 14/8/2 (Small: one colour
+  behind the head); Decrypt glyphs re-rolled every frame / 1 in 3 / once, no flash at Small; Drop and Assemble
+  `flight()` 1/0.7/0.4; Shine one glint level at Small; Shade in fewer steps. Large's random draws are unchanged
+  (byte-identical files).
+- Cost: `costOf(fmt, order, board)` = `animCost{size (the written file), sent (encodeFor with no board), pauseMs,
+  plain}` with page/order/info/message restored; `at(bps)` = sent x 10 / bps + pauses (`playMs`; telnet = -1 =
+  pauses only); `weight()` by `ratio()` = sent/plain: light <= 1.5, medium <= 4. Speeds: `bauds` now 2400 9600 14400
+  33600 57600 115200 telnet (prefs keep -1); `lineBps` where a number is needed. Settings: `prefs.AnimWarn` (s, 0 =
+  30), `prefs.AnimLevel` (Animate's last level, "" = medium).
+- Animate requester (transitions_ui.go + animcost_ui.go): Detail (D) and Caller's speed (sets `a.baud`), the lists'
+  weight bars (`fillCosts`: the chosen one, then one more per drawn frame; not on pages > 60000 cells), the cost
+  panel under the lists (`drawCost`, warning triangle drawn by hand: Topaz has no U+26A0), `orderFor(pat)` = what
+  Apply sets. Preview: `speedPreview` plays the saved stream of the first 50 rows through the page's terminal
+  with the board's pauses (`drawPreviewAt`; frames mode keeps the frames-at-holds preview).
+- Play: `Play.stepLine` (animcost.go) used by `playStepAt` and the preview: exact byte time carried between frames
+  (before, rounding made 2400 bps play a fifth slow), stops at `Play.pauses` (`playPauses`: the page's board's
+  pauses, if the bytes are the page's animation) and waits from the last byte's time.
+- Animate a folder: `batchSpec.Detail/MaxKB/MaxSeconds/AtBps/MaxWeight`, `pickFitting` (candidates shuffled by the
+  run's rng, each from the run's level downwards, first that fits; skip reason names the smallest) used only with
+  a budget, so old seeds without one pick as before (now at Medium); `batchItem.orders/sizes/times`; report
+  Detail/Budget/Times lines and per-output size + time; flags --detail --max-kb --max-seconds --at --light --weight.
+  UI: Detail, Effects (any / light / light and medium), budget fields + speed; ticked list bars from
+  `typicalWeights` (a made-up 80x25 screen, per level, cached).
+- Tests (animcost_test.go): every level round-trips in every stream format; every frame of Small/Medium effects;
+  Small <= Medium <= Large and Small draw orders <= 1.2x plain (bs-alove); `costOf` = the written file to the byte
+  and the time formula for 4 boards; weights; Play/preview time at 2400/14400/telnet with Mystic pauses; requester
+  cost = Apply's save; batch budget honoured (file sizes, times), lowering, skip reason, light only, CLI flags.
+- Not done: Large could churn less in the stream than in the GIF (kept as the full look on purpose); PETSCII /
+  ATASCII / VT52 writers have no reprint trick (their moves are 1 byte anyway); the weight of a frame strip saved
+  as a stream is not shown.
+
 ## Keys and safety (2026-10-13, evening)
 
 - `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's

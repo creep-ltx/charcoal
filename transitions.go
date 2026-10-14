@@ -117,6 +117,7 @@ type drawOrder struct {
 	Flip    bool   `json:"flip,omitempty"`
 	Seed    int64  `json:"seed,omitempty"`   // a frame effect's random parts
 	Frames  int    `json:"frames,omitempty"` // a frame effect's length (0: its own)
+	Detail  string `json:"detail,omitempty"` // "small", "medium" or "large" ("": large; animcost.go)
 	// BBS pauses (bbspause.go): the board whose codes the saved file gets
 	// ("": Settings' My BBS, "none": none for this page), the boards that also
 	// get a copy (ids, comma separated), a frame effect's hold (ms, 0: its
@@ -139,7 +140,11 @@ func (o *drawOrder) String() string {
 		s += ", flipped"
 	}
 	if isEffect(o.pat()) {
-		s += fmt.Sprintf(", %d frames", effectLength(o.pat(), o.Frames))
+		s += fmt.Sprintf(", %d frames", effectLengthAt(o.pat(), o.Frames, o.detail()))
+	}
+	if o.Detail != "" && o.pat() != patType && (o.pat() != patTop || o.Reverse) { // a level changes nothing else
+
+		s += ", " + strings.ToLower(detailNames[o.detail()])
 	}
 	return s
 }
@@ -150,6 +155,7 @@ func (o *drawOrder) String() string {
 type scanOpts struct {
 	reverse, flip bool
 	aspect        float64 // a cell's height over its width (2 for 8x16 cells); 0 means 2
+	run           int     // cells of a row put down together (0, 1: one by one; scanRun)
 }
 
 // blindRows is how tall a band of Blinds is.
@@ -175,9 +181,21 @@ func scanOrder(pat int, o scanOpts, cols, rows int, used func(x, y int) bool) []
 			}
 		}
 	}
+	// Runs: up to o.run cells next to each other on a row go together, at the
+	// place of their middle cell (one by one: each cell its own run).
+	var runs [][2]int // first cell, length
+	for i := 0; i < len(cells); {
+		j := i + 1
+		for o.run > 1 && j < len(cells) && j-i < o.run && cells[j] == cells[j-1]+1 && cells[j]%cols != 0 {
+			j++
+		}
+		runs = append(runs, [2]int{i, j - i})
+		i = j
+	}
 	key := scanKey(pat, cols, rows, asp)
-	keys := make([][4]float64, len(cells))
-	for i, c := range cells {
+	keys := make([][4]float64, len(runs))
+	for i, r := range runs {
+		c := cells[r[0]+r[1]/2]
 		x, y := c%cols, c/cols
 		if o.flip { // the scan visits (x, rows-1-y) where it would visit (x, y)
 			y = rows - 1 - y
@@ -185,7 +203,7 @@ func scanOrder(pat int, o scanOpts, cols, rows int, used func(x, y int) bool) []
 		k := key(x, y)
 		keys[i] = [4]float64{k[0], k[1], k[2], float64(y*cols + x)} // the last breaks every tie
 	}
-	idx := make([]int, len(cells))
+	idx := make([]int, len(runs))
 	for i := range idx {
 		idx[i] = i
 	}
@@ -198,12 +216,12 @@ func scanOrder(pat int, o scanOpts, cols, rows int, used func(x, y int) bool) []
 		}
 		return false
 	})
-	out := make([]int, len(cells))
-	for i, k := range idx {
-		out[i] = cells[k]
-	}
 	if o.reverse {
-		slices.Reverse(out)
+		slices.Reverse(idx)
+	}
+	out := make([]int, 0, len(cells))
+	for _, k := range idx {
+		out = append(out, cells[runs[k][0]:runs[k][0]+runs[k][1]]...) // a run left to right, also reversed
 	}
 	return out
 }
@@ -347,8 +365,16 @@ func (a *App) aspect() float64 { return float64(a.cellH()) / float64(max(1, a.ce
 // cellsInOrder are the cells of d a pattern draws, in order. The typewriter
 // types every row up to its last used cell, spaces too.
 func (a *App) cellsInOrder(d *Doc, e *Doc, pat int, rev, flip bool) []int {
+	return a.cellsInOrderAt(d, e, pat, rev, flip, detailLarge)
+}
+
+// cellsInOrderAt is cellsInOrder at a detail level (a scan in runs of cells below Large).
+func (a *App) cellsInOrderAt(d *Doc, e *Doc, pat int, rev, flip bool, detail int) []int {
 	used := func(x, y int) bool { return usedCell(a.mode, d.get(x, y), e.get(x, y)) }
 	o := scanOpts{reverse: rev, flip: flip, aspect: a.aspect()}
+	if isScan(pat) {
+		o.run = scanRun(detail)
+	}
 	if pat == patType {
 		last := make([]int, d.rows)
 		for y := range last {
@@ -455,15 +481,16 @@ type drawStep struct {
 func (a *App) drawSteps(d *Doc, o *drawOrder) []drawStep {
 	e := a.paperOf(d)
 	pat := o.pat()
-	order := a.cellsInOrder(d, e, pat, o.Reverse, o.Flip)
+	order := a.cellsInOrderAt(d, e, pat, o.Reverse, o.Flip, o.detail())
 	var steps []drawStep
 	if pat == patFadeIn {
 		paper := a.paperRGB(d, e)
-		for p := 1; p <= fadePasses; p++ {
+		passes := fadePassesAt(o.detail())
+		for p := 1; p <= passes; p++ {
 			for _, c := range order {
 				v := d.cells[c]
-				if p < fadePasses {
-					v = a.fadeCell(v, paper, float64(p)/fadePasses)
+				if p < passes {
+					v = a.fadeCell(v, paper, float64(p)/float64(passes))
 				}
 				steps = append(steps, drawStep{c % d.cols, c / d.cols, v})
 			}
@@ -489,6 +516,7 @@ type cursorWriter interface {
 	move(x, y int) []byte
 	put(v uint32, later func(x, y int) bool) []byte
 	end() []byte
+	clone() cursorWriter // a copy to try a way of writing on
 }
 
 // writeDrawSteps writes the steps as a stream of format fmtID ("ansi", "seq",
@@ -506,6 +534,32 @@ func writeDrawSteps(fmtID string, d *Doc, steps []drawStep, o streamOpts) (out [
 // frame, so every frame ends on the screen it should. begun is the length of
 // the clear screen the stream starts with.
 func writeStepsIn(fmtID string, d *Doc, steps []drawStep, seg []int, o streamOpts) (out []byte, offs []int, begun int) {
+	s := newStepStream(fmtID, d, o)
+	begun = len(s.out)
+	offs = make([]int, len(steps))
+	for i := 0; i < len(steps); {
+		j := i + 1
+		for seg != nil && j < len(steps) && seg[j] == seg[i] {
+			j++
+		}
+		if seg == nil {
+			j = len(steps)
+		}
+		s.write(steps[i:j], i, offs)
+		i = j
+	}
+	return s.finish(), offs, begun
+}
+
+// stepStream writes steps through a page type's cursorWriter.
+type stepStream struct {
+	w      cursorWriter
+	d      *Doc
+	lastAt []int32 // the last step of the frame being written that draws each cell
+	out    []byte
+}
+
+func newStepStream(fmtID string, d *Doc, o streamOpts) *stepStream {
 	var w cursorWriter
 	switch fmtID {
 	case "seq":
@@ -517,46 +571,59 @@ func writeStepsIn(fmtID string, d *Doc, steps []drawStep, seg []int, o streamOpt
 	default:
 		w = &ansiWriter{cols: d.cols, amiga: o.amiga, raw1A: o.sauce}
 	}
-	lastAt := make([]int32, d.cols*d.rows) // the last step of this frame that draws each cell
-	segOf := func(i int) int {
-		if seg == nil {
-			return 0
-		}
-		return seg[i]
+	s := &stepStream{w: w, d: d, lastAt: make([]int32, d.cols*d.rows)}
+	s.out = w.begin()
+	return s
+}
+
+// write writes one frame's steps (numbered from base); offs[base+j] is the
+// stream's length after step j (offs nil: not kept).
+func (s *stepStream) write(steps []drawStep, base int, offs []int) {
+	cols, rows := s.d.cols, s.d.rows
+	for j, st := range steps {
+		s.lastAt[st.y*cols+st.x] = int32(base + j + 1)
 	}
-	out = w.begin()
-	begun = len(out)
-	offs = make([]int, len(steps))
-	for i, s := range steps {
-		if i == 0 || segOf(i) != segOf(i-1) {
-			for j := i; j < len(steps) && segOf(j) == segOf(i); j++ {
-				lastAt[steps[j].y*d.cols+steps[j].x] = int32(j + 1)
-			}
-		}
-		if x, y := w.at(); x != s.x || y != s.y {
-			out = append(out, w.move(s.x, s.y)...)
+	for j, st := range steps {
+		i := base + j
+		if x, y := s.w.at(); x != st.x || y != st.y {
+			s.out = append(s.out, s.w.move(st.x, st.y)...)
 		}
 		later := func(x, y int) bool {
-			return x >= 0 && y >= 0 && x < d.cols && y < d.rows && int(lastAt[y*d.cols+x]) > i+1
+			return x >= 0 && y >= 0 && x < cols && y < rows && int(s.lastAt[y*cols+x]) > i+1
 		}
-		out = append(out, w.put(s.v, later)...)
-		offs[i] = len(out)
+		s.out = append(s.out, s.w.put(st.v, later)...)
+		if offs != nil {
+			offs[i] = len(s.out)
+		}
 	}
-	// The page's last row: a file whose cursor stops above it would open shorter.
-	if x, y := w.at(); cursorRows(x, y) < d.rows {
-		if d.cols > 1 {
-			out = append(out, w.move(1, d.rows-1)...)
+}
+
+// cost is how many bytes steps would take written now (nothing is written).
+func (s *stepStream) cost(steps []drawStep, base int) int {
+	t := &stepStream{w: s.w.clone(), d: s.d, lastAt: s.lastAt}
+	t.write(steps, base, nil)
+	return len(t.out)
+}
+
+// finish ends the stream with the cursor where the page's last row counts:
+// a file whose cursor stops above it would open shorter.
+func (s *stepStream) finish() []byte {
+	if x, y := s.w.at(); cursorRows(x, y) < s.d.rows {
+		if s.d.cols > 1 {
+			s.out = append(s.out, s.w.move(1, s.d.rows-1)...)
 		} else {
-			out = append(out, w.move(0, d.rows)...)
+			s.out = append(s.out, s.w.move(0, s.d.rows)...)
 		}
 	}
-	return append(out, w.end()...), offs, begun
+	return append(s.out, s.w.end()...)
 }
 
 // writeDeltaFrames writes frames as one stream: a clear screen, then for each
 // frame only the cells that look different from what the screen shows by then
-// (cursor moves and colours as a draw order's). No pauses are put in: the
-// modem's speed is the pacing. ends[i] is the stream's length after frame i.
+// (cursor moves and colours as a draw order's). Each frame's cells go in the
+// order that takes the fewest bytes: row by row, column by column, or colour
+// by colour. No pauses are put in: the modem's speed is the pacing. ends[i] is
+// the stream's length after frame i.
 func writeDeltaFrames(fmtID, mode string, paper *Doc, docs []*Doc, o streamOpts) (out []byte, ends []int) {
 	if len(docs) == 0 {
 		return nil, nil
@@ -564,29 +631,63 @@ func writeDeltaFrames(fmtID, mode string, paper *Doc, docs []*Doc, o streamOpts)
 	d := docs[len(docs)-1]
 	n := d.cols * d.rows
 	screen := slices.Clone(paper.cells[:n])
-	var steps []drawStep
-	var seg, last []int
+	s := newStepStream(fmtID, d, o)
+	begun := len(s.out)
+	ends = make([]int, len(docs))
+	base := 0
 	for i, f := range docs {
+		var steps []drawStep
 		for c := 0; c < n && c < len(f.cells); c++ {
 			v := f.cells[c]
 			if v != screen[c] && (usedCell(mode, v, paper.cells[c]) || usedCell(mode, screen[c], paper.cells[c])) {
 				steps = append(steps, drawStep{c % d.cols, c / d.cols, v})
-				seg = append(seg, i)
 				screen[c] = v
 			}
 		}
-		last = append(last, len(steps))
-	}
-	out, offs, begun := writeStepsIn(fmtID, d, steps, seg, o)
-	ends = make([]int, len(docs))
-	for i, l := range last {
-		ends[i] = begun
-		if l > 0 {
-			ends[i] = offs[l-1]
+		if len(steps) > 1 {
+			best, bc := steps, s.cost(steps, base)
+			for _, alt := range [][]drawStep{byColumn(steps), byColour(steps)} {
+				if c := s.cost(alt, base); c < bc {
+					best, bc = alt, c
+				}
+			}
+			steps = best
 		}
+		s.write(steps, base, nil)
+		base += len(steps)
+		ends[i] = max(begun, len(s.out))
 	}
+	out = s.finish()
 	ends[len(ends)-1] = len(out)
 	return out, ends
+}
+
+// byColumn is the steps column by column, top down.
+func byColumn(steps []drawStep) []drawStep {
+	out := slices.Clone(steps)
+	slices.SortStableFunc(out, func(a, b drawStep) int {
+		if a.x != b.x {
+			return a.x - b.x
+		}
+		return a.y - b.y
+	})
+	return out
+}
+
+// byColour is the steps colour by colour (the colours' first appearance), each row by row.
+func byColour(steps []drawStep) []drawStep {
+	rank := map[uint32]int{}
+	for _, s := range steps {
+		if _, ok := rank[s.v>>8]; !ok {
+			rank[s.v>>8] = len(rank)
+		}
+	}
+	if len(rank) == 1 {
+		return steps
+	}
+	out := slices.Clone(steps)
+	slices.SortStableFunc(out, func(a, b drawStep) int { return rank[a.v>>8] - rank[b.v>>8] })
+	return out
 }
 
 // shortest is the shortest of some ways to move the cursor.
@@ -609,14 +710,23 @@ func repeat(b []byte, n int) []byte {
 }
 
 // ansiWriter: ANSI (PC) or the Amiga console: CSI cursor moves, SGR colours.
+// It keeps what the terminal shows (screen), so a short gap on the row is
+// crossed by printing its cells again when that is shorter than a cursor move.
 type ansiWriter struct {
 	cols         int
 	amiga, raw1A bool
 	x, y         int
 	cur          attrs
+	screen       []uint32 // the cells as written (the byte sent, its colours); 0: as the clear left it
 }
 
 func (w *ansiWriter) at() (int, int) { return w.x, w.y }
+
+func (w *ansiWriter) clone() cursorWriter {
+	c := *w
+	c.screen = slices.Clone(w.screen)
+	return &c
+}
 
 func (w *ansiWriter) begin() []byte {
 	w.cur = attrs{fg: 7}
@@ -624,6 +734,29 @@ func (w *ansiWriter) begin() []byte {
 		return []byte("\x1b[0m\x0c")
 	}
 	return []byte("\x1b[0m\x1b[2J\x1b[1;1H")
+}
+
+// shown is what the terminal shows at (x, y): the cell as written, or a
+// cleared one (a space on paper 0).
+func (w *ansiWriter) shown(x, y int) uint32 {
+	if i := y*w.cols + x; i < len(w.screen) && w.screen[i] != 0 {
+		return w.screen[i]
+	}
+	return makeCell(32, 7, 0, 0)
+}
+
+// reprint is the bytes that print cells x0..x1-1 of row y again, as they are,
+// with no colour change (nil: one of them needs other colours).
+func (w *ansiWriter) reprint(x0, x1, y int) []byte {
+	var out []byte
+	for x := x0; x < x1; x++ {
+		v := w.shown(x, y)
+		if w.attrsOf(v, byte(cellCh(v))) != w.cur {
+			return nil
+		}
+		out = append(out, byte(cellCh(v)))
+	}
+	return out
 }
 
 func (w *ansiWriter) move(x, y int) []byte {
@@ -642,20 +775,30 @@ func (w *ansiWriter) move(x, y int) []byte {
 	default:
 		abs = []byte(fmt.Sprintf("\x1b[%d;%dH", y+1, x+1))
 	}
-	var vert, horiz []byte
+	var vert []byte
 	switch {
 	case y > w.y:
 		vert = csi(y-w.y, "B")
 	case y < w.y:
 		vert = csi(w.y-y, "A")
 	}
-	switch {
-	case x > w.x:
-		horiz = csi(x-w.x, "C")
-	case x < w.x:
-		horiz = csi(w.x-x, "D")
+	// Across the row: CSI C or D (never a back space: in a file with SAUCE,
+	// Moebius and real art take byte 8 as a character); on the row itself, the
+	// cells in between printed again.
+	across := func(from, to int) []byte {
+		switch {
+		case to > from:
+			return csi(to-from, "C")
+		case to < from:
+			return csi(from-to, "D")
+		}
+		return []byte{}
 	}
-	rel := append(append([]byte{}, vert...), horiz...)
+	rel := append(append([]byte{}, vert...), across(w.x, x)...)
+	var again []byte
+	if y == w.y && x > w.x && x-w.x <= 3 {
+		again = w.reprint(w.x, x, y)
+	}
 	var nl []byte // line ends: to the start of a row below
 	if y > w.y && y-w.y <= 3 {
 		end := "\r\n"
@@ -668,13 +811,59 @@ func (w *ansiWriter) move(x, y int) []byte {
 		}
 	}
 	w.x, w.y = x, y
-	return shortest(abs, rel, nl)
+	return shortest(abs, rel, again, nl)
+}
+
+// attrsOf is the colours cell v needs, written as byte ch; a space shows only
+// its background (and underline), so it takes the pen's other colours as they are.
+func (w *ansiWriter) attrsOf(v uint32, ch byte) attrs {
+	fg, bg := cellFg(v), cellBg(v)
+	want := attrs{fg: fg & 7, bold: fg > 7, bg: bg & 7, blink: bg > 7, it: v&italic != 0, ul: v&underline != 0}
+	if ch == 32 && !want.ul {
+		want.fg, want.bold, want.it = w.cur.fg, w.cur.bold, w.cur.it
+	}
+	return want
+}
+
+// cell is byte ch shown in these colours.
+func (at attrs) cell(ch byte) uint32 {
+	fg, bg, fl := at.fg, at.bg, uint32(0)
+	if at.bold {
+		fg |= 8
+	}
+	if at.blink {
+		bg |= 8
+	}
+	if at.it {
+		fl |= italic
+	}
+	if at.ul {
+		fl |= underline
+	}
+	return makeCell(int(ch), fg, bg, fl)
+}
+
+// outByte is the byte cell v is sent as: bytes a terminal would take as controls are spaces (as writeAnsi).
+func (w *ansiWriter) outByte(v uint32) byte {
+	ch := byte(cellCh(v))
+	switch ch {
+	case 0, 0x1B, 0x0A, 0x0D, 0x08, 0x09, 0x07:
+		ch = 32
+	case 0x1A:
+		if !w.raw1A {
+			ch = 32
+		}
+	}
+	if w.amiga && (ch < 0x20 || (ch >= 0x7F && ch < 0xA0)) {
+		ch = 32
+	}
+	return ch
 }
 
 func (w *ansiWriter) put(v uint32, _ func(x, y int) bool) []byte {
 	var out []byte
-	fg, bg := cellFg(v), cellBg(v)
-	want := attrs{fg: fg & 7, bold: fg > 7, bg: bg & 7, blink: bg > 7, it: v&italic != 0, ul: v&underline != 0}
+	ch := w.outByte(v)
+	want := w.attrsOf(v, ch)
 	cur := w.cur
 	var p []string
 	if (cur.bold && !want.bold) || (cur.blink && !want.blink) || (cur.it && !want.it) || (cur.ul && !want.ul) {
@@ -703,19 +892,12 @@ func (w *ansiWriter) put(v uint32, _ func(x, y int) bool) []byte {
 		out = append(out, "\x1b["+strings.Join(p, ";")+"m"...)
 		w.cur = want
 	}
-	ch := byte(cellCh(v))
-	switch ch { // bytes a terminal would take as controls (as writeAnsi)
-	case 0, 0x1B, 0x0A, 0x0D, 0x08, 0x09, 0x07:
-		ch = 32
-	case 0x1A:
-		if !w.raw1A {
-			ch = 32
-		}
-	}
-	if w.amiga && (ch < 0x20 || (ch >= 0x7F && ch < 0xA0)) {
-		ch = 32
-	}
 	out = append(out, ch)
+	i := w.y*w.cols + w.x
+	if i >= len(w.screen) {
+		w.screen = append(w.screen, make([]uint32, i+1-len(w.screen)+w.cols)...)
+	}
+	w.screen[i] = w.cur.cell(ch)
 	if w.x++; w.x >= w.cols { // the terminal wraps at once
 		w.x, w.y = 0, w.y+1
 	}
@@ -734,6 +916,8 @@ type petWriter struct {
 }
 
 func (w *petWriter) at() (int, int) { return w.x, w.y }
+
+func (w *petWriter) clone() cursorWriter { c := *w; return &c }
 
 func (w *petWriter) begin() []byte {
 	if w.lower {
@@ -815,7 +999,9 @@ type ataWriter struct {
 }
 
 func (w *ataWriter) at() (int, int) { return w.x, w.y }
-func (w *ataWriter) begin() []byte  { return []byte{0x7D} }
+
+func (w *ataWriter) clone() cursorWriter { c := *w; return &c }
+func (w *ataWriter) begin() []byte       { return []byte{0x7D} }
 
 func (w *ataWriter) across(from, to int) []byte {
 	r := (to - from + w.cols) % w.cols
@@ -869,6 +1055,8 @@ type vtWriter struct {
 }
 
 func (w *vtWriter) at() (int, int) { return w.x, w.y }
+
+func (w *vtWriter) clone() cursorWriter { c := *w; return &c }
 
 func (w *vtWriter) begin() []byte {
 	w.fg, w.bg = w.res.fg, w.res.bg
@@ -931,7 +1119,7 @@ func (a *App) writeOrderedPaced(fmtID string, d *Doc, sauce bool) ([]byte, []pau
 	var ps []pause
 	if p := a.order.pat(); isEffect(p) {
 		e := a.paperOf(d)
-		out, ends := writeDeltaFrames(fmtID, a.mode, e, a.effectFrames(d, e, p, a.order.Seed, a.order.Frames), a.streamOpts(sauce))
+		out, ends := writeDeltaFrames(fmtID, a.mode, e, a.effectFramesAt(d, e, p, a.order.Seed, a.order.Frames, a.order.detail()), a.streamOpts(sauce))
 		hold := a.order.effectHold()
 		for i, at := range ends[:len(ends)-1] {
 			ms := hold
@@ -1001,6 +1189,7 @@ type animSpec struct {
 	hold          int  // ms each frame is shown
 	baud          int
 	seed          int64 // a frame effect's random parts
+	detail        int   // detailLarge, detailMedium or detailSmall (animcost.go)
 }
 
 // Holds of the ends of an effect: the finished picture stays a while.
@@ -1020,12 +1209,12 @@ func (a *App) transitionFrames(d *Doc, s animSpec, maxCells int) (docs []*Doc, h
 	}
 	hold := max(20, s.hold)
 	if isEffect(s.pat) {
-		k := effectLength(s.pat, s.n)
+		k := effectLengthAt(s.pat, s.n, s.detail)
 		if k > maxK {
 			k = maxK
 			note = fmt.Sprintf("%d frames fit", k)
 		}
-		docs = a.effectFrames(d, e, s.pat, s.seed, k)
+		docs = a.effectFramesAt(d, e, s.pat, s.seed, k, s.detail)
 		holds = make([]int, len(docs))
 		for i := range holds {
 			holds[i] = hold
@@ -1082,7 +1271,7 @@ func (a *App) transitionFrames(d *Doc, s animSpec, maxCells int) (docs []*Doc, h
 			}
 		}
 	default:
-		order := a.cellsInOrder(d, e, s.pat, s.reverse, s.flip)
+		order := a.cellsInOrderAt(d, e, s.pat, s.reverse, s.flip, s.detail)
 		if len(order) == 0 {
 			return nil, nil, "Nothing is drawn on the page"
 		}
@@ -1143,7 +1332,7 @@ func (a *App) animCuts(d, e *Doc, order []int, s animSpec) (cuts, holds []int) {
 			}
 		}
 	}
-	baud := max(300, s.baud)
+	baud := lineBps(s.baud)
 	offs := make([]int, len(order))
 	if f := a.pageStreamFormat(); f != "" {
 		steps := make([]drawStep, len(order))
