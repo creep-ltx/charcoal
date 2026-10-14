@@ -117,6 +117,15 @@ type drawOrder struct {
 	Flip    bool   `json:"flip,omitempty"`
 	Seed    int64  `json:"seed,omitempty"`   // a frame effect's random parts
 	Frames  int    `json:"frames,omitempty"` // a frame effect's length (0: its own)
+	// BBS pauses (bbspause.go): the board whose codes the saved file gets
+	// ("": Settings' My BBS, "none": none for this page), the boards that also
+	// get a copy (ids, comma separated), a frame effect's hold (ms, 0: its
+	// own) and a draw order's pause (ms) every n cells (0: the defaults).
+	BBS    string `json:"bbs,omitempty"`
+	Copies string `json:"bbs_copies,omitempty"`
+	Hold   int    `json:"hold,omitempty"`
+	Every  int    `json:"pause_every,omitempty"`
+	Pause  int    `json:"pause_ms,omitempty"`
 }
 
 func (o *drawOrder) pat() int { return patternByID(o.Pattern) }
@@ -911,13 +920,34 @@ var streamFormats = map[string]bool{"ansi": true, "seq": true, "ata": true, "vt5
 
 // writeOrdered writes picture d in the page's draw order as fmtID.
 func (a *App) writeOrdered(fmtID string, d *Doc, sauce bool) []byte {
+	out, _ := a.writeOrderedPaced(fmtID, d, sauce)
+	return out
+}
+
+// writeOrderedPaced is writeOrdered with where a BBS should pause: after every
+// frame of a frame effect but the last (its hold), or every n cells of a draw
+// order (the order's pacing).
+func (a *App) writeOrderedPaced(fmtID string, d *Doc, sauce bool) ([]byte, []pause) {
+	var ps []pause
 	if p := a.order.pat(); isEffect(p) {
 		e := a.paperOf(d)
-		out, _ := writeDeltaFrames(fmtID, a.mode, e, a.effectFrames(d, e, p, a.order.Seed, a.order.Frames), a.streamOpts(sauce))
-		return out
+		out, ends := writeDeltaFrames(fmtID, a.mode, e, a.effectFrames(d, e, p, a.order.Seed, a.order.Frames), a.streamOpts(sauce))
+		hold := a.order.effectHold()
+		for i, at := range ends[:len(ends)-1] {
+			ms := hold
+			if i == 0 && p == patShine {
+				ms = max(hold, 400) // the picture a moment before the light comes (as the frames)
+			}
+			ps = append(ps, pause{at, ms})
+		}
+		return out, ps
 	}
-	out, _ := writeDrawSteps(fmtID, d, a.drawSteps(d, a.order), a.streamOpts(sauce))
-	return out
+	out, offs := writeDrawSteps(fmtID, d, a.drawSteps(d, a.order), a.streamOpts(sauce))
+	every, ms := a.order.pacing()
+	for i := every - 1; i < len(offs)-1; i += every {
+		ps = append(ps, pause{offs[i], ms})
+	}
+	return out, ps
 }
 
 func (a *App) streamOpts(sauce bool) streamOpts {
@@ -952,7 +982,11 @@ func (a *App) orderNote() string {
 	if a.order == nil || a.nFrames() > 1 || a.pageStreamFormat() == "" {
 		return ""
 	}
-	return "  Draws: " + a.order.String()
+	s := "  Draws: " + a.order.String()
+	if b := boardByID(a.pageBoard()); b != nil && b.shows(a.pageStreamFormat()) {
+		s += "; " + b.name + " pauses"
+	}
+	return s
 }
 
 // ---------------------------------------------------------------- frames

@@ -151,8 +151,19 @@ func (a *App) splitFrames(atHome bool) {
 
 // writeStreamFrames writes every frame as one stream: a clear before every frame after the first.
 func (a *App) writeStreamFrames(fmtID string, docs []*Doc, sauce bool) []byte {
+	out, _ := a.writeStreamFramesPaced(fmtID, docs, sauce)
+	return out
+}
+
+// writeStreamFramesPaced is writeStreamFrames with a BBS pause after every
+// frame but the last: the frame's hold.
+func (a *App) writeStreamFramesPaced(fmtID string, docs []*Doc, sauce bool) ([]byte, []pause) {
 	var out []byte
+	var ps []pause
 	for i, d := range docs {
+		if i > 0 {
+			ps = append(ps, pause{len(out), a.holdOf(i - 1)})
+		}
 		clear := i > 0 || a.info.clear
 		switch fmtID {
 		case "seq":
@@ -165,7 +176,7 @@ func (a *App) writeStreamFrames(fmtID string, docs []*Doc, sauce bool) []byte {
 			out = append(out, writeAnsi(d, a.amiga(), true, clear, sauce)...)
 		}
 	}
-	return out
+	return out, ps
 }
 
 // splitPage: the page is a stream file's frames (reading the file again would give one picture).

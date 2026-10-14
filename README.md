@@ -253,9 +253,33 @@ S picks another), so saving twice gives the same file. A preview plays the effec
   terminal plays it at modem speed; opened again it is exactly the same picture. The order stays with the page
   until changed or cleared; Ctrl+P (and CharView's `m`) plays it. The frame effects (Matrix rain, Decrypt, Drop,
   Assemble, Shine, Shade in, Melt in, Power on) save as a **delta stream**: the clear screen, then each frame's
-  changed cells only (the same cursor moves and colours); the modem's speed is the pace, no pauses are put in.
+  changed cells only (the same cursor moves and colours); the modem's speed is the pace, unless BBS pauses are on.
 - **Frames**: one every N cells (or every N ms at the modem speed), for the strip, Play, GIF and APNG. Erase makes
   the picture go away instead (TheDraw's Fadeout). Teletext and Spectrum pages make frames only.
+
+### BBS pauses
+
+A modem was the pace: over telnet with no speed limit an animated file arrives at once and the effect flashes past.
+Many BBSes read a pause code of their own while they show a screen, so CharEdit can write that board's codes into
+the saved `.ans`: a pause every N cells of a draw order, after every frame of a frame effect, or each frame's hold
+for the frame strip. **Settings > My BBS** (default *none*) is used for every animated file you save; **Animate**
+shows it and can choose another board, or none, for one page (kept with the page's order), and can save one copy
+per board in one go beside the file (`name-amiexpress.ans`, `name-mystic.ans` ...). *None* is the safe choice for
+art packs, 16colo.rs and several boards: another board's codes show as junk text. The board takes the codes out,
+so the terminal gets exactly the plain file's bytes (tested through a model of each board's display code).
+
+| Board | Written first | Pause | Unit, most per code | The board's own character in the art | How known |
+|---|---|---|---|---|---|
+| Ami-Express (/X) 5 | `~NS\|` (the first byte must be `~`; no More?) | `~<n>w\|` | 1/50 s, 999 | `~` as `~~\|`; codes never cut by its 998-byte reads | source |
+| Mystic | `\|PO` (no More?) | `\|DE` | 0.5 s, fixed | `\|` as `\|PI` | source (1.10) + docs |
+| PCBoard 15 | `@POFF@` (no More?) | `@DELAY:n@` | 0.1 s, 255 | none exists; codes never cut by its 2047-byte lines | source |
+| Synchronet | | Ctrl-A `,` `;` `.` | 0.1 / 0.5 / 2 s | Ctrl-A as Ctrl-A `A`, Ctrl-Z as Ctrl-A `z`; Ctrl-A `Q` after `@`, `\|` and LF | source |
+| Tempest | | `~DELAY(n)` | 1/50 s | `~` as `~~` | manual only |
+
+Not offered: boards with no fixed delay code (System-X, Sigma Express, DayDream, ENiGMA½, Talisman, Wildcat,
+Logic), with only whole seconds (FAME `~W`, CNet `{W}`, Image BBS `£W`) or a fixed 0.8 s (Renegade `%DE`,
+Telegard `@8`), Hydra (its timed pause shows a prompt) and Ami-Express 4.x (its manual has no `~w`). PETSCII,
+ATASCII and VT52 files get no codes.
 
 ## Keys
 

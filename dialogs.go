@@ -729,9 +729,10 @@ REFERENCE PICTURE
 A picture (PNG, JPEG, GIF, BMP, WebP) to trace over: the Ref gadget, ` + keyName("ref_open") + `, or drop it on the window. It shows in the page's empty cells (or faintly over everything), and can be faded, hidden, shown in greys, moved (` + keyName("ref_move") + `: drag or arrows, Shift a pixel, + and - size it; or Ctrl+drag) and sized (fit width, fit page, 1:1, bigger, smaller). It is only shown: never turned into characters, never saved or exported with the art. CharEdit remembers it with the art file (in prefs.json) and in the autosave.
 FRAMES
 A page can hold several frames: ` + keyName("frame_new") + ` adds an empty one, ` + keyName("frame_duplicate") + ` copies the frame, ` + keyName("frame_previous") + ` / ` + keyName("frame_next") + ` go through them. The strip under the page numbers them (click to go, drag to move) and has each frame's hold time (how long it shows when played) and New, Copy, Delete, Onion (the frame before, faint, under the empty cells), Play, Loop and the speed. Width and crop change every frame; each frame has its own height. Undo goes back through all of it, to the frame each step changed.
-Saved as .c, .petmate or .tti every frame is kept (a .tti keeps each subpage's other lines; its hold is the CT line). ANSI, .seq, .ata and .vt save the frames as one stream with a clear screen between them; their speed is the modem's, so the hold times are not kept. A file that clears the screen between pictures opens as one picture and says so: ` + keyName("frames_strip") + ` shows the strip with Split (at each clear, or at each cursor home). Formats of one picture (.scr, .xb, .png ...) write the frame on show, and the page stays unsaved. Save as .gif or APNG for an animation.
+Saved as .c, .petmate or .tti every frame is kept (a .tti keeps each subpage's other lines; its hold is the CT line). ANSI, .seq, .ata and .vt save the frames as one stream with a clear screen between them; their speed is the modem's, so the hold times are not kept (in an .ans, My BBS's pauses keep them: see BBS pauses). A file that clears the screen between pictures opens as one picture and says so: ` + keyName("frames_strip") + ` shows the strip with Split (at each clear, or at each cursor home). Formats of one picture (.scr, .xb, .png ...) write the frame on show, and the page stays unsaved. Save as .gif or APNG for an animation.
 ANIMATION TEMPLATES
 ` + keyName("animate") + ` (TheDraw's Easy Animation) puts a picture on the screen cell by cell in a pattern: TheDraw's Top, Left, Clock, Circles, Checkerboard, Angle, Gate, Pyramid, Squares, Scramble, Door, Diamond, Wiggle and Wiggle out, with Reverse (the whole order backwards) and Flip (rows mirrored top to bottom), and Charcoal's own Fade in / out (the colours come up out of the paper), Typewriter, Scroll in, Matrix rain, Decrypt, Spiral, Drop, Assemble, Blinds, Shine, Shade in, Melt in and Power on. A preview plays it; the effects' random parts come from a seed kept with the page (Shuffle or S picks another). The frame effects (Matrix rain to Power on but Spiral and Blinds) saved as the file write a delta stream: each frame's changed cells only. Make "the draw order of the saved file": saving as .ans, .seq, .ata or .vt writes the picture in that order (a clear screen, then each cell with a cursor move where it does not follow the one before; only cells that show something), so any terminal plays it at the modem's speed; Play shows it at the speed in the bar; the order stays with the page (status line "Draws:") until changed or cleared. Or make frames: one every N cells (or every N ms at the modem's speed), each held so long; Erase makes the picture go away instead (TheDraw's Fadeout). Teletext and Spectrum pages make frames only.
+BBS pauses: over telnet with no speed limit an animated file arrives at once and the effect flashes past. Settings' My BBS (default none) puts that board's own pause codes into every animated .ans you save (a draw order, a frame effect, or the strip's frames with their holds); Animate can choose another board, or none, for one page, and tick boxes save one copy per board beside the file (name-amiexpress.ans ...). A draw order pauses N ms every N cells, a frame effect after each frame. Ami-Express (/X): ~NS| first, ~<n>w| (n/50 s); Mystic: |PO first, |DE (half a second); PCBoard: @POFF@ first, @DELAY:n@ (n/10 s); Synchronet: Ctrl-A , ; . (0.1, 0.5, 2 s); Tempest: ~DELAY(n) (n/50 s, from its manual). Each board's code character in the art is written the board's way. None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text. PETSCII, ATASCII and VT52 files get none (no board's codes known).
 The Commodore character sets are the machines' ROMs and do not come with the program: the first run offers to download them from the VICE emulator project (each checked by its SHA-1), and so does Settings.
 
 FONTS
@@ -976,7 +977,7 @@ func openSettings() { a.dialog = &SettingsReq{} }
 
 func (d *SettingsReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(660, 410), "Settings")
+	in := u.window(centre(660, 480), "Settings")
 	y := in.y
 	fb.text(in.x, y+3, "Window size", cText)
 	sizes := []string{"1x (normal)", "2x (big screens)", "3x", "4x"} // as many as main allows (maxUIScale)
@@ -989,7 +990,31 @@ func (d *SettingsReq) draw(u *UI) {
 		prefs.NoBackup = !v
 		savePrefs()
 	}
-	y += gadH + 16
+	y += gadH + 8
+	// My BBS: the board whose pause codes animated files get (bbspause.go).
+	fb.text(in.x, y+3, "My BBS", cText)
+	boards := []string{"None (plays at the modem's speed)"}
+	cur := 0
+	for i, b := range bbsBoards {
+		boards = append(boards, b.name)
+		if b.id == prefs.MyBBS {
+			cur = i + 1
+		}
+	}
+	u.choice("mybbs", Rect{in.x + 120, y, choiceW(boards), gadH}, boards, cur,
+		"Animated files you save (draw orders, frame effects, frames) get this board's pause codes, so they play at their pace over telnet too", func(i int) {
+			prefs.MyBBS = ""
+			if i > 0 {
+				prefs.MyBBS = bbsBoards[i-1].id
+			}
+			savePrefs()
+		})
+	y += gadH + 4
+	for _, l := range wrap("Pauses in animated files. None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text. Animate can choose for one page.", in.w/charW) {
+		fb.text(in.x, y, l, cText)
+		y += lineH
+	}
+	y += 12
 	fb.text(in.x, y, "Commodore character sets (PETSCII)", cHi)
 	y += lineH + 4
 	var have, missing []string

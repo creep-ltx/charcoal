@@ -36,6 +36,7 @@ type Prefs struct {
 	Refs      map[string]*RefPref `json:"references,omitempty"` // each art file's reference picture (refimage.go)
 	Shades    map[string][]int    `json:"shades,omitempty"`     // the shade brush's characters per page type, lightest first
 	ArtFonts  map[string]ArtFont  `json:"art_fonts"`            // art file -> the font CharEdit keeps for it (fontfile.go)
+	MyBBS     string              `json:"my_bbs,omitempty"`     // the board whose pause codes animated saves get ("": none; bbspause.go)
 	Width     int                 `json:"width"`
 	Height    int                 `json:"height"`
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,9 +22,11 @@ type AnimReq struct {
 	byTime               bool // a frame every ms at the modem's speed, not every n cells
 	cells, ms, steps     Field
 	rows, hold           Field
-	length               Field // a frame effect's frames
-	seed                 int64 // a frame effect's random parts
-	shown                int   // the pattern whose defaults the fields hold
+	length               Field  // a frame effect's frames
+	seed                 int64  // a frame effect's random parts
+	shown                int    // the pattern whose defaults the fields hold
+	bbs, copies          string // BBS pauses: drawOrder.BBS and .Copies (bbspause.go)
+	every, pauseMs       Field  // a draw order's pause (ms) every n cells
 	prevKey              string
 	prev                 []*Doc
 	prevHolds            []int
@@ -47,13 +50,15 @@ func openAnimate() {
 		return
 	}
 	d := &AnimReq{pat: patClock, cells: Field{max: 6}, ms: Field{max: 6}, steps: Field{max: 3}, rows: Field{max: 4}, hold: Field{max: 5},
-		length: Field{max: 3}, seed: newSeed(), shown: -1}
+		length: Field{max: 3}, seed: newSeed(), shown: -1, every: Field{max: 5}, pauseMs: Field{max: 5}}
 	d.cells.set("40")
 	d.ms.set("100")
 	d.steps.set("8")
 	d.rows.set("1")
 	d.hold.set("60")
-	for _, f := range []*Field{&d.cells, &d.ms, &d.steps, &d.rows, &d.hold, &d.length} {
+	d.every.set("40")
+	d.pauseMs.set("40")
+	for _, f := range []*Field{&d.cells, &d.ms, &d.steps, &d.rows, &d.hold, &d.length, &d.every, &d.pauseMs} {
 		f.enter = d.apply
 	}
 	if o := a.order; o != nil && o.pat() >= 0 {
@@ -67,6 +72,15 @@ func openAnimate() {
 		}
 	}
 	d.syncDefaults()
+	if o := a.order; o != nil {
+		d.bbs, d.copies = o.BBS, o.Copies
+		every, ms := o.pacing()
+		d.every.set(strconv.Itoa(every))
+		d.pauseMs.set(strconv.Itoa(ms))
+		if o.Hold > 0 && isEffect(d.pat) {
+			d.hold.set(strconv.Itoa(o.Hold))
+		}
+	}
 	if a.pageStreamFormat() == "" || a.order == nil && a.nFrames() > 1 {
 		d.frames = true
 	}
@@ -137,9 +151,14 @@ func (d *AnimReq) apply() {
 			return
 		}
 	}
-	o := &drawOrder{Pattern: patterns[d.pat].id, Reverse: s.reverse, Flip: s.flip}
+	o := &drawOrder{Pattern: patterns[d.pat].id, Reverse: s.reverse, Flip: s.flip, BBS: d.bbs, Copies: d.copies}
 	if isEffect(d.pat) {
 		o.Seed, o.Frames = s.seed, s.n
+		if s.hold != effectDefaults[d.pat][1] {
+			o.Hold = s.hold
+		}
+	} else if every, ms := fieldInt(&d.every, 40, 1, 1<<20), fieldInt(&d.pauseMs, 40, 20, 99000); every != 40 || ms != 40 {
+		o.Every, o.Pause = every, ms
 	}
 	a.applyOrder(o)
 }
@@ -233,7 +252,7 @@ func blitScaled(dst *FB, r Rect, src *FB) {
 func (d *AnimReq) draw(u *UI) {
 	fb := u.fb
 	d.syncDefaults()
-	in := u.window(centre(980, 580), "Animate")
+	in := u.window(centre(980, 660), "Animate")
 	// The patterns: TheDraw's, and Charcoal's own beside them.
 	ly := in.y
 	listW := 150
@@ -351,6 +370,10 @@ func (d *AnimReq) draw(u *UI) {
 		}
 		y += gadH + 8
 		fb.text(px, y, "The frames take the place of this frame; undo gives it back.", cText)
+		if b := boardByID(prefs.MyBBS); b != nil && b.shows(a.pageStreamFormat()) {
+			y += lineH
+			fb.text(px, y, "Saved as one stream, the holds become "+b.name+" pauses (Settings' My BBS).", cText)
+		}
 	} else {
 		if isEffect(d.pat) {
 			fb.text(px, y+3, "Frames", cText)
@@ -358,9 +381,10 @@ func (d *AnimReq) draw(u *UI) {
 			u.field(Rect{x, y, 3*charW + 16, gadH}, &d.length, "How many frames the effect takes")
 			d.shuffleButton(u, x+3*charW+24, y)
 			y += gadH + 8
-			fb.text(px, y, "The file draws each frame's changes only; the modem's speed is the pace.", cText)
-			y += lineH
+			fb.text(px, y, "The file draws each frame's changes only.", cText)
+			y += lineH + 6
 		}
+		y = d.drawPauses(u, px, y, pw)
 		fb.text(px, y, fmt.Sprintf("Play (%s) shows it at %d bps, the speed in the bar.", keyName("play"), a.baud), cText)
 		y += lineH
 		fb.text(px, y, "Kept with the page until changed or cleared.", cText)
@@ -421,4 +445,92 @@ func (d *AnimReq) key(k string, ctrl, shift bool) bool {
 		return false
 	}
 	return true
+}
+
+// drawPauses: the BBS pauses part of the draw order's options (bbspause.go):
+// the board (My BBS, none, or one for this page), the pace, and copies.
+func (d *AnimReq) drawPauses(u *UI, x, y, w int) int {
+	fb := u.fb
+	f := a.pageStreamFormat()
+	ext := map[string]string{"ansi": ".ans", "seq": ".seq", "ata": ".ata", "vt52": ".vt"}[f]
+	boards := boardsFor(f)
+	if len(boards) == 0 {
+		fb.text(x, y, "BBS pauses: no board's codes known for "+ext+" files (the modem's speed is the pace).", cText)
+		return y + lineH + 6
+	}
+	items := []string{"My BBS (" + boardName(prefs.MyBBS) + ")", "None for this page"}
+	cur := 0
+	if d.bbs == "none" {
+		cur = 1
+	}
+	for i, b := range boards {
+		items = append(items, b.name)
+		if b.id == d.bbs {
+			cur = i + 2
+		}
+	}
+	lx := fb.text(x, y+3, "BBS pauses", cText) + 8
+	u.choice("animbbs", Rect{lx, y, choiceW(items), gadH}, items, cur,
+		"The board whose pause codes the saved file gets, so it plays at its pace over telnet too (My BBS is in Settings)",
+		func(i int) {
+			switch i {
+			case 0:
+				d.bbs = ""
+			case 1:
+				d.bbs = "none"
+			default:
+				d.bbs = boards[i-2].id
+			}
+		})
+	y += gadH + 6
+	eff := prefs.MyBBS
+	if d.bbs != "" {
+		eff = map[bool]string{true: "", false: d.bbs}[d.bbs == "none"]
+	}
+	if b := boardByID(eff); b != nil && b.shows(f) || d.copies != "" {
+		fx := x
+		label := func(s string) { fx = fb.text(fx, y+3, s, cText) + 8 }
+		field := func(fl *Field, chars int, hint string) {
+			u.field(Rect{fx, y, chars*charW + 16, gadH}, fl, hint)
+			fx += chars*charW + 24
+		}
+		if isEffect(d.pat) {
+			label("Hold")
+			field(&d.hold, 5, "How long the board waits after each frame, in ms")
+			label("ms a frame")
+		} else {
+			label("A pause of")
+			field(&d.pauseMs, 5, "How long the board waits each time, in ms")
+			label("ms every")
+			field(&d.every, 5, "Cells drawn between two pauses")
+			label("cells")
+		}
+		y += gadH + 6
+		if b != nil && b.shows(f) {
+			for _, l := range wrap(b.name+": "+b.note+".", w/charW) {
+				fb.text(x, y, l, cText)
+				y += lineH
+			}
+		}
+	}
+	cx := fb.text(x, y+3, "Also save a copy for", cText) + 8
+	for _, b := range boards {
+		if cx+checkW(b.name) > x+w {
+			cx, y = x+16, y+gadH+4
+		}
+		on := strings.Contains(","+d.copies+",", ","+b.id+",")
+		o := drawOrder{Copies: d.copies}
+		v, cw := u.check(cx, y, b.name, on, "Saving also writes name-"+b.id+ext+" with "+b.name+"'s codes beside the file")
+		if v != on {
+			o.toggleCopy(b.id)
+			d.copies = o.Copies
+		}
+		cx += cw + 16
+	}
+	y += gadH + 6
+	for _, l := range wrap("None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text.", w/charW) {
+		fb.text(x, y, l, cText)
+		y += lineH
+	}
+	return y + 6
 }

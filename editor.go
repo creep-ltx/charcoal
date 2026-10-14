@@ -2193,7 +2193,22 @@ func (a *App) modeFormats() []Format {
 }
 
 func (a *App) encode(fmtID string) ([]byte, error) {
+	return a.encodeFor(fmtID, a.pageBoard(), nil)
+}
+
+// encodeFor writes the page as fmtID; an animated stream gets board's pause
+// codes (bbspause.go; "" none), and *ps (when not nil) is where it pauses.
+func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	d, am, info := a.doc, a.amiga(), a.info
+	paced := func(out []byte, p []pause) []byte {
+		if b := boardByID(board); b != nil && b.shows(fmtID) {
+			if ps != nil {
+				*ps = p
+			}
+			return b.pace(out, p)
+		}
+		return out
+	}
 	withSauce := func(art []byte, fileType int) []byte {
 		if !info.writeSauce {
 			return art
@@ -2227,7 +2242,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 				}
 			}
 		}
-		out := a.writeStreamFrames(fmtID, docs, info.writeSauce)
+		out := paced(a.writeStreamFramesPaced(fmtID, docs, info.writeSauce))
 		if fmtID == "ansi" {
 			d = &Doc{cols: docs[0].cols, rows: max(25, docs[0].rows)} // SAUCE: the first frame's size
 			out = withSauce(out, 1)
@@ -2235,7 +2250,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		return out, nil
 	}
 	if a.orderedSave(fmtID) { // the page's draw order (transitions.go)
-		out := a.writeOrdered(fmtID, d, info.writeSauce)
+		out := paced(a.writeOrderedPaced(fmtID, d, info.writeSauce))
 		if fmtID == "ansi" {
 			out = withSauce(out, 1)
 		}
@@ -2411,7 +2426,8 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: there is no drawer " + filepath.Dir(path))
 		return false
 	}
-	data, err := a.encode(fmtID)
+	var ps []pause
+	data, err := a.encodeFor(fmtID, a.pageBoard(), &ps)
 	bakErr, changed := error(nil), 0
 	if err == nil && !prefs.NoBackup {
 		bakErr = keepBackup(path, data)
@@ -2447,6 +2463,9 @@ func (a *App) writeOut(path, fmtID string) bool {
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
 	note := a.keepArtFont(path, fmtID)
+	if a.animatedSave(fmtID) {
+		note += pacedNote(a.pageBoard(), ps) + a.writeCopies(path, fmtID)
+	}
 	if bakErr != nil {
 		a.msg(fmt.Sprintf("Saved %s, but the old version could not be kept as .bak: %v", path, bakErr) + note)
 		return true
@@ -2458,7 +2477,11 @@ func (a *App) writeOut(path, fmtID string) bool {
 		}
 	}
 	if a.nFrames() > 1 && (fmtID == "ansi" || fmtID == "seq" || fmtID == "ata" || fmtID == "vt52") {
-		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d frames, a clear screen between them; the hold times are not kept (these files play at the modem's speed)", path, len(data), a.nFrames()) + note)
+		held := "the hold times are not kept (these files play at the modem's speed; Animate's BBS pauses can keep them)"
+		if len(ps) > 0 {
+			held = "the holds kept as pauses"
+		}
+		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d frames, a clear screen between them; %s", path, len(data), a.nFrames(), held) + note)
 		return true
 	}
 	if fmtID == "tti" && a.nFrames() > 1 {
@@ -2495,7 +2518,7 @@ func (a *App) playBytes() []byte {
 	if b := a.orderedPlayBytes(); b != nil {
 		return b
 	}
-	if a.source != nil && !a.dirty && a.srcKind == "" {
+	if a.source != nil && !a.dirty && a.srcKind == "" && (a.nFrames() == 1 || a.pageBoard() == "") { // a paced file's codes are the board's, not the terminal's
 		return a.source
 	}
 	if a.nFrames() > 1 && !a.zx() && !a.tt() { // every frame, a clear between them

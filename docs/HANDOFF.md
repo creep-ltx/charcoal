@@ -145,6 +145,18 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   Video: `tools/preview.sh` (preview_test.go with CHARCOAL_PREVIEW) -> preview/templates.mp4 + sheet.png
   (preview/ is excluded from git). Test trap: on random ANSI pages a 0x1A ends the plain reference file and a
   0x9B before digits reads as CSI, so stream-vs-plain comparisons of intermediate frames clean those first.
+- BBS pauses (2026-10-14, branch templates): `bbspause.go`. `bbsBoards` (Ami-Express (/X), Mystic, PCBoard,
+  Synchronet, Tempest: head, delay code, unit/max with the rounding carried (`units`), escape of the board's
+  own character, `layout` for boards that read in pieces: `layoutAE` (998-byte Fgets pieces, filled with empty
+  `~|` / a last `~`), `layoutPCB` (2047-byte dosfgets lines, filled with `@DELAY:000@`)). `pace(stream,
+  pauses)`; the pauses come from `writeOrderedPaced` (every N cells / each effect frame's hold) and
+  `writeStreamFramesPaced` (the strip's holds). `encodeFor(fmtID, board, &ps)`; `encode` uses `pageBoard()`
+  = `drawOrder.BBS` ("none" = none) else `prefs.MyBBS` (Settings' My BBS, default ""). `drawOrder` keeps
+  BBS, Copies (ids, comma separated), Hold, Every, Pause (autosave/undo with the order). `writeOut` writes the
+  copies (`copyPath`: name-<id>.ext) and a status note. Animate: `drawPauses`. Tests: `bbspause_test.go`, a
+  model of each board's display code (from its source) gives the plain stream's bytes and the asked time.
+  Codes per board and how they were established: ~/Projects/Knowledge/bbs/ansi-draw-order-animation.md.
+  Not tried on a real board yet (the user's Ami-Express next).
 - Not done: reading a draw order back from a file (it opens as the picture; the order is not recognised), Amiga
   real-terminal check, TheDraw's own animation editing (limiting, markers, include files, pauses).
 

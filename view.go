@@ -613,7 +613,7 @@ func (a *App) drawBar(u *UI) int {
 	if u.button(fl.place(buttonW("Info")), "Info", false, "SAUCE info (title, author, group) and save options ("+keyName("info")+")") != nil {
 		openInfo()
 	}
-	if u.button(fl.place(buttonW("Settings")), "Settings", false, "Settings: window size, .bak files, the C64 character set and the ST font") != nil {
+	if u.button(fl.place(buttonW("Settings")), "Settings", false, "Settings: window size, .bak files, My BBS (pauses in animated files), the C64 character set and the ST font") != nil {
 		openSettings()
 	}
 	if u.button(fl.place(buttonW("?")), "?", false, "Keys and mouse") != nil {
