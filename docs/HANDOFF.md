@@ -20,7 +20,7 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | Page | Files |
 |---|---|
 | Amiga ANSI | .ans .asc .txt .nfo .diz, XBin, PNG/HTML; Amiga or PC guessed by learned byte weights (core.go) |
-| PC ANSI | + .bin (BIOS colour order!), XBin, PCBoard .pcb, Avatar .avt; opens iCEDraw .idf, ArtWorx .adf, Tundra .tnd |
+| PC ANSI | + .bin (BIOS colour order!), XBin, PCBoard .pcb, Avatar .avt; iCEDraw .idf, ArtWorx .adf, Tundra .tnd, IcyDraw .icy, REXPaint .xp, Playscii .psci (see Other editors' files) |
 | Atari (ATASCII) | .ata (width 38/40 guessed); AltirraOS font built in |
 | Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL) |
 | PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form); ROMs from VICE on first use |
@@ -160,6 +160,38 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Not done: reading a draw order back from a file (it opens as the picture; the order is not recognised), Amiga
   real-terminal check, TheDraw's own animation editing (limiting, markers, include files, pauses).
 
+## Other editors' files (2026-10-14, branch exports)
+
+- `editorformats.go`: writers `writeIDF` (runs within a row, 4+ cells or any character 1, count <= 255),
+  `writeADF` (80 columns; EGA 64 with the 16 at `adfColours`), `writeTundra` (80 columns; the first cell sets both
+  colours, characters 1-6 always inside a colour command), `writeIcy` (IcyDraw v1: PNG + icYD records ICED,
+  PALETTE, FONT (PSF2), LAYER, END; uncompressed; no SAUCE record, IcyDraw refuses a file whose SAUCE it cannot
+  read), `writeXP` (gzip, column-major), `writePsci` (Playscii JSON, one layer per frame, charset/palette by
+  name), `writeMarqPet` / `writeMarqBas` / `writeMarqAsm` (Marq's C64 exports), `writePetmateJSON`. Readers:
+  `parseIcyDraw` (v1 with zstd via klauspost/compress, and v0 base64 tEXt/zTXt) + `icyPage` (layers put
+  together as IcyDraw's merge_layer_char, bold -> bright, blink -> background 8-15), `parseXP`, `parsePsci`
+  (charsets dos, amiga_topaz, atari, c64_real_shifted/unshifted, commodore_pet, c64_petscii/c64_edscii through
+  `psciC64Sets`; a C64/Atari page's background is the commonest, reversed cells from swapped colours),
+  `parseMarqPet`, `parsePetmateJSON`. Hostile sizes: IcyDraw pages/layers <= 4M cells, 256 MB unpacked; a
+  Playscii picture must fit its file (w*h <= len/16); Petmate JSON needs w*h screencodes.
+- Glue (the only edits to shared files): entries at the end of `formats` ("For other editors: ..."),
+  `encodeEditor` at the end of `encodeFor`, `loadEditor` first in `loadBytes` (it also takes .idf/.adf/.tnd
+  over, so their saveFmt is now their own format; before, Ctrl+S on an opened .idf wrote XBin bytes into it),
+  `reparseEditor` first in `reparse`, `editorOwn` in `writeOut` (own + srcKind), `editorCarriesFont` in
+  `carriesFont`, `isIcyDraw` in `isPicture` (an .icy is a PNG). `init` adds psci/pmjson to `framesFormats`.
+  SAUCE of opened .idf/.adf/.tnd/.icy goes to the page's info; written back without comment lines (ansilove
+  takes 129 bytes off the end, so comments would move its font/palette).
+- Verified: `editorformats_test.go` (round trips, models of ansilove's and IcyDraw's idf/tnd readers, files
+  IcyDraw 0.6 wrote in `testdata/icydraw`, Playscii's hello1.psci, CharEdit save/open/Ctrl+S); external
+  `editorformats_ext_test.go`: ansilove renders .idf/.adf pixel-identical to CharEdit (+ SAUCE), .tnd colours;
+  IcyDraw's engine (ccdump, built in a bwrap sandbox: ~/Projects/Knowledge/amiga/text-art-editor-formats.md)
+  reads all five PC formats cell for cell; Playscii's own art.py loader reads the .psci tiles/frames/delays.
+  `FuzzEditorFormats` (2.8M execs) and FuzzParsers (60 s; it stalls at 0/sec for long stretches on main too).
+- Not done: IcyDraw PETSCII/ATASCII/Viewdata/ST pages, sixel layers, layer effects, tags; Playscii xform
+  (flips) and other charsets; a Playscii charset for an own font (Playscii takes charsets only from its own
+  folders); Petmate custom charsets in its JSON; PabloDraw / TheDraw / ACiDDraw / Moebius have no own art file
+  beyond ANSI, BIN, XBin (TheDraw .tdf are fonts).
+
 ## Keys and safety (2026-10-13, evening)
 
 - `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's
@@ -253,4 +285,4 @@ The goal and the plan: docs/roadmap.md (the go-to editor for text artists on eve
 - ~/Projects/Knowledge/bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
 - ~/Projects/Knowledge/go/sdl2-desktop-gui.md: the GUI approach and headless testing.
 
-Last updated 2026-10-14 (reference picture, shapes and brushes; own fonts and the font editor; animation templates; frames and animation before).
+Last updated 2026-10-14 (other editors' files; reference picture, shapes and brushes; own fonts and the font editor; animation templates; frames and animation before).

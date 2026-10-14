@@ -405,7 +405,9 @@ func (a *App) fontKeptHint() string {
 }
 
 // carriesFont: the format holds the page's font inside.
-func carriesFont(fmtID string) bool { return fmtID == "xbin" || fmtID == "petmate" }
+func carriesFont(fmtID string) bool {
+	return fmtID == "xbin" || fmtID == "petmate" || editorCarriesFont(fmtID)
+}
 
 // ArtFont is a font CharEdit keeps for an art file whose format cannot hold it.
 type ArtFont struct {

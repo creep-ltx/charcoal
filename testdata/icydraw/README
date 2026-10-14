@@ -1,0 +1,4 @@
+icydraw-alove.* were written by IcyDraw's engine (icy_tools crates/icy_engine, IcyDraw 0.6.0, git
+eddbe237 of 2026-10-13, default save options) from ../alove/bs-alove.xb (ansilove's test art, BSD
+2-clause, ../alove/LICENSE-ansilove.txt): files as IcyDraw writes them, for CharEdit's readers. The
+.icy has zstd-packed records (IcyDraw's default).

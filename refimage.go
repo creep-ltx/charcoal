@@ -63,7 +63,7 @@ var refOpacities = []int{10, 20, 30, 40, 50, 60, 70, 80, 90, 100}
 func isPicture(b []byte) bool {
 	for _, m := range []string{"\x89PNG", "GIF8", "\xff\xd8\xff", "BM"} {
 		if bytes.HasPrefix(b, []byte(m)) {
-			return len(b) > 14 || m != "BM"
+			return (len(b) > 14 || m != "BM") && !isIcyDraw(b) // an IcyDraw file is art in a PNG
 		}
 	}
 	return len(b) >= 12 && string(b[:4]) == "RIFF" && string(b[8:12]) == "WEBP"

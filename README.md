@@ -50,7 +50,8 @@ Settings, keys and autosaves are kept in `%AppData%\Charcoal` on Windows,
 
 ## What it is
 
-An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw),
+An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw,
+IcyDraw, REXPaint, Playscii),
 Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens and teletext
 (BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA, EGA 8x14,
@@ -133,9 +134,9 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   allows passing the ROM on, `fonts/zx-spectrum-NOTICE.txt`) with the block graphics and UDGs. Saved as `.scr`
   (6912 bytes); a `.scr` opens with each 8x8 cell matched to a character (drawings get the nearest one).
 - **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save; iCEDraw (.idf), ArtWorx (.adf) and
-  TundraDraw (.tnd) open with their own fonts and colours. The same art in five formats (ansilove's test files,
-  `testdata/alove`) gives the same page in all of them. PC attribute bytes are in BIOS colour order and are
-  converted.
+  TundraDraw (.tnd) open with their own fonts and colours and save (see Files for other editors). The same art
+  in five formats (ansilove's test files, `testdata/alove`) gives the same page in all of them. PC attribute
+  bytes are in BIOS colour order and are converted.
 - **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
   character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's
   ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its
@@ -161,6 +162,30 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   the format, and an **animated GIF or APNG** of the frames. Everything that holds characters opens too.
   (Web pages do not open; a picture can be the page's reference, below.)
 - Settings in `~/.config/charcoal/prefs.json` (`"uiscale": 2` doubles the window for big screens).
+
+## Files for other editors
+
+Save as lists them at the end, as "For other editors: ...", only for the page types they fit. The ones that
+open again become the page's file (Save writes the same format again).
+
+| Program | File | Pages | Saves | Opens | Checked against |
+|---|---|---|---|---|---|
+| iCEDraw | `.idf` | PC, Amiga | cells (runs as iCEDraw packs them), font, palette | yes | ansilove (picture identical), IcyDraw's reader; files IcyDraw wrote |
+| ArtWorx | `.adf` | PC, Amiga, 80 columns | cells, font, the 16 colours in the EGA's 64 | yes | ansilove (picture identical), IcyDraw's reader; files IcyDraw wrote |
+| TundraDraw | `.tnd` | PC, Amiga, 80 columns | cells with 24-bit colours (no font) | yes | ansilove (colours; it cannot draw characters 1, 2, 4, 6), IcyDraw's reader; files IcyDraw wrote |
+| IcyDraw | `.icy` | PC, Amiga | one layer, font, palette, iCE or blink; a picture of the first 80 rows | yes (version 1 with or without zstd, and the older version 0; layers put together, picture layers and effects left out) | IcyDraw's reader; files IcyDraw 0.6 wrote |
+| REXPaint | `.xp` | PC | one layer, 24-bit colours | yes (layers put together) | IcyDraw's reader |
+| Playscii | `.psci` | PC (dos), Amiga (amiga_topaz), PETSCII (c64_real_*, commodore_pet), Atari (atari) | every frame with its hold, one layer; Playscii's own charset and palette by name | yes, also c64_petscii and c64_edscii (Playscii's defaults); layers put together | Playscii's own loader (art.py); its glyph order compared with the ROM fonts |
+| Marq's PETSCII editor | `.pet` | C64 | screen codes, colours, border, background, case | yes | its source (m_c64.pde) |
+| Marq's PETSCII editor | `.bas`, `.s` | C64 | a BASIC listing (for petcat) and an ACME program of a 40x25 screen (data only for other sizes) | no | its source |
+| Petmate | `.json` | PETSCII | every screen (Petmate's JSON export) | yes | its source (exporters/json.ts) |
+
+Traps: Petmate's `.pet` export says 0 for lower case where Marq's says 1 (CharEdit follows Marq); IcyDraw
+evens out colours that do not show when it saves and writes NUL as a space; an ArtWorx or TundraDraw page is
+80 columns; Playscii and REXPaint files cannot hold a font (CharEdit keeps a page's own font for the file, as
+for `.ans`). Not done: PabloDraw and TheDraw have no files of their own beyond ANSI/BIN/XBin (TheDraw's `.tdf`
+are fonts); ACiDDraw saves ANSI; Moebius saves ANSI/BIN/XBin with SAUCE; IcyDraw's PETSCII, ATASCII and other
+non-PC pages; Playscii's other charsets (Apple II, CPC, MSX, ZX81 "speccy" ...).
 
 ## Frames and animation
 
@@ -338,6 +363,7 @@ come back cell for cell after saving in their own format.
 | `fontfile.go`, `fontedit.go` | a page's own font: font files read and written, kept with the art; the font editor (`fontfile_test.go`); `tools/pcfonts.py` makes the built-in EGA/VGA fonts |
 | `viewer.go` | CharView |
 | `export.go` | `.prg`, the `.c` array, XBin, HTML (`export_test.go` runs the `.prg` in a small 6502 emulator) |
+| `editorformats.go` | other editors' files: iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii, Marq's `.pet`/`.bas`/`.s`, Petmate JSON (`editorformats_test.go`; `editorformats_ext_test.go` checks against ansilove, IcyDraw's engine and Playscii's loader when they are there) |
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
 | `keys.go` | the table of actions and their default keys, the keys file, the help's key list |
@@ -366,7 +392,12 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | SDL2 (linked into the Windows and Mac programs) | libsdl.org, Sam Lantinga | zlib, `third_party/SDL2-LICENSE.txt` |
 | go-sdl2, the Go binding to SDL2 | github.com/veandco/go-sdl2 | BSD 3-clause, `third_party/go-sdl2-LICENSE.txt` |
 | BMP and WebP readers (reference pictures) | golang.org/x/image, The Go Authors | BSD 3-clause, `third_party/x-image-LICENSE.txt` |
+| zstd decoder (IcyDraw files) | github.com/klauspost/compress v1.19.0, Klaus Post, The Go Authors (xxhash: Caleb Spare) | BSD 3-clause (and Apache 2.0 parts, MIT xxhash), `third_party/klauspost-compress-LICENSE.txt` |
+| Playscii's palettes (`psciPalettes`) and glyph tables | Playscii, JP LeBreton (the colours and glyph order of its palettes/ and charsets/) | MIT, `third_party/playscii-LICENSE.txt` |
+| Marq's ACME copy loop (`marqAsmCode`) | Marq's PETSCII editor | WTFPL, `third_party/marq-petscii-LICENSE.txt` |
 | Test art in `testdata/alove` | ansilove's tests | BSD 2-clause, `testdata/alove/LICENSE-ansilove.txt` |
+| `testdata/icydraw` | `testdata/alove`'s art as IcyDraw 0.6 saves it | as above |
+| `testdata/playscii/hello1.psci` | Playscii's example art | MIT, `testdata/playscii/LICENSE-playscii.txt` |
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE
 project) and the EmuTOS font sources (GPL), for PETSCII and Atari ST pages.

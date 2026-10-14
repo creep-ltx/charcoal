@@ -27,6 +27,17 @@ func FuzzParsers(f *testing.F) {
 	} {
 		f.Add([]byte(s))
 	}
+	{ // other editors' files (editorformats.go)
+		d := newDoc(3, 2)
+		d.cells[1] = makeCell(1, 4, 5, 0)
+		pal := paletteByID("vga").colors
+		f.Add(writeIcy(d, pal, fontByID("vga"), true, nil))
+		f.Add(writeXP(d, pal, true))
+		out, _ := writePsci([]*Doc{d}, nil, psciPage{mode: "c64", machine: "c64"})
+		f.Add(out)
+		f.Add(writeMarqPet(d, false))
+		f.Add(writePetmateJSON([]PetScreen{{doc: d}}))
+	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		check := func(name string, run func() []*Doc) {
 			start := time.Now()
@@ -78,6 +89,17 @@ func FuzzParsers(f *testing.F) {
 			}
 		}
 		check("xbin", func() []*Doc { return own(parseXBin(b)) })
+		check("icy", func() []*Doc { return own(parseIcy(b)) })
+		check("xp", func() []*Doc { return own(parseXP(b)) })
+		check("psci", func() []*Doc {
+			art, err := parsePsci(b)
+			if err != nil {
+				return nil
+			}
+			return art.docs
+		})
+		check("pet", func() []*Doc { d, _, _ := parseMarqPet(b); return one(d) })
+		check("petmate json", func() []*Doc { return screens(parsePetmateJSON(b)) })
 		check("petmate", func() []*Doc { return screens(parsePetmate(b)) })
 		check("prg", func() []*Doc { d, _, _ := parsePrg(b); return one(d) })
 		check("vt52", func() []*Doc { return one(parseVT52(b, stResolutions[0], 0)) })
