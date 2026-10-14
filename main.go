@@ -340,9 +340,14 @@ func handleEvent(ev sdl.Event) bool {
 			return true
 		}
 		c := &Click{x: ui.mx, y: ui.my, button: int(e.Button), shift: shiftHeld()}
-		if ui.popup != nil {
+		if p := ui.popup; p != nil {
 			ui.popupClick(c)
-			return true
+			// A click on the menu titles while a menu is open goes on to them:
+			// another title opens its menu, the open one's closes it.
+			if !p.menu || p.r.has(c.x, c.y) || !ui.menuBar.has(c.x, c.y) {
+				return true
+			}
+			ui.closedMenu = p.id
 		}
 		if ui.focus != nil && a.dialog == nil {
 			ui.focus = nil // a click elsewhere lets go of the width field
@@ -414,9 +419,7 @@ func keyDown(e *sdl.KeyboardEvent) {
 	mod := sdl.Keymod(e.Keysym.Mod)
 	ctrl, shift := ctrlMod(mod), mod&sdl.KMOD_SHIFT != 0 // AltGr is no Ctrl
 	if ui.popup != nil {
-		if k == "Escape" {
-			ui.popup = nil
-		}
+		ui.popupKey(k)
 		return
 	}
 	if a.playing != nil {

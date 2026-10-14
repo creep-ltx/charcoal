@@ -23,6 +23,8 @@ type UI struct {
 	focus      *Field
 	wheel      int // wheel steps of this pass (positive = down)
 	wheelTaken bool
+	menuBar    Rect   // where the menu titles are
+	closedMenu string // the menu this pass's click closed: its title does not open it again
 }
 
 func (u *UI) hover(r Rect) bool { return !u.inert && r.has(u.mx, u.my) }
@@ -100,6 +102,68 @@ type Popup struct {
 	items []string
 	cur   int
 	pick  func(int)
+	hot   int // the item the mouse or the arrow keys are on, -1: none
+
+	// A menu from the menu bar: each item's keys and tick, "" items are the
+	// lines between groups, nav opens the menu to the left or right.
+	menu  bool
+	keys  []string
+	ticks []bool
+	nav   func(d int)
+	mouse [2]int // where the mouse was: the arrow keys win until it moves
+}
+
+func (p *Popup) rowH(i int) int {
+	switch {
+	case !p.menu:
+		return lineH + 2
+	case p.items[i] == "":
+		return 7
+	}
+	return lineH + 6
+}
+
+// row is item i's place in the list.
+func (p *Popup) row(i int) Rect {
+	y := p.r.y + 2
+	for j := range i {
+		y += p.rowH(j)
+	}
+	return Rect{p.r.x + 2, y, p.r.w - 4, p.rowH(i)}
+}
+
+func (p *Popup) height() int {
+	h := 4
+	for i := range p.items {
+		h += p.rowH(i)
+	}
+	return h
+}
+
+// at is the item at (x, y), -1 for none or a line between groups.
+func (p *Popup) at(x, y int) int {
+	for i := range p.items {
+		if p.row(i).has(x, y) && p.items[i] != "" {
+			return i
+		}
+	}
+	return -1
+}
+
+// step moves the hot item by d, over the lines between groups.
+func (p *Popup) step(d int) {
+	n := len(p.items)
+	i := p.hot
+	if i < 0 && d < 0 {
+		i = n
+	}
+	for range n {
+		i = (i + d + n) % n
+		if p.items[i] != "" {
+			p.hot = i
+			return
+		}
+	}
 }
 
 // choice: a gadget showing the current item; a click opens the list.
@@ -131,7 +195,7 @@ func (u *UI) choice(id string, r Rect, items []string, cur int, hint string, pic
 		if y+h > u.fb.h {
 			y = max(0, r.y-h)
 		}
-		u.popup = &Popup{id: id, r: Rect{r.x, y, w, h}, items: items, cur: cur, pick: pick}
+		u.popup = &Popup{id: id, r: Rect{r.x, y, w, h}, items: items, cur: cur, pick: pick, hot: -1}
 	}
 }
 
@@ -150,34 +214,92 @@ func (u *UI) drawPopup() {
 		return
 	}
 	f := u.fb
+	if m := [2]int{u.mx, u.my}; m != p.mouse { // the mouse moved: it picks the hot item
+		p.mouse = m
+		if i := p.at(u.mx, u.my); i >= 0 || p.r.has(u.mx, u.my) {
+			p.hot = i
+		}
+	}
 	f.fill(p.r, cGrey)
 	f.frame(p.r, cEdgeDk)
 	for i, it := range p.items {
-		ir := Rect{p.r.x + 2, p.r.y + 2 + i*(lineH+2), p.r.w - 4, lineH + 2}
-		hot := ir.has(u.mx, u.my)
+		ir := p.row(i)
+		if it == "" {
+			f.fill(Rect{ir.x + 6, ir.y + ir.h/2, ir.w - 12, 1}, cEdgeLt)
+			continue
+		}
 		col := uint32(cText)
-		if hot {
+		if i == p.hot {
 			f.fill(ir, cBlue)
 			col = cHi
 		}
-		mark := "  "
-		if i == p.cur {
-			mark = "\u00bb "
+		ty := ir.y + (ir.h-lineH)/2
+		if !p.menu {
+			mark := "  "
+			if i == p.cur {
+				mark = "\u00bb "
+			}
+			f.text(ir.x+4, ty, mark+it, col)
+			continue
 		}
-		f.text(ir.x+4, ir.y+1, mark+it, col)
+		if p.ticks[i] {
+			tickMark(f, ir.x+8, ir.y+ir.h/2, col)
+		}
+		f.text(ir.x+28, ty, it, col)
+		if k := p.keys[i]; k != "" {
+			kc := uint32(cDim)
+			if i == p.hot {
+				kc = cText
+			}
+			f.text(ir.x+ir.w-10-textW(k), ty, k, kc)
+		}
+	}
+}
+
+// tickMark draws a small tick with its middle-left at (x, y).
+func tickMark(f *FB, x, y int, c uint32) {
+	for i := range 4 { // down to the bottom
+		f.fill(Rect{x + i, y - 1 + i, 2, 2}, c)
+	}
+	for i := range 7 { // and up to the right
+		f.fill(Rect{x + 4 + i, y + 2 - i, 2, 2}, c)
 	}
 }
 
 // popupClick handles a press while the list is open.
 func (u *UI) popupClick(c *Click) {
 	p := u.popup
-	u.popup = nil
-	if !p.r.has(c.x, c.y) {
+	if p.r.has(c.x, c.y) {
+		i := p.at(c.x, c.y)
+		if i < 0 {
+			return // a line between groups: the menu stays
+		}
+		u.popup = nil
+		p.pick(i)
 		return
 	}
-	i := (c.y - p.r.y - 2) / (lineH + 2)
-	if i >= 0 && i < len(p.items) {
-		p.pick(i)
+	u.popup = nil
+}
+
+// popupKey handles a key while the list is open: arrows move, Return picks, Esc closes.
+func (u *UI) popupKey(k string) {
+	p := u.popup
+	switch k {
+	case "Escape":
+		u.popup = nil
+	case "Up":
+		p.step(-1)
+	case "Down":
+		p.step(1)
+	case "Left", "Right":
+		if p.nav != nil {
+			p.nav(map[string]int{"Left": -1, "Right": 1}[k])
+		}
+	case "Return", "Keypad Enter":
+		if p.hot >= 0 {
+			u.popup = nil
+			p.pick(p.hot)
+		}
 	}
 }
 

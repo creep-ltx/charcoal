@@ -387,8 +387,15 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   pixels: `textW`, `digitsW(n)` for number fields and columns, `fitText`, `wrap(s, px)` (`wrapCols(s, n)` is for
   plain-text reports). No `charW` any more: never count characters for screen layout. Checked pixel-identical
   to 0.1b7 on 9 screens (start, page, Animate, Animate a folder, help, open, save as, info, typing).
-  Next: the menu bar generated from `keys.go`, then the Studio layout, Light/Workbench themes and a system font
-  (golang.org/x/image's opentype, already a dependency).
+- Menu bar (step 2, 2026-10-14): `menus.go`. `menuBar` lists File, Edit, View, Page, Draw, Animate, Help; an item
+  names an action id from `keys.go` (its keys shown are `keysNow`, so presets and the keys file show), or has
+  its own `run` (machines, layouts, Settings); `tick` draws a tick. A wrong action id panics at start (tests
+  catch it). The open menu is a `Popup` with `menu` set: "" items are group lines, `hot` is moved by the mouse
+  or Up/Down, Return picks, Left/Right open the next menu, Esc closes. The mouse switches menus only when it
+  moves onto another title (`p.mouse`); a click on the titles goes through (`ui.closedMenu`: the open one's
+  title closes it). Drawn above the gadget bar (`drawBar(u, top)`), hidden with the gadgets (Ctrl+H).
+  Next: the Studio layout (drop the gadget bar's duplicates of the menus), then Light/Workbench themes and a
+  system font (golang.org/x/image's opentype, already a dependency).
 - Sources: 16colo.rs packs and tags, asciiarena.se (sitemap; files at /collections/<name>/<file>),
   ~/Amiga/BBS/BBS Style (412 files), NAS /mnt/nas/home/Unsorted/Junk/Latex/Petscii* (with the PETSCII editor's
   own PNGs: rendering is pixel-identical). **Not csdb.dk and not zxart.ee files: their robots.txt forbid it.**

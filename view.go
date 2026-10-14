@@ -205,7 +205,8 @@ func (a *App) drawWindow(u *UI) {
 
 	top := 0
 	if !a.bare {
-		top = a.drawBar(u)
+		top = a.drawMenuBar(u)
+		top = a.drawBar(u, top)
 		top = a.drawTabs(u, top)
 	}
 
@@ -383,10 +384,10 @@ func (a *App) drawTabs(u *UI, top int) int {
 }
 
 // drawBar draws the gadget bar and returns where the page starts.
-func (a *App) drawBar(u *UI) int {
+func (a *App) drawBar(u *UI, top int) int {
 	fb := u.fb
 	W := fb.w
-	fl := &flow{x0: 6, x: 6, y: 4, right: W - 6}
+	fl := &flow{x0: 6, x: 6, y: top + 4, right: W - 6}
 	if u.button(fl.place(buttonW("New")), "New", false, "New page in a new tab ("+keyName("new_page")+")") != nil {
 		a.addTab()
 	}
@@ -628,7 +629,7 @@ func (a *App) drawBar(u *UI) int {
 	if u.button(fl.place(buttonW("?")), "?", false, "Keys and mouse") != nil {
 		openHelp()
 	}
-	top := fl.y + gadH + 4
+	top = fl.y + gadH + 4
 	fb.fill(Rect{0, top, W, 1}, cEdgeDk)
 	return top + 1
 }
