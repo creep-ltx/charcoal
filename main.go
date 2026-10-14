@@ -69,7 +69,7 @@ func main() {
 		return
 	}
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
-		fmt.Println("usage: charedit [FILE...]\nA character art editor for Amiga and PC ANSI, Atari, Atari ST, PETSCII (PET, VIC-20, C64, C128),\nZX Spectrum and teletext pages. Press ? in the window for the keys.")
+		fmt.Println("usage: charedit [FILE...]\nA character art editor for Amiga and PC ANSI, Atari, Atari ST, PETSCII (PET, VIC-20, C64, C128),\nZX Spectrum and teletext pages. Help > Keys and mouse (F12) in the window lists the keys.")
 		fmt.Println("\n" + animateUsage)
 		return
 	}
@@ -82,7 +82,8 @@ func main() {
 	loadSTFonts()
 	loadPrefs()
 	loadKeys()
-	setFace(bitmapFace{fontByID("topaz2")}, 16)
+	useTheme(prefs.Theme)
+	applyUIFont()
 	mode := prefs.Mode // the last page type, if it can be had without a download
 	switch {
 	case mode == "c64" && a.hasC64, mode == "st" && hasSTFont():

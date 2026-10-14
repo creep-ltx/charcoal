@@ -79,7 +79,7 @@ func (d *AnimReq) fillCosts() {
 func weightBars(fb *FB, x, y, w int) {
 	for i := 0; i < 3; i++ {
 		h := 4 + 3*i
-		col := uint32(cEdgeLt)
+		col := cFaint
 		if i <= w {
 			col = cText
 			if w == weightHeavy {

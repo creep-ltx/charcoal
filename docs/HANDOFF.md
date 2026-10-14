@@ -405,6 +405,18 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   `drawBlockOrToolOptions`). View > "Studio layout" / "Focus layout" switches. `u.hover`/`u.take` ignore what
   is outside `fb.clip`, so gadgets scrolled out of the panel take no clicks. Info, Settings and ? left the
   toolbar for the menus. The status line shows the file's name, the title bar its folder.
+- Themes and the interface font (step 4, 2026-10-14): `themes` in `theme.go` has Dark (the old look, the
+  default), Light and Workbench; `setTheme` (View menu, Settings) stores `prefs.Theme`. `Faint` is for marks
+  that are off (Animate's unlit cost bars, menu group lines): EdgeLt is white in the light themes. The text
+  on `On` (cBlue) is cText/cHi, so each theme's On is light enough for its dark text or the other way round.
+  `uifont.go`: `ttFace` (golang.org/x/image opentype, glyph alpha masks cached per rune, advances summed
+  without kerning so `width` and `draw` agree) for `prefs.UIFont` "" = the system's sans (fc-match on
+  Linux/BSD, Helvetica/SF on a Mac, Segoe UI on Windows), "bundled" = the Go font (gofont/goregular, in
+  x/image, BSD), "topaz", "file" (`prefs.UIFontFile`, a FileReq from Settings). `applyUIFont` falls back to
+  the Go font, then Topaz, with a message. Size `prefs.UIFontSize` (13 default); `lineH` = ascent + descent + 1
+  (Noto Sans 13: 19). `centre` makes requesters bigger when lineH > 16. The art window is drawn at logical
+  pixels and scaled by the Window size setting, so at 2x the interface text is pixel-doubled, not rendered at
+  the screen's resolution. New module: golang.org/x/text (x/image's sfnt needs it).
 - Sources: 16colo.rs packs and tags, asciiarena.se (sitemap; files at /collections/<name>/<file>),
   ~/Amiga/BBS/BBS Style (412 files), NAS /mnt/nas/home/Unsorted/Junk/Latex/Petscii* (with the PETSCII editor's
   own PNGs: rendering is pixel-identical). **Not csdb.dk and not zxart.ee files: their robots.txt forbid it.**

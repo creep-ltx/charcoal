@@ -103,7 +103,7 @@ func (a *App) drawPanel(u *UI, r Rect) {
 	rule()
 
 	heading("Characters")
-	a.drawFsetSwitch(u, x+w-48, y-lineH-6)
+	a.drawFsetSwitch(u, x+w-fsetSwitchW(), y-lineH-6)
 	y = a.drawFkeyRow(u, x, y) + 10
 	cols := 32
 	if 32*a.cellW() > w {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,6 +27,9 @@ func closeDialog() {
 
 // centre gives a w x h box in the middle of the window, shrunk to fit.
 func centre(w, h int) Rect {
+	if lineH > 16 { // the sizes are for 16-pixel lines: a bigger interface font gets more room
+		w, h = w*lineH/16, h*lineH/16
+	}
 	w, h = min(w, ui.fb.w-20), min(h, ui.fb.h-20)
 	return Rect{(ui.fb.w - w) / 2, (ui.fb.h - h) / 2, w, h}
 }
@@ -1022,8 +1026,9 @@ func openSettings() {
 
 func (d *SettingsReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(660, 520+gadH+8), "Settings")
+	in := u.window(centre(660, 520+gadH+8+2*(gadH+8)+lineH+16), "Settings")
 	y := in.y
+	y = d.drawAppearance(u, in, y)
 	fb.text(in.x, y+3, "Window size", cText)
 	sizes := []string{"1x (normal)", "2x (big screens)", "3x", "4x"} // as many as main allows (maxUIScale)
 	u.choice("uiscale", Rect{in.x + 120, y, choiceW(sizes), gadH}, sizes, scale-1, "", func(i int) {
@@ -1160,4 +1165,83 @@ func (d *SettingsReq) key(k string, ctrl, shift bool) bool {
 		return false
 	}
 	return true
+}
+
+// drawAppearance draws Settings' rows for the interface's look and returns the y under them.
+func (d *SettingsReq) drawAppearance(u *UI, in Rect, y int) int {
+	fb := u.fb
+	col2 := in.x + in.w/2
+	fb.text(in.x, y+3, "Theme", cText)
+	names := themeNames()
+	u.choice("theme", Rect{in.x + 120, y, choiceW(names), gadH}, names, max(0, slices.Index(names, theme.Name)),
+		"The interface's colours (also in the View menu)", func(i int) { setTheme(names[i]) })
+	fb.text(col2, y+3, "Layout", cText)
+	layouts := []string{"Studio", "Focus"}
+	u.choice("uilayout", Rect{col2 + 70, y, choiceW(layouts), gadH}, layouts, map[bool]int{false: 1}[a.studio()],
+		"Studio: the tools on the left, a panel on the right. Focus: the page as wide as the window, the gadgets under it", func(i int) {
+			a.setUILayout([]string{"studio", "focus"}[i])
+		})
+	y += gadH + 8
+	fb.text(in.x, y+3, "Interface font", cText)
+	var fonts []string
+	cur := 0
+	for i, f := range uiFontChoices {
+		name := f.name
+		if f.id == "file" && prefs.UIFont == "file" {
+			name = filepath.Base(prefs.UIFontFile)
+		}
+		fonts = append(fonts, name)
+		if f.id == prefs.UIFont {
+			cur = i
+		}
+	}
+	u.choice("uifont", Rect{in.x + 120, y, choiceW(fonts), gadH}, fonts, cur,
+		"The font of the menus, gadgets and requesters (the art keeps its own)", func(i int) {
+			id := uiFontChoices[i].id
+			if id == "file" {
+				openUIFontRequester(d)
+				return
+			}
+			prefs.UIFont = id
+			applyUIFont()
+			savePrefs()
+		})
+	if prefs.UIFont != "topaz" {
+		fb.text(col2, y+3, "Size", cText)
+		var sizes []string
+		scur := 0
+		size := prefs.UIFontSize
+		if size == 0 {
+			size = defaultUIFontSize
+		}
+		for i, s := range uiFontSizes {
+			sizes = append(sizes, strconv.Itoa(s)+" pixels")
+			if s == size {
+				scur = i
+			}
+		}
+		u.choice("uifontsize", Rect{col2 + 70, y, choiceW(sizes), gadH}, sizes, scur, "The interface font's size", func(i int) {
+			prefs.UIFontSize = uiFontSizes[i]
+			applyUIFont()
+			savePrefs()
+		})
+	}
+	y += gadH + 8
+	fb.fill(Rect{in.x, y, in.w, 1}, cEdgeDk)
+	return y + 10
+}
+
+// openUIFontRequester asks for a .ttf or .otf to be the interface font; back is Settings.
+func openUIFontRequester(back Dialog) {
+	d := &FileReq{sel: -1, title: "Choose the interface font", note: "A TrueType or OpenType font: .ttf, .otf or .ttc", back: back}
+	d.listFirst(startDir(a.lastDir))
+	d.path.enter = d.enter
+	d.pick = func(p string) {
+		prefs.UIFont, prefs.UIFontFile = "file", p
+		applyUIFont()
+		savePrefs()
+		a.dialog = back
+	}
+	a.dialog = d
+	ui.focus = &d.path
 }

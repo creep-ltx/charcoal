@@ -18,6 +18,7 @@ type Theme struct {
 	On       uint32 // a gadget that is on
 	Accent   uint32 // the cursor, warnings, the current item
 	Surround uint32 // outside the page
+	Faint    uint32 // marks that are off: unlit bars, lines between groups
 }
 
 var themes = []Theme{
@@ -33,7 +34,56 @@ var themes = []Theme{
 		On:       0xFF34507A,
 		Accent:   0xFFFF8A00,
 		Surround: 0xFF141518,
+		Faint:    0xFF41454D,
 	},
+	{
+		Name:     "Light",
+		Panel:    0xFFE8E6E1,
+		Status:   0xFFDAD7D1,
+		Text:     0xFF35363B,
+		Hi:       0xFF101114,
+		Dim:      0xFF6E7076,
+		EdgeLt:   0xFFFFFFFF,
+		EdgeDk:   0xFFA8A49C,
+		On:       0xFFC3D3EC,
+		Accent:   0xFFB04A0A,
+		Surround: 0xFFC9C6C0,
+		Faint:    0xFFBDB9B1,
+	},
+	{
+		// Workbench 3, made calmer: its grey, black text, white and dark edges, its blue.
+		Name:     "Workbench",
+		Panel:    0xFFB2B6BE,
+		Status:   0xFF9CA1AA,
+		Text:     0xFF000000,
+		Hi:       0xFF14264A,
+		Dim:      0xFF474C55,
+		EdgeLt:   0xFFFFFFFF,
+		EdgeDk:   0xFF3B3F47,
+		On:       0xFF8EA8D2,
+		Accent:   0xFF9C3A00,
+		Surround: 0xFF56607A,
+		Faint:    0xFF858A94,
+	},
+}
+
+// themeNames lists the themes for the menus and Settings.
+func themeNames() []string {
+	var n []string
+	for _, t := range themes {
+		n = append(n, t.Name)
+	}
+	return n
+}
+
+// setTheme switches to the named theme and remembers it.
+func setTheme(name string) {
+	useTheme(name)
+	prefs.Theme = theme.Name
+	if prefs.Theme == themes[0].Name {
+		prefs.Theme = ""
+	}
+	savePrefs()
 }
 
 // The current theme's colours, read by all drawing code. useTheme sets them.
@@ -41,7 +91,7 @@ var (
 	cGrey, cDark, cText, cHi, cDim uint32
 	cEdgeLt, cEdgeDk               uint32
 	cBlue, cOrange                 uint32
-	cStartBack                     uint32
+	cStartBack, cFaint             uint32
 	theme                          Theme
 )
 
@@ -62,7 +112,7 @@ func useTheme(name string) {
 	cGrey, cDark, cText, cHi, cDim = t.Panel, t.Status, t.Text, t.Hi, t.Dim
 	cEdgeLt, cEdgeDk = t.EdgeLt, t.EdgeDk
 	cBlue, cOrange = t.On, t.Accent
-	cStartBack = t.Surround
+	cStartBack, cFaint = t.Surround, t.Faint
 }
 
 // ---------------------------------------------------------------- the interface text

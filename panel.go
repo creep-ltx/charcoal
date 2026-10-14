@@ -120,17 +120,23 @@ func (a *App) drawCharset(u *UI, x, y, cols int) Rect {
 // and returns the y under them.
 func (a *App) drawFkeys(u *UI, x, y int) int {
 	a.drawFsetSwitch(u, x, y)
-	return a.drawFkeyRow(u, x+54, y)
+	return a.drawFkeyRow(u, x+fsetSwitchW()+6, y)
 }
 
-// drawFsetSwitch draws the F-key set's number between its two arrows, 48 wide.
+// fsetSwitchW is the width of the F-key set switch: two arrows and the set's number.
+func fsetSwitchW() int { return 2*fsetArrowW() + max(12, textW("8")+4) }
+
+func fsetArrowW() int { return max(18, textW(">")+10) }
+
+// drawFsetSwitch draws the F-key set's number between its two arrows.
 func (a *App) drawFsetSwitch(u *UI, x, y int) {
-	if u.button(Rect{x, y, 18, smallH}, "<", false, "Previous F-key set ("+keyName("fkeys_previous")+")") != nil {
+	bw := fsetArrowW()
+	if u.button(Rect{x, y, bw, smallH}, "<", false, "Previous F-key set ("+keyName("fkeys_previous")+")") != nil {
 		a.setFset(a.fset - 1)
 	}
 	label := fmt.Sprintf("%d", a.fset+1)
-	u.fb.text(x+22, y+2, label, cText)
-	if u.button(Rect{x + 30, y, 18, smallH}, ">", false, "Next F-key set ("+keyName("fkeys_next")+")") != nil {
+	u.fb.text(x+bw+4, y+2, label, cText)
+	if u.button(Rect{x + fsetSwitchW() - bw, y, bw, smallH}, ">", false, "Next F-key set ("+keyName("fkeys_next")+")") != nil {
 		a.setFset(a.fset + 1)
 	}
 }

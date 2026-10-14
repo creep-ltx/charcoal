@@ -226,7 +226,7 @@ func (u *UI) drawPopup() {
 	for i, it := range p.items {
 		ir := p.row(i)
 		if it == "" {
-			f.fill(Rect{ir.x + 6, ir.y + ir.h/2, ir.w - 12, 1}, cEdgeLt)
+			f.fill(Rect{ir.x + 6, ir.y + ir.h/2, ir.w - 12, 1}, cFaint)
 			continue
 		}
 		col := uint32(cText)

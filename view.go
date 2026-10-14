@@ -659,14 +659,14 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 		if u.focus != fieldCols {
 			fieldCols.set(strconv.Itoa(a.doc.cols))
 		}
-		u.field(Rect{r.x + 16, r.y, r.w - 16, r.h}, fieldCols, "Page width in columns (Enter sets it)")
+		u.field(Rect{r.x + textW("W") + 8, r.y, r.w - textW("W") - 8, r.h}, fieldCols, "Page width in columns (Enter sets it)")
 	}
 	rh := fl.place(textW("H") + 8 + digitsW(7) + 8)
 	fb.text(rh.x, rh.y+3, "H", cText)
 	if u.focus != fieldRows {
 		fieldRows.set(strconv.Itoa(a.doc.rows))
 	}
-	u.field(Rect{rh.x + 16, rh.y, rh.w - 16, rh.h}, fieldRows, "Page height in rows (Enter sets it). Enter or Down past the last row adds one")
+	u.field(Rect{rh.x + textW("H") + 8, rh.y, rh.w - textW("H") - 8, rh.h}, fieldRows, "Page height in rows (Enter sets it). Enter or Down past the last row adds one")
 	var r Rect
 	if a.amiga() {
 		r = fl.place(checkW("8x8"))

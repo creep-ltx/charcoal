@@ -33,6 +33,9 @@ func init() {
 	arrange := func(label, l string) menuItem {
 		return menuItem{label: label, run: func() { a.setUILayout(l) }, tick: func() bool { return a.studio() == (l == "studio") }}
 	}
+	look := func(name string) menuItem {
+		return menuItem{label: name + " theme", run: func() { setTheme(name) }, tick: func() bool { return theme.Name == name }}
+	}
 	layout := func(label, l string) menuItem {
 		return menuItem{label: label, run: func() { a.setLayout(l) }, tick: func() bool { return a.layout == l }}
 	}
@@ -90,6 +93,10 @@ func init() {
 			layout("Top and bottom", "rows"),
 			arrange("Studio layout: tools left, a side panel", "studio"),
 			arrange("Focus layout: the page wide, gadgets under it", "focus"),
+			menuSep,
+			look("Dark"),
+			look("Light"),
+			look("Workbench"),
 			{label: "Next page", action: "next_page"},
 			{label: "Previous page", action: "previous_page"},
 			menuSep,
