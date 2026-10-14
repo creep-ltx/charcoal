@@ -33,8 +33,10 @@ against each platform's best editor. Each step says what it wins.
 - [x] Windows and Mac builds, one file each (2026-10-14): GitHub Actions builds and tests Linux, Windows and
   macOS (Charcoal.app, Apple Silicon + Intel) on every push; a v* tag makes the release page. Details in HANDOFF.md.
 - [ ] The first release (a tag), tried by a Windows and a Mac user.
-- A start screen: "New page for ..." with each machine's picture, recent files, an example to open.
-  Today a PC artist lands on an Amiga page and must know to press PC.
+- [x] A start screen (2026-10-14): "New page for" with a tile per machine (Amiga, PC, Atari 8-bit, Atari ST,
+  C64, PET, VIC-20, C128, ZX Spectrum, teletext) drawn in its own font and colours with its size, the last 10
+  files, Open, "Drop a file here". Typing, a tool or Esc starts on the last used type. Not done: an example
+  to open (no art of our own to ship yet).
 - A short manual with screenshots, and "coming from Moebius / Petmate / edit.tf" pages (their keys
   mapped to ours). A small website later.
 

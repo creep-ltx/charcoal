@@ -126,6 +126,7 @@ func main() {
 	if viewer == nil && a.dialog == nil {
 		offerAutosaves() // pages a CharEdit left unsaved when it stopped
 	}
+	a.start = startShownAtLaunch(len(os.Args) - 1)
 	if !a.hasC64 && !prefs.C64Asked && a.dialog == nil && viewer == nil {
 		openC64Req(nil) // ask once, on the first run
 	}
@@ -379,6 +380,7 @@ func textInput(s string) {
 	if a.dialog != nil || a.playing != nil || ui.popup != nil || shortcutMod(sdl.GetModState()) {
 		return
 	}
+	a.start = false // typing starts on a page of the last used type
 	for _, r := range s {
 		b := a.charToByte(r)
 		if b < 0 {
@@ -486,6 +488,9 @@ func (a *App) selectKey(k string) {
 func editorKey(k string, ctrl, shift, alt bool) {
 	if viewer != nil {
 		viewerKey(k, ctrl, shift)
+		return
+	}
+	if a.start && !ctrl && !alt && a.startKey(k, shift) {
 		return
 	}
 	if runKey(combo{modsOf(ctrl, alt, shift), k}) {

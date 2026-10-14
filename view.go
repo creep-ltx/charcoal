@@ -398,7 +398,8 @@ func (a *App) drawBar(u *UI) int {
 		if m == "tt" {
 			label = "TT"
 		}
-		if u.button(fl.place(buttonW(label)), label, a.mode == m, modeHint) != nil {
+		if u.button(fl.place(buttonW(label)), label, a.mode == m && !a.start, modeHint) != nil {
+			a.start = false
 			a.setMode(m)
 		}
 	}
@@ -430,6 +431,7 @@ func (a *App) drawBar(u *UI) int {
 			}
 		}
 		u.choice("machine", fl.place(choiceW(mNames)), mNames, mcur, "The Commodore machine: its character set, colours and screen width", func(i int) {
+			a.start = false
 			a.setMachine(machines[i].id)
 		})
 		var keep []int
@@ -492,6 +494,7 @@ func (a *App) drawBar(u *UI) int {
 			}
 		}
 		u.choice("stres", fl.place(choiceW(names)), names, cur, "The ST's resolution: its width, colours and font", func(i int) {
+			a.start = false
 			a.setSTRes(stResolutions[i].id)
 		})
 	case a.c64(): // the machine's width, not to be changed
@@ -641,6 +644,13 @@ func (a *App) contentSize() (int, int) {
 
 func (a *App) drawPage(u *UI, id string) {
 	fb, p := u.fb, a.page
+	if a.start && viewer == nil {
+		if a.untouched() {
+			a.drawStart(u, Rect{p.x, p.y, p.w + 18, p.h + 18})
+			return
+		}
+		a.start = false // something was put on the page or opened in it
+	}
 	z, H := a.zoom, a.cellH()
 	cw, ch := a.contentSize()
 	// Scrollbars.
@@ -861,7 +871,7 @@ func (a *App) pagePress(c *Click) {
 
 // pageMotion follows the mouse over the page: hover, and painting while a button is down.
 func (a *App) pageMotion(mx, my int) {
-	if a.playing != nil {
+	if a.playing != nil || a.start {
 		return
 	}
 	p, _ := a.cellAt(mx, my)
@@ -966,6 +976,7 @@ func (a *App) drawPane(u *UI, pane Rect) {
 			name, hint = "Sixel", "Sixels: left sets, right clears one of a cell's 2x3 graphics pixels (the row needs a graphics colour to its left)"
 		}
 		if u.button(r, name, a.tool == t.id, hint) != nil {
+			a.start = false
 			a.setTool(t.id)
 		}
 		i++

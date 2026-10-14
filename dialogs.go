@@ -670,7 +670,10 @@ func openHelp() { a.dialog = &HelpReq{} }
 
 // helpText is the help; its list of keys is made from the key table.
 func helpText() string {
-	return `MOUSE
+	return `START SCREEN
+Started without files, CharEdit shows a new page for each machine (Amiga, PC, Atari 8-bit, Atari ST, C64, PET, VIC-20, C128, ZX Spectrum, teletext), each in its own font and colours with its size, the last 10 files and Open. Click one, or arrows / Tab and Enter. Typing, a tool or Esc starts on a page of the last used type instead; dropping a file opens it. New pages (+, ` + keyName("new_page") + `) start there too; ` + keyName("start_screen") + ` brings it back. "Show this at start" off: CharEdit starts on an empty page of the last used type.
+
+MOUSE
 Draw: left paints the brush (character + colours), right erases, Shift+click draws a line from the last point.
 Colour: left sets the foreground, right the background (on a C64 page: the foreground only).
 Fill: left fills equal cells with the brush.

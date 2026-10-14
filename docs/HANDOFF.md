@@ -44,6 +44,18 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   page falls back to the mode's font).
 - `.bak` on saving over a file (`prefs.no_backup` switches it off; Settings). Recent files: `prefs.recent`.
 
+## Start screen (2026-10-14)
+
+- `start.go`: CharEdit started with no files (`startShownAtLaunch`) shows it in the page area of the empty
+  tab (`Tab.start`; drawn by `drawPage` while the tab is `untouched()`). Tiles (`startTiles`): each draws an
+  empty page of its type made by `makeTab` (the same the pick uses) with the machine's name through
+  `drawCell`, and its colours; PET/C128 follow the last machine (40 or 80), ST the last resolution. Picking
+  (`pickTile`) swaps the empty tab for that new page (an empty Spectrum page is not blank to `usedRows`, so
+  `setMode` would keep its size); ROMs / EmuTOS go through the download question first. Typing, a tool, a
+  page type gadget, F1-F10, Backspace/Delete or Esc let it go; Ctrl+T/N/+ show it in the new tab,
+  Ctrl+Shift+N (`start_screen`) brings it back. `prefs.no_start_screen` = the "Show this at start" box off.
+- Screenshot for the README: `docs/screenshots/start.png` (1320x900, recent files faked with HOME=/tmp/fh).
+
 ## Testing
 
 - `go test ./...` (unit tests; `testApp` (editor_fixes_test.go) gives temp XDG_CONFIG_HOME and XDG_DATA_HOME and
@@ -106,4 +118,4 @@ The goal and the plan: docs/roadmap.md (the go-to editor for text artists on eve
 - ~/Projects/Knowledge/bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
 - ~/Projects/Knowledge/go/sdl2-desktop-gui.md: the GUI approach and headless testing.
 
-Last updated 2026-10-13 (keys, block jobs, autosave).
+Last updated 2026-10-14 (start screen).

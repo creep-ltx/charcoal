@@ -155,6 +155,7 @@ type Tab struct {
 	stres               string      // the resolution of an Atari ST page
 	autoID              string      // its autosave's name, "" when it has none
 	autoGen             int         // the generation the autosave holds
+	start               bool        // the start screen is shown instead of the (empty) page
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -196,6 +197,9 @@ type App struct {
 	defSTRes      string
 	ch8Default    bool
 	smearDefault  bool
+	startSel      int // the start screen's chosen item (keyboard)
+	startCols     int // tiles in a row of the start screen, as last drawn
+	startCol      int // the column Up goes back to from the recent files
 }
 
 var a *App
@@ -774,6 +778,7 @@ func (a *App) toolKey(t string) {
 		a.msg("The Half tool is for PC pages, the Sixel tool for teletext pages")
 		return
 	}
+	a.start = false // a tool means drawing: on the page of the last used type
 	a.setTool(t)
 	for _, tl := range tools {
 		if tl.id == t {
@@ -1689,7 +1694,16 @@ func newAtariDoc() *Doc {
 
 // ---------------------------------------------------------------- tabs
 
+// newTab adds an empty page of a type to the tabs.
 func (a *App) newTab(mode string) *Tab {
+	t := a.makeTab(mode)
+	a.tabs = append(a.tabs, t)
+	return t
+}
+
+// makeTab is an empty page of a type, with the fonts, palettes and machine
+// new pages start with.
+func (a *App) makeTab(mode string) *Tab {
 	t := &Tab{mode: mode, zoom: a.defZoom, fontFor: map[string]string{}, paletteFor: map[string]string{},
 		info: Info{writeSauce: true}, saveFmt: "ansi", name: "untitled.ans"}
 	for k, v := range a.defFont {
@@ -1726,7 +1740,6 @@ func (a *App) newTab(mode string) *Tab {
 		t.doc = newAtariDoc()
 		t.saveFmt, t.name = "ata", "untitled.ata"
 	}
-	a.tabs = append(a.tabs, t)
 	return t
 }
 
@@ -1779,8 +1792,10 @@ func (a *App) cycleTab(n int) {
 	a.focusTab(a.tabs[((i+n)%len(a.tabs)+len(a.tabs))%len(a.tabs)])
 }
 
+// addTab opens a new tab: the start screen when it is on, else an empty page of the type being worked on.
 func (a *App) addTab() {
 	a.focusTab(a.newTab(a.mode))
+	a.start, a.startSel = !prefs.NoStart, 0
 }
 
 func (a *App) closeTab(t *Tab) {
@@ -1879,9 +1894,10 @@ func (a *App) openPath(path, as string) {
 		}
 	}
 	a.endPlay()
-	if !a.pristine() {
+	if !a.pristine() && !(a.start && a.untouched()) { // the start screen's tab takes the file too
 		a.focusTab(a.newTab(a.mode))
 	}
+	a.start = false
 	a.loadBytes(b, filepath.Base(path), path, as)
 	a.lastDir = filepath.Dir(path)
 	addRecent(path)

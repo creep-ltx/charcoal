@@ -17,6 +17,10 @@ and file formats.
 | ![Two pages side by side](docs/screenshots/split.png) | ![CharView](docs/screenshots/viewer.png) |
 | <sub>Tabs, and two pages side by side (Ctrl+L).</sub> | <sub>CharView, the viewer: *Jeroen Tel* by The Knight / Fuel (2019), fuel30 on 16colo.rs.</sub> |
 
+![The start screen](docs/screenshots/start.png)
+
+<sub>The start screen: a new page for each machine, drawn in its own font and colours, and the recent files.</sub>
+
 The art belongs to its artists and is shown here with their names; if you are one of them and want your
 piece taken down, open an issue.
 
