@@ -26,6 +26,20 @@ func closeDialog() {
 }
 
 // centre gives a w x h box in the middle of the window, shrunk to fit.
+// colAfter is where a gadget goes after its label(s): at least min, else past the widest label.
+func colAfter(min int, labels ...string) int {
+	w := min
+	for _, l := range labels {
+		w = max(w, textW(l)+10)
+	}
+	return w
+}
+
+// settingsCol is where Settings' gadgets start after their labels.
+func settingsCol() int {
+	return colAfter(120, "Window size", "Keys like", "My BBS", "Theme", "Interface font")
+}
+
 func centre(w, h int) Rect {
 	if lineH > 16 { // the sizes are for 16-pixel lines: a bigger interface font gets more room
 		w, h = w*lineH/16, h*lineH/16
@@ -460,7 +474,7 @@ func (d *FileReq) draw(u *UI) {
 	fb.clip = old
 	y := listR.y + listR.h + 8
 	fb.text(in.x, y+3, "File", cText)
-	u.field(Rect{in.x + 48, y, in.w - 48, gadH}, &d.path, "Type a path; Enter opens it (a drawer lists it)")
+	u.field(Rect{in.x + colAfter(48, "File"), y, in.w - colAfter(48, "File"), gadH}, &d.path, "Type a path; Enter opens it (a drawer lists it)")
 	y += gadH + 8
 	if d.pick != nil {
 		fb.text(in.x, y+3, d.note, cText)
@@ -470,14 +484,14 @@ func (d *FileReq) draw(u *UI) {
 		for _, f := range a.modeFormats() {
 			names = append(names, f.name)
 		}
-		u.choice("fmt", Rect{in.x + 64, y, choiceW(names), gadH}, names, d.choice, "", d.setFormat)
+		u.choice("fmt", Rect{in.x + colAfter(64, "Format"), y, choiceW(names), gadH}, names, d.choice, "", d.setFormat)
 	} else {
 		fb.text(in.x, y+3, "Open as", cText)
 		names := openAsNames
 		if !a.hasC64 {
 			names = names[:7]
 		}
-		u.choice("as", Rect{in.x + 72, y, choiceW(names), gadH}, names, d.choice, "", func(i int) { d.choice = i })
+		u.choice("as", Rect{in.x + colAfter(72, "Open as"), y, choiceW(names), gadH}, names, d.choice, "", func(i int) { d.choice = i })
 		bx := in.x + 72 + choiceW(names) + 16
 		if len(prefs.Recent) > 0 {
 			r := Rect{bx, y, buttonW("Recent files"), gadH}
@@ -1031,7 +1045,7 @@ func (d *SettingsReq) draw(u *UI) {
 	y = d.drawAppearance(u, in, y)
 	fb.text(in.x, y+3, "Window size", cText)
 	sizes := []string{"1x (normal)", "2x (big screens)", "3x", "4x"} // as many as main allows (maxUIScale)
-	u.choice("uiscale", Rect{in.x + 120, y, choiceW(sizes), gadH}, sizes, scale-1, "", func(i int) {
+	u.choice("uiscale", Rect{in.x + settingsCol(), y, choiceW(sizes), gadH}, sizes, scale-1, "", func(i int) {
 		scale = i + 1
 		savePrefs()
 	})
@@ -1052,7 +1066,7 @@ func (d *SettingsReq) draw(u *UI) {
 			cur = i + 1
 		}
 	}
-	u.choice("mybbs", Rect{in.x + 120, y, choiceW(boards), gadH}, boards, cur,
+	u.choice("mybbs", Rect{in.x + settingsCol(), y, choiceW(boards), gadH}, boards, cur,
 		"Animated files you save (draw orders, frame effects, frames) get this board's pause codes, so they play at their pace over telnet too. None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text. Animate can choose for one page.", func(i int) {
 			prefs.MyBBS = ""
 			if i > 0 {
@@ -1168,11 +1182,11 @@ func (d *SettingsReq) drawAppearance(u *UI, in Rect, y int) int {
 	col2 := in.x + in.w/2
 	fb.text(in.x, y+3, "Theme", cText)
 	names := themeNames()
-	u.choice("theme", Rect{in.x + 120, y, choiceW(names), gadH}, names, max(0, slices.Index(names, theme.Name)),
+	u.choice("theme", Rect{in.x + settingsCol(), y, choiceW(names), gadH}, names, max(0, slices.Index(names, theme.Name)),
 		"The interface's colours (also in the View menu)", func(i int) { setTheme(names[i]) })
 	fb.text(col2, y+3, "Layout", cText)
 	layouts := []string{"Studio", "Focus"}
-	u.choice("uilayout", Rect{col2 + 70, y, choiceW(layouts), gadH}, layouts, map[bool]int{false: 1}[a.studio()],
+	u.choice("uilayout", Rect{col2 + colAfter(70, "Layout", "Size"), y, choiceW(layouts), gadH}, layouts, map[bool]int{false: 1}[a.studio()],
 		"Studio: the tools on the left, a panel on the right. Focus: the page as wide as the window, the gadgets under it", func(i int) {
 			a.setUILayout([]string{"studio", "focus"}[i])
 		})
@@ -1190,7 +1204,7 @@ func (d *SettingsReq) drawAppearance(u *UI, in Rect, y int) int {
 			cur = i
 		}
 	}
-	u.choice("uifont", Rect{in.x + 120, y, choiceW(fonts), gadH}, fonts, cur,
+	u.choice("uifont", Rect{in.x + settingsCol(), y, choiceW(fonts), gadH}, fonts, cur,
 		"The font of the menus, gadgets and requesters (the art keeps its own)", func(i int) {
 			id := uiFontChoices[i].id
 			if id == "file" {
@@ -1215,7 +1229,7 @@ func (d *SettingsReq) drawAppearance(u *UI, in Rect, y int) int {
 				scur = i
 			}
 		}
-		u.choice("uifontsize", Rect{col2 + 70, y, choiceW(sizes), gadH}, sizes, scur, "The interface font's size", func(i int) {
+		u.choice("uifontsize", Rect{col2 + colAfter(70, "Layout", "Size"), y, choiceW(sizes), gadH}, sizes, scur, "The interface font's size", func(i int) {
 			prefs.UIFontSize = uiFontSizes[i]
 			applyUIFont()
 			savePrefs()

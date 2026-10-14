@@ -286,7 +286,7 @@ func (d *AnimReq) draw(u *UI) {
 	// The patterns: TheDraw's, and Charcoal's own beside them, each with its
 	// weight on this page at this level when it is the saved file.
 	ly := in.y
-	listW := 150
+	listW := max(150, textW("Checkerboard")+40) // the longest name and its weight bars
 	lx := in.x
 	fb.text(lx, ly, "TheDraw's", cHi)
 	ly += lineH + 4
@@ -317,7 +317,7 @@ func (d *AnimReq) draw(u *UI) {
 	}
 	// Under the lists: the weights' legend and what the chosen one costs.
 	cy := in.y + (nPatterns-nTheDraw+1)*(lineH+4) + 10
-	d.drawCost(u, Rect{in.x, cy, 2*listW + 8, in.y + in.h - gadH - 12 - cy}, file)
+	d.drawCost(u, Rect{in.x, cy, 2*listW + 8, in.y + in.h - cy}, file) // the buttons are on the right: down to the bottom
 	// The preview, and what the pattern does.
 	px := in.x + 2*listW + 24
 	pw := in.x + in.w - px
@@ -384,7 +384,7 @@ func (d *AnimReq) draw(u *UI) {
 		if a.pageStreamFormat() == "" {
 			why = "frames (a " + modeNames[a.mode] + " page is no stream to draw in order)"
 		}
-		fb.text(px+48, y+3, why, cHi)
+		fb.text(px+colAfter(48, "Make"), y+3, why, cHi)
 	} else {
 		ext := map[string]string{"ansi": ".ans", "seq": ".seq", "ata": ".ata", "vt52": ".vt"}[a.pageStreamFormat()]
 		items := []string{"the draw order of the saved " + ext, "frames"}
@@ -392,7 +392,7 @@ func (d *AnimReq) draw(u *UI) {
 			items[0] = "the saved " + ext + ", frame by frame"
 		}
 		cur := map[bool]int{true: 1}[d.frames]
-		u.choice("animresult", Rect{px + 48, y, choiceW(items), gadH}, items, cur,
+		u.choice("animresult", Rect{px + colAfter(48, "Make"), y, choiceW(items), gadH}, items, cur,
 			"Draw order: saving as "+ext+" draws the picture in this order (any terminal plays it); frames: the strip, Play, GIF and APNG",
 			func(i int) { d.frames = i == 1 })
 	}

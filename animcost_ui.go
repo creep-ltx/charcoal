@@ -102,6 +102,9 @@ func warnSign(fb *FB, x, y int) {
 // drawCost shows the legend of the weights and the chosen template's cost in r.
 func (d *AnimReq) drawCost(u *UI, r Rect, file bool) {
 	fb := u.fb
+	old := fb.clip // a big interface font: what does not fit is cut, not drawn over the window's edge
+	fb.clip = r.and(old)
+	defer func() { fb.clip = old }()
 	x, y := r.x, r.y
 	if !file {
 		for _, l := range wrap("Frames: the strip, Play, GIF and APNG. The saved file's cost shows when Make is the saved file.", r.w) {
@@ -124,6 +127,9 @@ func (d *AnimReq) drawCost(u *UI, r Rect, file bool) {
 	fb.text(r.x, y, "The saved file", cHi)
 	y += lineH + 2
 	row := func(l, v string, col uint32) {
+		if y+lineH > r.y+r.h { // no room for the whole row: none of it
+			return
+		}
 		fb.text(r.x, y, l, col)
 		fb.text(r.x+digitsW(12), y, v, col)
 		y += lineH

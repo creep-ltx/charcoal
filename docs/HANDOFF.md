@@ -420,6 +420,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Requesters (step 5, 2026-10-14): explanations go in the gadget's hint, not in paragraphs (the BBS
   "safe choice" text in Animate and Settings); secondary notes in cDim. While a requester is open the hint
   shows as a tooltip by the mouse (`drawTooltip`, main.go): a big requester covers the status line.
+- Rough edges fixed (2026-10-14): the Focus strip grows when the tool options wrap (`paneNeed`; `pass` lays the
+  window out a second time at once when it changed); the tool rail has no gap where the Half tool is missing;
+  gadgets after a label start past the label's measured width (`colAfter`, `settingsCol`), Animate's pattern
+  list is as wide as "Checkerboard" needs, and its cost list is clipped to its column (whole rows only).
+  Checked at 20 pixels on Animate, Animate a folder, Open, Info, the font editor and the menus.
 - README screenshots in the new look: hero, start, amiga (Workbench theme, Animate menu), light, focus. Still in
   the old look: c64, teletext, atari, split, viewer, frames, reference, fonteditor, animate-cost, animate-folder,
   animate.gif. Headless recipe with the prefs written first: an absolute XDG_CONFIG_HOME with

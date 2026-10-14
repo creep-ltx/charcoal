@@ -1037,7 +1037,7 @@ func (a *App) pageRelease() {
 // ---------------------------------------------------------------- the bottom pane
 
 func (a *App) paneHeight() int {
-	return max(8*a.cellH(), 5*(smallH+4)) + 14
+	return max(max(8*a.cellH(), 5*(smallH+4))+14, paneNeed)
 }
 
 var smallH = lineH + 4
@@ -1084,9 +1084,13 @@ func (a *App) drawPane(u *UI, pane Rect) {
 	a.drawColours(u, x, cy, 16)
 	by := cy + 26
 	bx := a.drawBrush(u, x, by)
-	a.drawBlockOrToolOptions(u, bx, by+smallH+6, pane.x+pane.w)
+	end := a.drawBlockOrToolOptions(u, bx, by+smallH+6, pane.x+pane.w-8)
+	paneNeed = end + 7 - pane.y // a second row of options makes the strip taller from the next pass
 	fb.clip = old
 }
+
+// paneNeed is the height the strip under the page last needed.
+var paneNeed int
 
 // pageGlyph draws a character of the page's font in the interface's text colour.
 func (a *App) pageGlyph(fb *FB, x, y, c int) {

@@ -201,7 +201,7 @@ func drawKeysLike(u *UI, in Rect, y int) int {
 			cur = i
 		}
 	}
-	u.choice("keyslike", Rect{in.x + 120, y, choiceW(names), gadH}, names, cur,
+	u.choice("keyslike", Rect{in.x + settingsCol(), y, choiceW(names), gadH}, names, cur,
 		"Another editor's keys for CharEdit's actions (your own lines in the keys file still win; the file before is kept as keys.bak). Help (F12) lists the keys in use", func(i int) {
 			if err := setKeyPreset(keyPresets[i].id); err != nil {
 				a.msg("Could not write the keys file: " + err.Error())

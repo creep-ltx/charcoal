@@ -26,7 +26,7 @@ func (a *App) drawTools(u *UI, x, y, w, cols int) int {
 		}
 		i++
 	}
-	sy := y + (len(tools)+cols-1)/cols*(smallH+4)
+	sy := y + (i+cols-1)/cols*(smallH+4) // under the tools this page has
 	sx := x
 	right := x + cols*(w+4) - 4
 	toggle := func(label string, on bool, hint string) bool {

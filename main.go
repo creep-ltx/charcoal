@@ -247,7 +247,12 @@ func pass() {
 	ui.fb.resize(int(ow)/pxScale, int(oh)/pxScale)
 	ui.hint, ui.wheelTaken = "", false
 	ui.inert = a.dialog != nil
+	need := paneNeed
 	a.drawWindow(ui)
+	if paneNeed != need { // the strip under the page wants another height: lay it out again at once
+		ui.hint = ""
+		a.drawWindow(ui)
+	}
 	ui.inert = false
 	if a.dialog != nil {
 		if _, fe := a.dialog.(*FontEd); !fe { // the font editor leaves the page bright: it shows the font live
