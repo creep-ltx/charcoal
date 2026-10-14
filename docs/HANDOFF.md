@@ -394,8 +394,17 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   or Up/Down, Return picks, Left/Right open the next menu, Esc closes. The mouse switches menus only when it
   moves onto another title (`p.mouse`); a click on the titles goes through (`ui.closedMenu`: the open one's
   title closes it). Drawn above the gadget bar (`drawBar(u, top)`), hidden with the gadgets (Ctrl+H).
-  Next: the Studio layout (drop the gadget bar's duplicates of the menus), then Light/Workbench themes and a
-  system font (golang.org/x/image's opentype, already a dependency).
+- Layouts (step 3, 2026-10-14): `layout.go`, `panel.go`. Studio (default, `prefs.UILayout` ""): menu bar, one
+  toolbar row (`drawBar`: New Open Save Save-as, Undo Redo, zoom Grid Ref pages Sync, Animate... speed Play), tabs,
+  then a tool rail (`drawRail`), the page, and a side panel (`drawPanel`, `panelW`, scrolled by the wheel,
+  `panelScroll`): Page (`drawPageGadgets(u, fl, compact)`, labelled rows), Colours (8 to a row) and the brush,
+  Characters (F-key set switch in the heading, 32 or 16 columns as the font's width allows), the tool's options or
+  the block's buttons (wrapping, `drawToolOptions(u, x, y, right)`). Focus (`"focus"`): the old arrangement, the
+  page gadgets in the toolbar and the drawing gadgets under the page (`drawPane`). Both draw the same pieces
+  (`drawTools`, `drawCharset(cols)`, `drawFsetSwitch`, `drawFkeyRow`, `drawColours(perRow)`, `drawBrush`,
+  `drawBlockOrToolOptions`). View > "Studio layout" / "Focus layout" switches. `u.hover`/`u.take` ignore what
+  is outside `fb.clip`, so gadgets scrolled out of the panel take no clicks. Info, Settings and ? left the
+  toolbar for the menus. The status line shows the file's name, the title bar its folder.
 - Sources: 16colo.rs packs and tags, asciiarena.se (sitemap; files at /collections/<name>/<file>),
   ~/Amiga/BBS/BBS Style (412 files), NAS /mnt/nas/home/Unsorted/Junk/Latex/Petscii* (with the PETSCII editor's
   own PNGs: rendering is pixel-identical). **Not csdb.dk and not zxart.ee files: their robots.txt forbid it.**

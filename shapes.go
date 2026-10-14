@@ -505,20 +505,26 @@ func (a *App) setPaintOnly(what string) {
 
 // ---------------------------------------------------------------- the options under the brush
 
-// drawToolOptions draws the options of the tool in use in one row at (x, y).
-func (a *App) drawToolOptions(u *UI, x, y int) {
+// drawToolOptions draws the options of the tool in use from (x, y), in rows
+// that end before right, and returns the y under them.
+func (a *App) drawToolOptions(u *UI, x, y, right int) int {
 	if a.tool != "draw" && a.tool != "shape" && a.tool != "colour" && a.tool != "half" {
-		return
+		return y
+	}
+	x0 := x
+	place := func(w int) Rect {
+		if x > x0 && x+w > right {
+			x, y = x0, y+smallH+4
+		}
+		r := Rect{x, y, w, smallH}
+		x += w + 4
+		return r
 	}
 	toggle := func(label string, on bool, hint string) bool {
-		r := Rect{x, y, buttonW(label), smallH}
-		x += r.w + 4
-		return u.button(r, label, on, hint) != nil
+		return u.button(place(buttonW(label)), label, on, hint) != nil
 	}
 	choice := func(id string, items []string, cur int, hint string, pick func(int)) {
-		r := Rect{x, y, choiceW(items), smallH}
-		x += r.w + 4
-		u.choice(id, r, items, cur, hint, pick)
+		u.choice(id, place(choiceW(items)), items, cur, hint, pick)
 	}
 	if a.tool == "shape" {
 		choice("shape", shapeNames, a.shape, "The shape: line, box or ellipse (drag on the page; "+keyName("shape_line")+", "+keyName("shape_box")+", "+keyName("shape_ellipse")+")", func(i int) { a.shape = i })
@@ -543,6 +549,7 @@ func (a *App) drawToolOptions(u *UI, x, y int) {
 		}
 	}
 	choice("mirror", mirrorNames, a.mirror, "Symmetry: what you draw is mirrored around the page's centre ("+keyName("mirror_left_right")+", "+keyName("mirror_top_bottom")+")", func(i int) { a.mirror = i })
+	return y + smallH
 }
 
 // halfSym paints a half block (Half tool) and its mirror images.

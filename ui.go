@@ -27,11 +27,12 @@ type UI struct {
 	closedMenu string // the menu this pass's click closed: its title does not open it again
 }
 
-func (u *UI) hover(r Rect) bool { return !u.inert && r.has(u.mx, u.my) }
+// hover and take see only what is inside the clip: a gadget scrolled out of a panel takes nothing.
+func (u *UI) hover(r Rect) bool { return !u.inert && r.has(u.mx, u.my) && u.fb.clip.has(u.mx, u.my) }
 
 // take returns the pending click if it falls in r, and consumes it.
 func (u *UI) take(r Rect) *Click {
-	if u.inert || u.click == nil || !r.has(u.click.x, u.click.y) {
+	if u.inert || u.click == nil || !r.has(u.click.x, u.click.y) || !u.fb.clip.has(u.click.x, u.click.y) {
 		return nil
 	}
 	c := u.click

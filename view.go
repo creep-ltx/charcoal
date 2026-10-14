@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -212,6 +213,11 @@ func (a *App) drawWindow(u *UI) {
 
 	// The status line and the pane, from the bottom up.
 	status := Rect{0, H - lineH - 6, W, lineH + 6}
+	if a.studio() && !a.bare {
+		a.drawStudio(u, Rect{0, top, W, status.y - top})
+		a.drawStatus(u, status)
+		return
+	}
 	paneH := a.paneHeight()
 	if a.bare {
 		paneH = 0
@@ -383,7 +389,7 @@ func (a *App) drawTabs(u *UI, top int) int {
 	return top + 1
 }
 
-// drawBar draws the gadget bar and returns where the page starts.
+// drawBar draws the toolbar (and in the Focus layout the page's gadgets) and returns where the page starts.
 func (a *App) drawBar(u *UI, top int) int {
 	fb := u.fb
 	W := fb.w
@@ -401,21 +407,124 @@ func (a *App) drawBar(u *UI, top int) int {
 		a.save(true)
 	}
 	fl.gap()
-	modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti."
-	for _, m := range []string{"amiga", "pc", "atari", "st", "c64", "zx", "tt"} {
-		label := modeNames[m]
-		if m == "st" {
-			label = "ST"
+	if u.button(fl.place(buttonW("Undo")), "Undo", false, "Undo ("+keyName("undo")+")") != nil {
+		a.doUndo()
+	}
+	if u.button(fl.place(buttonW("Redo")), "Redo", false, "Redo ("+keyName("redo")+")") != nil {
+		a.doRedo()
+	}
+	fl.gap()
+	zooms := []string{"1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "Fit"}
+	u.choice("zoom", fl.place(choiceW(zooms)), zooms, a.zoom-1, "Zoom (Ctrl+wheel, "+keyName("zoom_in")+" / "+keyName("zoom_out")+"; "+keyName("fit_width")+" fits the width)", func(i int) {
+		if i == 8 {
+			a.fitZoom()
+		} else {
+			a.setZoom(i + 1)
 		}
-		if m == "zx" {
-			label = "ZX"
+	})
+	r := fl.place(checkW("Grid"))
+	if v, _ := u.check(r.x, r.y, "Grid", a.grid, "Lines between the cells; brighter every 10 columns and every 25 rows ("+keyName("grid")+")"); v != a.grid {
+		a.grid = v
+		savePrefs()
+	}
+	a.refGadget(u, fl.place(buttonW("Ref")))
+	layouts := []string{"One page", "Side by side", "Top / bottom"}
+	ids := []string{"one", "cols", "rows"}
+	lcur := 0
+	for i, id := range ids {
+		if id == a.layout {
+			lcur = i
 		}
-		if m == "tt" {
-			label = "TT"
+	}
+	u.choice("layout", fl.place(choiceW(layouts)), layouts, lcur, "Show one page, or two pages side by side or one over the other ("+keyName("layout")+")", func(i int) {
+		a.setLayout(ids[i])
+	})
+	if a.layout != "one" {
+		r = fl.place(checkW("Sync"))
+		a.syncScroll, _ = u.check(r.x, r.y, "Sync", a.syncScroll, "Scroll both pages together")
+	}
+	if !a.studio() {
+		a.drawPageGadgets(u, fl, false)
+	}
+	fl.gap()
+	if u.button(fl.place(buttonW("Animate...")), "Animate...", false, "Animate: TheDraw's scan patterns and Charcoal's effects as the saved file's draw order or as frames ("+keyName("animate")+")") != nil {
+		openAnimate()
+	}
+	var baudNames []string
+	bcur := 2
+	for i, b := range bauds {
+		baudNames = append(baudNames, speedLabel(b))
+		if b == a.baud {
+			bcur = i
 		}
-		if u.button(fl.place(buttonW(label)), label, a.mode == m && !a.start, modeHint) != nil {
+	}
+	u.choice("baud", fl.place(choiceW(baudNames)), baudNames, bcur, "Play speed: a caller's modem (bits per second), or telnet (only a board's pauses)", func(i int) {
+		a.baud = bauds[i]
+		savePrefs()
+	})
+	playLabel := "Play"
+	if a.playing != nil {
+		playLabel = "Stop"
+	}
+	if u.button(fl.place(buttonW("Play")), playLabel, a.playing != nil, "Play the file as if it came over a modem (Esc stops)") != nil {
+		a.play()
+	}
+	top = fl.y + gadH + 4
+	fb.fill(Rect{0, top, W, 1}, cEdgeDk)
+	return top + 1
+}
+
+// drawPageGadgets places the page's gadgets with fl: its machine, font,
+// palette, size and look. compact (the side panel) lists the machines in one gadget.
+func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
+	fb := u.fb
+	// In the panel each list is a row of its own with its name before it.
+	labelW := textW("Resolution") + 10
+	row := func(label string, w int) Rect {
+		if !compact {
+			return fl.place(w)
+		}
+		if fl.x > fl.x0 {
+			fl.x, fl.y = fl.x0, fl.y+gadH+4
+		}
+		fb.text(fl.x0, fl.y+3, label, cText)
+		r := Rect{fl.x0 + labelW, fl.y, fl.right - fl.x0 - labelW, gadH}
+		fl.x = fl.right + 1 // what follows starts a new row
+		return r
+	}
+	if !compact {
+		fl.gap()
+	}
+	if compact { // the side panel: the machine in a list
+		var names []string
+		cur := 0
+		for i, m := range modeOrder {
+			names = append(names, modeNames[m])
+			if a.mode == m && !a.start {
+				cur = i
+			}
+		}
+		u.choice("mode", row("Machine", choiceW(names)), names, cur, "The machine the page is for: its characters, colours, fonts and file format", func(i int) {
 			a.start = false
-			a.setMode(m)
+			a.setMode(modeOrder[i])
+		})
+	} else {
+		modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti."
+		for _, m := range []string{"amiga", "pc", "atari", "st", "c64", "zx", "tt"} {
+			label := modeNames[m]
+			if m == "st" {
+				label = "ST"
+			}
+			if m == "zx" {
+				label = "ZX"
+			}
+			if m == "tt" {
+				label = "TT"
+			}
+			if u.button(fl.place(buttonW(label)), label, a.mode == m && !a.start, modeHint) != nil {
+				a.start = false
+				a.setMode(m)
+			}
 		}
 	}
 	var fontNames, fontIDs []string
@@ -450,7 +559,7 @@ func (a *App) drawBar(u *UI, top int) int {
 				mcur = i
 			}
 		}
-		u.choice("machine", fl.place(choiceW(mNames)), mNames, mcur, "The Commodore machine: its character set, colours and screen width", func(i int) {
+		u.choice("machine", row("Model", choiceW(mNames)), mNames, mcur, "The Commodore machine: its character set, colours and screen width", func(i int) {
 			a.start = false
 			a.setMachine(machines[i].id)
 		})
@@ -475,7 +584,7 @@ func (a *App) drawBar(u *UI, top int) int {
 			fontNames = append(fontNames, "Load a font...", "Edit the font...")
 			fontIDs = append(fontIDs, "+load", "+edit")
 		}
-		u.choice("font", fl.place(choiceW(fontNames)), fontNames, cur, "Font (on a PETSCII page: upper case + graphics, or lower + upper case); load one from a file, or edit it", func(i int) {
+		u.choice("font", row("Font", choiceW(fontNames)), fontNames, cur, "Font (on a PETSCII page: upper case + graphics, or lower + upper case); load one from a file, or edit it", func(i int) {
 			switch fontIDs[i] {
 			case "+load":
 				openFontRequester()
@@ -501,12 +610,17 @@ func (a *App) drawBar(u *UI, top int) int {
 			pcur = i
 		}
 	}
-	u.choice("palette", fl.place(choiceW(palNames)), palNames, pcur, "Palette (Shift+click a colour below to change it)", func(i int) {
+	u.choice("palette", row("Palette", choiceW(palNames)), palNames, pcur, "Palette (Shift+click a colour below to change it)", func(i int) {
 		a.paletteFor[a.mode] = palIDs[i]
 		a.setPalette()
 		savePrefs()
 	})
-	fl.gap()
+	if compact {
+		row("Size", 0)
+		fl.x = fl.x0 + labelW
+	} else {
+		fl.gap()
+	}
 	switch {
 	case a.tt():
 		r := fl.place(textW("40 x 25") + 8)
@@ -525,7 +639,7 @@ func (a *App) drawBar(u *UI, top int) int {
 				cur = i
 			}
 		}
-		u.choice("stres", fl.place(choiceW(names)), names, cur, "The ST's resolution: its width, colours and font", func(i int) {
+		u.choice("stres", row("Resolution", choiceW(names)), names, cur, "The ST's resolution: its width, colours and font", func(i int) {
 			a.start = false
 			a.setSTRes(stResolutions[i].id)
 		})
@@ -536,7 +650,7 @@ func (a *App) drawBar(u *UI, top int) int {
 		u.setHint(r, "The page is as wide as the machine's screen")
 	case a.atari(): // the screen editor's 38 or a terminal's 40
 		widths := []string{"38 columns", "40 columns"}
-		u.choice("atariwidth", fl.place(choiceW(widths)), widths, map[bool]int{true: 1}[a.doc.cols == 40], "38: text made in the Atari's screen editor (it keeps a margin of 2); 40: terminal art", func(i int) {
+		u.choice("atariwidth", row("Width", choiceW(widths)), widths, map[bool]int{true: 1}[a.doc.cols == 40], "38: text made in the Atari's screen editor (it keeps a margin of 2); 40: terminal art", func(i int) {
 			a.setCols([]int{38, 40}[i])
 		})
 	default:
@@ -553,35 +667,7 @@ func (a *App) drawBar(u *UI, top int) int {
 		fieldRows.set(strconv.Itoa(a.doc.rows))
 	}
 	u.field(Rect{rh.x + 16, rh.y, rh.w - 16, rh.h}, fieldRows, "Page height in rows (Enter sets it). Enter or Down past the last row adds one")
-	zooms := []string{"1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "Fit"}
-	u.choice("zoom", fl.place(choiceW(zooms)), zooms, a.zoom-1, "Zoom (Ctrl+wheel, "+keyName("zoom_in")+" / "+keyName("zoom_out")+"; "+keyName("fit_width")+" fits the width)", func(i int) {
-		if i == 8 {
-			a.fitZoom()
-		} else {
-			a.setZoom(i + 1)
-		}
-	})
-	r := fl.place(checkW("Grid"))
-	if v, _ := u.check(r.x, r.y, "Grid", a.grid, "Lines between the cells; brighter every 10 columns and every 25 rows ("+keyName("grid")+")"); v != a.grid {
-		a.grid = v
-		savePrefs()
-	}
-	a.refGadget(u, fl.place(buttonW("Ref")))
-	layouts := []string{"One page", "Side by side", "Top / bottom"}
-	ids := []string{"one", "cols", "rows"}
-	lcur := 0
-	for i, id := range ids {
-		if id == a.layout {
-			lcur = i
-		}
-	}
-	u.choice("layout", fl.place(choiceW(layouts)), layouts, lcur, "Show one page, or two pages side by side or one over the other ("+keyName("layout")+")", func(i int) {
-		a.setLayout(ids[i])
-	})
-	if a.layout != "one" {
-		r = fl.place(checkW("Sync"))
-		a.syncScroll, _ = u.check(r.x, r.y, "Sync", a.syncScroll, "Scroll both pages together")
-	}
+	var r Rect
 	if a.amiga() {
 		r = fl.place(checkW("8x8"))
 		if v, _ := u.check(r.x, r.y, "8x8", a.ch8, "Amiga fonts at 8x8 (no line doubling)"); v != a.ch8 {
@@ -600,39 +686,10 @@ func (a *App) drawBar(u *UI, top int) int {
 			savePrefs()
 		}
 	}
-	fl.gap()
-	var baudNames []string
-	bcur := 2
-	for i, b := range bauds {
-		baudNames = append(baudNames, speedLabel(b))
-		if b == a.baud {
-			bcur = i
-		}
-	}
-	u.choice("baud", fl.place(choiceW(baudNames)), baudNames, bcur, "Play speed: a caller's modem (bits per second), or telnet (only a board's pauses)", func(i int) {
-		a.baud = bauds[i]
-		savePrefs()
-	})
-	playLabel := "Play"
-	if a.playing != nil {
-		playLabel = "Stop"
-	}
-	if u.button(fl.place(buttonW("Play")), playLabel, a.playing != nil, "Play the file as if it came over a modem (Esc stops)") != nil {
-		a.play()
-	}
-	if u.button(fl.place(buttonW("Info")), "Info", false, "SAUCE info (title, author, group) and save options ("+keyName("info")+")") != nil {
-		openInfo()
-	}
-	if u.button(fl.place(buttonW("Settings")), "Settings", false, "Settings: window size, .bak files, My BBS (pauses in animated files), the C64 character set and the ST font") != nil {
-		openSettings()
-	}
-	if u.button(fl.place(buttonW("?")), "?", false, "Keys and mouse") != nil {
-		openHelp()
-	}
-	top = fl.y + gadH + 4
-	fb.fill(Rect{0, top, W, 1}, cEdgeDk)
-	return top + 1
 }
+
+// modeOrder is the machines in the order the gadgets show them.
+var modeOrder = []string{"amiga", "pc", "atari", "st", "c64", "zx", "tt"}
 
 // ---------------------------------------------------------------- zoom
 
@@ -996,7 +1053,7 @@ var tools = []struct{ id, name, hint string }{
 	{"half", "Half", "Half blocks: paint pixels of half a cell (PC page; Sixel on a teletext page)"},
 }
 
-// drawPane draws the strip under the page: tools, characters, F-keys and colours, kept small.
+// drawPane draws the strip under the page (the Focus layout): tools, characters, F-keys and colours, kept small.
 func (a *App) drawPane(u *UI, pane Rect) {
 	fb := u.fb
 	if pane.h <= 0 {
@@ -1014,219 +1071,20 @@ func (a *App) drawPane(u *UI, pane Rect) {
 
 	// Tools, two columns, and the style toggles under them.
 	bw := buttonW("Colour")
-	i := 0
-	for _, t := range tools {
-		if t.id == "half" && !a.pc() && !a.tt() {
-			continue
-		}
-		r := Rect{x + (i%2)*(bw+4), y + (i/2)*(smallH+4), bw, smallH}
-		name, hint := t.name, t.hint
-		if t.id == "half" && a.tt() {
-			name, hint = "Sixel", "Sixels: left sets, right clears one of a cell's 2x3 graphics pixels (the row needs a graphics colour to its left)"
-		}
-		if u.button(r, name, a.tool == t.id, hint) != nil {
-			a.start = false
-			a.setTool(t.id)
-		}
-		i++
-	}
-	sy := y + 4*(smallH+4)
-	sx := x
-	toggle := func(label string, on bool, hint string) bool {
-		r := Rect{sx, sy, buttonW(label) - 4, smallH}
-		sx += r.w + 4
-		if u.button(r, label, on, hint) != nil {
-			return !on
-		}
-		return on
-	}
-	if a.amiga() {
-		a.ital = toggle("I", a.ital, "Italic (Amiga console SGR 3)")
-		a.under = toggle("U", a.under, "Underline (Amiga console SGR 4)")
-	}
-	if a.zx() {
-		a.flash = toggle("Flash", a.flash, "Flash: new cells swap ink and paper twice a second")
-	}
-	if a.tt() {
-		a.showCodes = toggle("Codes", a.showCodes, "Show the attribute codes' names in their cells (T text colour, G graphics colour, D double, F flash ...)")
-	}
-	if a.screen() {
-		a.rev = toggle("Rev", a.rev, "Reverse: typing gives reversed characters, like RVS ON ("+keyName("reverse")+")")
-	}
-	a.insert = toggle("Ins", a.insert, "Insert mode for typing (Insert key)")
+	a.drawTools(u, x, y, bw, 2)
 	x += 2*bw + 4 + 14
 
-	// The characters, at the page font's own size. On a teletext page the
-	// first four rows are the codes (attributes, then letters), the last four
-	// the same codes as sixels.
-	CW := a.cellW()
-	cm := Rect{x, y, 32 * CW, 8 * H}
-	fb.fill(cm, cPaper)
-	for c := 0; c < 256; c++ {
-		px, py := cm.x+(c%32)*CW, cm.y+(c/32)*H
-		switch {
-		case a.tt() && c >= 128:
-			if k := c - 128; k >= 0x20 && (k < 0x40 || k >= 0x60) {
-				a.drawTTCell(fb, px, py, 1, ttCell{code: k, mosaic: true, fg: 7, control: -1}, false)
-			}
-		case a.printable(c):
-			a.drawCell(fb, px, py, 1, makeCell(c, a.previewFg(), 0, 0))
-		default:
-			fb.fill(Rect{px + 1, py + 1, CW - 2, H - 2}, 0xFF1A1B1E)
-		}
-	}
-	fb.frame(Rect{cm.x + (a.brush%32)*CW, cm.y + (a.brush/32)*H, CW, H}, cOrange)
-	a.charHover = -1
-	if u.hover(cm) {
-		a.charHover = (u.my-cm.y)/H*32 + (u.mx-cm.x)/CW
-		u.hint = fmt.Sprintf("Character %d (0x%02X). Click: brush (types it with Type). Right click: put it on the active F-key.", a.charHover, a.charHover)
-		if a.tt() {
-			k := a.charHover & 0x7F
-			what := fmt.Sprintf("code %d (0x%02X)", k, k)
-			if k < 0x20 {
-				what += ": " + ttCodeName(k)
-			}
-			u.hint = what + ". Click: brush. Right click: put it on the active F-key."
-		}
-	}
-	if c := u.take(cm); c != nil {
-		ch := (c.y-cm.y)/H*32 + (c.x-cm.x)/CW
-		if a.tt() {
-			ch &= 0x7F // the sixel rows are the same codes
-		}
-		if a.printable(ch) {
-			switch {
-			case c.button == 3:
-				a.fkeys[a.mode][a.fset][a.factive] = ch
-				savePrefs()
-			case a.tool == "type" && !c.shift:
-				a.typeByte(ch)
-			default:
-				a.brush = ch
-				if a.tool != "draw" && a.tool != "fill" && a.tool != "type" {
-					a.setTool("draw")
-				}
-			}
-		}
-	}
+	cm := a.drawCharset(u, x, y, 32)
 	x += cm.w + 14
 
-	// The F-keys in one row, the set switch before them.
-	if u.button(Rect{x, y, 18, smallH}, "<", false, "Previous F-key set ("+keyName("fkeys_previous")+")") != nil {
-		a.setFset(a.fset - 1)
-	}
-	label := fmt.Sprintf("%d", a.fset+1)
-	fb.text(x+22, y+2, label, cText)
-	if u.button(Rect{x + 30, y, 18, smallH}, ">", false, "Next F-key set ("+keyName("fkeys_next")+")") != nil {
-		a.setFset(a.fset + 1)
-	}
-	fx := x + 54
-	for i, c := range a.fkeys[a.mode][a.fset] {
-		r := Rect{fx + i*28, y, 26, H + lineH + 6}
-		fb.fill(r, cGrey)
-		fb.bevel(r, true)
-		fb.fill(Rect{r.x + 9, r.y + 2, 8, H}, cPaper)
-		a.drawCell(fb, r.x+9, r.y+2, 1, makeCell(c, a.previewFg(), 0, a.styleFlags()))
-		name := fmt.Sprintf("F%d", i+1)
-		col := uint32(cText)
-		if i == a.factive {
-			col = cOrange
-		}
-		fb.text(r.x+(r.w-textW(name))/2, r.y+H+3, name, col)
-		if u.take(r) != nil {
-			a.factive, a.brush = i, c
-			if a.tool != "draw" && a.tool != "fill" && a.tool != "type" {
-				a.setTool("draw")
-			}
-		}
-		u.setHint(r, fmt.Sprintf("F%d: character %d. F1-F10 type these; click makes it the brush", i+1, c))
-	}
+	a.drawFkeys(u, x, y)
 
 	// The colours in one row under them, then the brush.
 	cy := y + H + lineH + 14
-	for i := 0; i < 16; i++ {
-		r := Rect{x + i*20, cy, 18, 18}
-		fb.fill(r, a.pal[i])
-		fb.frame(r, cEdgeDk)
-		fgNow, fgName := a.fg, "foreground"
-		if a.atari() {
-			fgNow, fgName = a.doc.ink, "the text colour"
-		}
-		if i == fgNow {
-			fb.frame(r.inset(-2), cHi)
-		}
-		bgNow := a.bg
-		bgName := "background"
-		if a.screen() {
-			bgNow, bgName = a.doc.bg, "the screen colour, middle: the border"
-		}
-		if i == bgNow {
-			fb.dashed(r.inset(-2), cOrange)
-		}
-		if (a.screen() || a.zx()) && i == a.doc.borderColour() { // the border: a mark under the swatch
-			fb.fill(Rect{r.x + 4, r.y + r.h + 3, r.w - 8, 2}, cHi)
-		}
-		u.setHint(r, fmt.Sprintf("Colour %d: #%06X. Left: %s, right: %s, Shift+click: change it", i, a.pal[i]&0xFFFFFF, fgName, bgName))
-		if c := u.take(r); c != nil {
-			switch {
-			case c.shift:
-				openColour(i)
-			case c.button == 3:
-				a.setBg(i)
-			case c.button == 2 && (a.screen() || a.zx()):
-				if a.doc.border != i {
-					a.pushUndo()
-					a.doc.border = i
-				}
-			default:
-				a.setFg(i)
-			}
-		}
-	}
+	a.drawColours(u, x, cy, 16)
 	by := cy + 26
-	br := Rect{x, by, 8*2 + 6, H*2 + 6}
-	fb.fill(br, cPaper)
-	fb.frame(br, cEdgeDk)
-	a.drawCell(fb, br.x+3, br.y+3, 2, a.brushCell())
-	u.setHint(br, "The brush")
-	if u.button(Rect{br.x + br.w + 8, by, buttonW("Swap"), smallH}, "Swap", false, "Swap foreground and background ("+keyName("swap_colours")+")") != nil {
-		a.fg, a.bg = a.bg, a.fg
-	}
-	fgShown, bgShown := a.fg, a.bg
-	if a.screen() {
-		bgShown = a.doc.bg
-	}
-	if a.atari() {
-		fgShown = a.doc.ink
-	}
-	fb.text(br.x+br.w+8+buttonW("Swap")+10, by+2, fmt.Sprintf("char %d  fg %d  bg %d", a.brush, fgShown, bgShown), cText)
-
-	// While a block is selected or being pasted: turn it over.
-	if a.sel != nil || a.float != nil {
-		bx, bly := br.x+br.w+8, by+smallH+6
-		what := "the selection"
-		if a.float != nil {
-			what = "the block being pasted"
-		}
-		for _, b := range []struct {
-			label, hint string
-			op          int
-		}{
-			{"Mirror", "Flip " + what + " left-right (" + keyName("mirror") + ")", flipH},
-			{"Upside down", "Flip " + what + " upside down (" + keyName("upside_down") + ")", flipV},
-			{"Turn", "Turn " + what + " a quarter clockwise (" + keyName("turn") + ")", turnCW},
-			{"Invert", "Invert " + what + ": reversed characters, or the colours swapped (" + keyName("invert") + ")", invertBlock},
-		} {
-			r := Rect{bx, bly, buttonW(b.label), smallH}
-			if u.button(r, b.label, false, b.hint) != nil {
-				a.blockOp(b.op)
-			}
-			bx += r.w + 4
-		}
-	}
-	if a.sel == nil && a.float == nil {
-		a.drawToolOptions(u, br.x+br.w+8, by+smallH+6)
-	}
+	bx := a.drawBrush(u, x, by)
+	a.drawBlockOrToolOptions(u, bx, by+smallH+6, pane.x+pane.w)
 	fb.clip = old
 }
 
@@ -1263,8 +1121,8 @@ func (a *App) drawStatus(u *UI, r Rect) {
 	}
 	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum", "tt": "Teletext"}[a.mode]
 	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, a.doc.rows), cText) + 24
-	name := a.path
-	if name == "" {
+	name := filepath.Base(a.path) // the whole path is in the title bar and Info
+	if a.path == "" {
 		name = a.name
 	}
 	if a.dirty {

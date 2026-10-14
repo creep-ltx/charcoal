@@ -30,6 +30,9 @@ func init() {
 		return menuItem{label: label, run: func() { a.start = false; a.setMode(m) },
 			tick: func() bool { return a.mode == m && !a.start }}
 	}
+	arrange := func(label, l string) menuItem {
+		return menuItem{label: label, run: func() { a.setUILayout(l) }, tick: func() bool { return a.studio() == (l == "studio") }}
+	}
 	layout := func(label, l string) menuItem {
 		return menuItem{label: label, run: func() { a.setLayout(l) }, tick: func() bool { return a.layout == l }}
 	}
@@ -85,6 +88,8 @@ func init() {
 			layout("One page", "one"),
 			layout("Side by side", "cols"),
 			layout("Top and bottom", "rows"),
+			arrange("Studio layout: tools left, a side panel", "studio"),
+			arrange("Focus layout: the page wide, gadgets under it", "focus"),
 			{label: "Next page", action: "next_page"},
 			{label: "Previous page", action: "previous_page"},
 			menuSep,

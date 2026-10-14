@@ -257,6 +257,9 @@ func pass() {
 	ui.drawPopup()
 	ui.click, ui.wheel = nil, 0
 	title := a.name + " - CharEdit"
+	if a.path != "" { // the folder too: the status line shows only the name
+		title = a.name + " - " + shownDir(filepath.Dir(a.path)) + " - CharEdit"
+	}
 	if viewer != nil {
 		title = fmt.Sprintf("%s (%d/%d) - CharView", a.name, viewer.i+1, len(viewer.files))
 	}
