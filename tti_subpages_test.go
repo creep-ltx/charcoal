@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,38 +64,50 @@ func TestTTISubpagesSplit(t *testing.T) {
 	}
 }
 
+func TestTTIHead(t *testing.T) {
+	b := carouselTTI()
+	head, subs := ttiHead(b)
+	if len(subs) != 3 || !bytes.Equal(append(append([]byte{}, head...), bytes.Join(subs, nil)...), b) {
+		t.Fatal("head and subpages do not give the file back")
+	}
+	if !bytes.HasPrefix(head, []byte("DE,")) || !bytes.HasPrefix(subs[0], []byte("PN,11101")) {
+		t.Fatalf("head %q", head)
+	}
+	if h, s := ttiHead([]byte("OL,1,hi\r\n")); h != nil || len(s) != 1 {
+		t.Fatal("a file without PN")
+	}
+}
+
 func TestTTICarouselRoundTrip(t *testing.T) {
 	orig := carouselTTI()
 	a, p := loadTTIFile(t, orig)
-	if len(a.tabs) != 3 {
-		t.Fatalf("%d tabs, want one per subpage", len(a.tabs))
+	if len(a.tabs) != 1 || a.nFrames() != 3 || a.mode != "tt" || a.srcKind != "tti" || a.path != p {
+		t.Fatalf("%d tabs, %d frames, mode %s kind %s", len(a.tabs), a.nFrames(), a.mode, a.srcKind)
 	}
 	for i, word := range []string{"FIRST", "SECOND", "THIRD"} {
-		tab := a.tabs[i]
-		if tab.mode != "tt" || tab.srcKind != "tti" || tab.srcIndex != i || tab.path != p {
-			t.Fatalf("tab %d: mode %s kind %s index %d path %q", i, tab.mode, tab.srcKind, tab.srcIndex, tab.path)
+		if got := ttRowText(a.frameDoc(i), 1); got != "."+word {
+			t.Fatalf("frame %d row 1 %q", i, got)
 		}
-		if got := ttRowText(tab.doc, 1); got != "."+word {
-			t.Fatalf("tab %d row 1 %q", i, got)
-		}
-	}
-	// Saved unchanged, every tab gives the file back byte for byte.
-	for _, tab := range a.tabs {
-		a.focusTab(tab)
-		if !a.writeOut(p, "tti") {
-			t.Fatal(a.message)
-		}
-		if got, _ := os.ReadFile(p); !bytes.Equal(got, orig) {
-			t.Fatalf("unchanged save of subpage %d changed the file:\n%q", tab.srcIndex+1, got)
+		if a.holdOf(i) != 8000 {
+			t.Fatalf("frame %d holds %d ms (the file's CT,8,T)", i, a.holdOf(i))
 		}
 	}
-	// Edit subpage 2: only its page rows change.
-	a.focusTab(a.tabs[1])
+	// Saved unchanged: the file byte for byte, also after going through the frames.
+	a.goFrame(2)
+	if !a.writeOut(p, "tti") {
+		t.Fatal(a.message)
+	}
+	if got, _ := os.ReadFile(p); !bytes.Equal(got, orig) {
+		t.Fatalf("unchanged save changed the file:\n%q", got)
+	}
+	// Edit frame 2: only its page rows change.
+	a.goFrame(1)
+	a.pushUndo()
 	a.doc.set(0, 5, makeCell('X', 0, 0, 0))
 	if !a.writeOut(p, "tti") {
 		t.Fatal(a.message)
 	}
-	if !strings.Contains(a.message, "the other 2 kept") {
+	if !strings.Contains(a.message, "3 subpages, 1 changed") {
 		t.Fatalf("status line: %q", a.message)
 	}
 	got, _ := os.ReadFile(p)
@@ -115,14 +128,57 @@ func TestTTICarouselRoundTrip(t *testing.T) {
 	if d := parseTTI(gs[1]); ttRowText(d, 5) != "X" || ttRowText(d, 1) != ".SECOND" {
 		t.Fatalf("edited subpage reads back %q %q", ttRowText(d, 5), ttRowText(d, 1))
 	}
-	// Then subpage 3: the edit of subpage 2 stays.
-	a.focusTab(a.tabs[2])
+	// Edits of frames 2 and 3 in one save: both kept.
+	a.pushUndo()
+	a.doc.set(0, 7, makeCell('V', 0, 0, 0))
+	a.goFrame(2)
+	a.pushUndo()
 	a.doc.set(0, 6, makeCell('Y', 0, 0, 0))
 	a.writeOut(p, "tti")
 	got, _ = os.ReadFile(p)
 	gs = ttiSubpages(got)
-	if ttRowText(parseTTI(gs[1]), 5) != "X" || ttRowText(parseTTI(gs[2]), 6) != "Y" || !bytes.Equal(gs[0], os0[0]) {
-		t.Fatalf("second save lost the first edit:\n%q", got)
+	if d := parseTTI(gs[1]); ttRowText(d, 5) != "X" || ttRowText(d, 7) != "V" || ttRowText(parseTTI(gs[2]), 6) != "Y" || !bytes.Equal(gs[0], os0[0]) {
+		t.Fatalf("two edits in one save:\n%q", got)
+	}
+	// A hold of its own writes a CT line in that subpage only.
+	a.goFrame(0)
+	a.setHold(5000)
+	a.writeOut(p, "tti")
+	got, _ = os.ReadFile(p)
+	gs = ttiSubpages(got)
+	if !strings.Contains(string(gs[0]), "SC,0001\r\nCT,5,T\r\n") || strings.Count(string(got), "CT,") != 2 {
+		t.Fatalf("hold: %q", got)
+	}
+	// A new frame at the end: PN,11104 / SC,0004.
+	a.goFrame(2)
+	a.newFrame()
+	a.doc.set(0, 1, makeCell('N', 0, 0, 0))
+	a.writeOut(p, "tti")
+	got, _ = os.ReadFile(p)
+	_, subs := ttiHead(got)
+	if len(subs) != 4 || !strings.HasPrefix(string(subs[3]), "PN,11104\r\nSC,0004\r\n") || ttRowText(parseTTI(subs[3]), 1) != "N" {
+		t.Fatalf("new frame: %q", subs[len(subs)-1])
+	}
+	// Moving it first renumbers every subpage.
+	a.moveFrame(-1)
+	a.moveFrame(-1)
+	a.moveFrame(-1)
+	a.writeOut(p, "tti")
+	got, _ = os.ReadFile(p)
+	_, subs = ttiHead(got)
+	for i, s := range subs {
+		pn := fmt.Sprintf("PN,111%02d\r\nSC,%04d\r\n", i+1, i+1)
+		if !strings.HasPrefix(string(s), pn) {
+			t.Fatalf("subpage %d after the move: %q", i+1, s[:20])
+		}
+	}
+	if ttRowText(parseTTI(subs[0]), 1) != "N" || ttRowText(parseTTI(subs[1]), 1) != ".FIRST" {
+		t.Fatal("order after the move")
+	}
+	// Opened again: the frames as saved.
+	b, _ := loadTTIFile(t, got)
+	if b.nFrames() != 4 || b.holdOf(1) != 5000 || b.holdOf(2) != 8000 {
+		t.Fatalf("read back: %d frames, holds %d %d", b.nFrames(), b.holdOf(1), b.holdOf(2))
 	}
 }
 

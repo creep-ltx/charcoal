@@ -136,67 +136,82 @@ func TestCloseTabNeverShowsOneTabTwice(t *testing.T) {
 	}
 }
 
-// Saving a .c or .petmate file with several screens from one screen's tab
-// keeps every other screen (it once wrote that one screen over the file).
-func TestSaveOneScreenKeepsTheOthers(t *testing.T) {
+// A .c or .petmate file with several screens opens as one page of frames;
+// saving it unchanged gives the same bytes, an edit of one frame keeps the
+// others, and Petmate's fields CharEdit does not know are kept.
+func TestScreensAsFrames(t *testing.T) {
 	withFonts(t, false)
-	s1, s2 := newDoc(40, 25), newDoc(40, 25)
+	s1, s2, s3 := newDoc(40, 25), newDoc(40, 25), newDoc(40, 25)
 	s1.set(0, 0, makeCell(1, 3, 0, 0))
 	s2.set(5, 5, makeCell(2, 4, 0, 0))
-	pmSrc := []byte(`{"version":4,"screens":[0,1],"framebufs":[` +
+	s3.set(7, 7, makeCell(3, 5, 0, 0))
+	pmSrc := []byte(`{"version":4,"screens":[0,1,2],"framebufs":[` +
 		`{"width":40,"height":25,"backgroundColor":6,"borderColor":14,"charset":"upper","name":"one","zoom":{"zoomLevel":2},"framebuf":[]},` +
-		`{"width":40,"height":25,"backgroundColor":6,"borderColor":14,"charset":"upper","name":"two","framebuf":[]}],` +
+		`{"width":40,"height":25,"backgroundColor":6,"borderColor":14,"charset":"lower","name":"two","framebuf":[]},` +
+		`{"width":40,"height":25,"backgroundColor":6,"borderColor":14,"charset":"upper","name":"three","framebuf":[]}],` +
 		`"customFonts":{"x":{"name":"mine"}},"somethingNew":[1,2]}`)
-	// Fill the Petmate framebufs from the two pages.
-	pmSrc = writePetmateFrames(pmSrc, []PetScreen{{doc: s1, fb: 0}, {doc: s2, fb: 1}})
+	pmSrc = writePetmateFrames(pmSrc, []PetScreen{{doc: s1, fb: 0}, {doc: s2, fb: 1, lower: 1}, {doc: s3, fb: 2}})
 	for _, c := range []struct {
 		ext  string
 		data []byte
-	}{{".c", writeMarqFrames([]*Doc{s1, s2}, false, "c64")}, {".petmate", pmSrc}} {
-		for tab := 0; tab < 2; tab++ {
-			a := testApp(t, "pc")
-			a.hasC64 = true
-			p := filepath.Join(t.TempDir(), "two"+c.ext)
-			if err := os.WriteFile(p, c.data, 0o644); err != nil {
-				t.Fatal(err)
+	}{{".c", writeMarqFrames([]*Doc{s1, s2, s3}, false, "c64")}, {".petmate", pmSrc}} {
+		kind := map[string]string{".c": "marq", ".petmate": "petmate"}[c.ext]
+		a := testApp(t, "pc")
+		a.hasC64 = true
+		p := filepath.Join(t.TempDir(), "three"+c.ext)
+		if err := os.WriteFile(p, c.data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		a.openPath(p, "auto")
+		if len(a.tabs) != 1 || a.nFrames() != 3 || a.cur != 0 {
+			t.Fatalf("%s: %d tabs, %d frames", c.ext, len(a.tabs), a.nFrames())
+		}
+		a.save(false)
+		if b, _ := os.ReadFile(p); !bytes.Equal(b, c.data) {
+			t.Fatalf("%s: an unchanged save changed the file", c.ext)
+		}
+		a.goFrame(1)
+		if kind == "petmate" && !a.lower() {
+			t.Fatal("frame 2 is lower case in the file")
+		}
+		a.pushUndo()
+		a.doc.set(9, 9, makeCell(7, 1, 0, 0))
+		a.save(false)
+		if a.dirty {
+			t.Fatalf("%s: %s", c.ext, a.message)
+		}
+		b, _ := os.ReadFile(p)
+		scr, err := a.readScreens(b, kind)
+		if err != nil || len(scr) != 3 {
+			t.Fatalf("%s: %d screens back, %v", c.ext, len(scr), err)
+		}
+		if scr[0].doc.get(0, 0) != s1.get(0, 0) || scr[1].doc.get(5, 5) != s2.get(5, 5) || scr[2].doc.get(7, 7) != s3.get(7, 7) {
+			t.Fatalf("%s: a screen lost its cells", c.ext)
+		}
+		if scr[1].doc.get(9, 9) != makeCell(7, 1, 0, 0) || scr[0].doc.get(9, 9) == makeCell(7, 1, 0, 0) {
+			t.Fatalf("%s: the edit is not where it was made", c.ext)
+		}
+		if kind == "petmate" {
+			if scr[1].lower != 1 || scr[0].lower != 0 || scr[2].name != "three" {
+				t.Fatalf("petmate: cases %d %d, name %q", scr[0].lower, scr[1].lower, scr[2].name)
 			}
-			a.openPath(p, "auto")
-			if len(a.tabs) != 2 || a.tabs[1].path != p {
-				t.Fatalf("%s: %d tabs", c.ext, len(a.tabs))
-			}
-			a.focusTab(a.tabs[tab])
-			a.pushUndo()
-			a.doc.set(9, 9, makeCell(7, 1, 0, 0)) // an edit in this screen
-			a.save(false)
-			b, _ := os.ReadFile(p)
-			kind := map[string]string{".c": "marq", ".petmate": "petmate"}[c.ext]
-			scr, err := a.readScreens(b, kind)
-			if err != nil || len(scr) != 2 {
-				t.Fatalf("%s tab %d: %d screens back, %v", c.ext, tab, len(scr), err)
-			}
-			if scr[0].doc.get(0, 0) != s1.get(0, 0) || scr[1].doc.get(5, 5) != s2.get(5, 5) {
-				t.Fatalf("%s tab %d: a screen lost its cells", c.ext, tab)
-			}
-			if scr[tab].doc.get(9, 9) != makeCell(7, 1, 0, 0) || scr[1-tab].doc.get(9, 9) == makeCell(7, 1, 0, 0) {
-				t.Fatalf("%s tab %d: the edit is not where it was made", c.ext, tab)
-			}
-			if kind == "petmate" {
-				for _, keep := range []string{`"customFonts":{"x":{"name":"mine"}}`, `"somethingNew":[1,2]`, `"zoom":{"zoomLevel":2}`, `"name":"two"`} {
-					if !bytes.Contains(b, []byte(keep)) {
-						t.Fatalf("petmate lost %s: %s", keep, b[:200])
-					}
+			for _, keep := range []string{`"customFonts":{"x":{"name":"mine"}}`, `"somethingNew":[1,2]`, `"zoom":{"zoomLevel":2}`, `"name":"two"`} {
+				if !bytes.Contains(b, []byte(keep)) {
+					t.Fatalf("petmate lost %s", keep)
 				}
 			}
-			// The other tab now builds on what was saved: saving it keeps this edit.
-			a.focusTab(a.tabs[1-tab])
-			a.pushUndo()
-			a.doc.set(8, 8, makeCell(6, 1, 0, 0))
-			a.save(false)
-			b, _ = os.ReadFile(p)
-			scr, _ = a.readScreens(b, kind)
-			if len(scr) != 2 || scr[tab].doc.get(9, 9) != makeCell(7, 1, 0, 0) || scr[1-tab].doc.get(8, 8) != makeCell(6, 1, 0, 0) {
-				t.Fatalf("%s tab %d: the second save lost the first one's edit", c.ext, tab)
-			}
+		}
+		// A new frame and a move, saved: four screens in the new order.
+		a.newFrame()
+		a.moveFrame(-1)
+		a.save(false)
+		b, _ = os.ReadFile(p)
+		scr, _ = a.readScreens(b, kind)
+		if len(scr) != 4 || scr[2].doc.get(9, 9) != makeCell(7, 1, 0, 0) || scr[1].doc.inkCells() != 0 {
+			t.Fatalf("%s: after a new frame: %d screens", c.ext, len(scr))
+		}
+		if kind == "petmate" && (scr[2].name != "two" || scr[3].name != "three") {
+			t.Fatalf("petmate: names %q %q", scr[2].name, scr[3].name)
 		}
 	}
 }

@@ -104,6 +104,18 @@ func TestMarq(t *testing.T) {
 	if scr, err := parseMarq(two); err != nil || len(scr) != 2 || scr[0].lower != 1 {
 		t.Fatalf("two frames: %v %d", err, len(scr))
 	}
+	// Written as frames, as Petmate does: frame0000, frame0001, one META line;
+	// a smaller frame is padded to the largest.
+	e := newDoc(40, 20)
+	e.set(1, 1, makeCell(9, 2, 0, 0))
+	out := writeMarqFrames([]*Doc{d, e}, true, "c64")
+	if !strings.Contains(string(out), "frame0001[]") || strings.Count(string(out), "// META:") != 1 {
+		t.Fatal("frame names or META")
+	}
+	if scr, err := parseMarq(out); err != nil || len(scr) != 2 || scr[0].doc.get(3, 2) != d.get(3, 2) ||
+		scr[1].doc.get(1, 1) != e.get(1, 1) || scr[1].doc.rows != 25 || scr[0].lower != 1 {
+		t.Fatalf("frames: %v %d", err, len(scr))
+	}
 	// Petmate's workspace.
 	pm, err := parsePetmate(writePetmate(d, true, "x"))
 	if err != nil || len(pm) != 1 || pm[0].lower != 1 || pm[0].doc.get(3, 2) != d.get(3, 2) || pm[0].doc.border != 11 {

@@ -6,6 +6,7 @@ package main
 // undo steps may share them.
 
 import (
+	"bytes"
 	"fmt"
 	"slices"
 	"strings"
@@ -18,6 +19,7 @@ type Frame struct {
 	name  string // a Petmate screen's name
 	lower int    // PETSCII: this screen's case, -1 not said, 0 upper, 1 lower
 	seg   []byte // .tti: the subpage text it came from; nil for a new frame
+	src   int    // .petmate: its framebuf in the file (-1 for a new frame)
 }
 
 // holdDefault is how long a frame without a hold of its own is shown: teletext
@@ -67,7 +69,7 @@ func (t *Tab) holdOf(i int) int {
 // ensureFrames makes the one picture of a page a frame list of one.
 func (t *Tab) ensureFrames() {
 	if t.frames == nil {
-		t.frames, t.cur = []Frame{{doc: t.doc, lower: -1}}, 0
+		t.frames, t.cur = []Frame{{doc: t.doc, lower: -1, src: -1}}, 0
 	}
 }
 
@@ -152,7 +154,7 @@ func (a *App) blankLike(d *Doc) *Doc {
 }
 
 // addFrame puts a picture in after the current frame and goes to it.
-func (a *App) addFrame(d *Doc, what string) {
+func (a *App) addFrame(d *Doc, copied bool, what string) {
 	a.endPlay()
 	if a.frameCells()+d.cols*d.rows > maxPageCells {
 		a.msg("No more frames: all of them together would be larger than the largest page")
@@ -161,7 +163,10 @@ func (a *App) addFrame(d *Doc, what string) {
 	a.pushFramesUndo(0)
 	a.ensureFrames()
 	a.keepCase()
-	f := Frame{doc: d, hold: a.frames[a.cur].hold, lower: a.frames[a.cur].lower}
+	f := Frame{doc: d, hold: a.frames[a.cur].hold, lower: a.frames[a.cur].lower, src: -1}
+	if copied { // a copied subpage keeps its lines (Fastext links, enhancements)
+		f.seg = a.frames[a.cur].seg
+	}
 	a.frames[a.cur].doc = a.doc
 	a.frames = slices.Insert(a.frames, a.cur+1, f)
 	a.restructured = true
@@ -169,8 +174,8 @@ func (a *App) addFrame(d *Doc, what string) {
 	a.msg(fmt.Sprintf("%s: frame %d of %d (%s undoes it)", what, a.cur+1, len(a.frames), keyName("undo")))
 }
 
-func (a *App) newFrame() { a.addFrame(a.blankLike(a.doc), "New frame") }
-func (a *App) dupFrame() { a.addFrame(a.doc.clone(), "Copied frame") }
+func (a *App) newFrame() { a.addFrame(a.blankLike(a.doc), false, "New frame") }
+func (a *App) dupFrame() { a.addFrame(a.doc.clone(), true, "Copied frame") }
 
 func (a *App) deleteFrame() {
 	if a.nFrames() < 2 {
@@ -288,7 +293,46 @@ func (a *App) snapshotLike(s Snap) Snap {
 }
 
 // framesFormats are the page formats that keep every frame.
-var framesFormats = map[string]bool{}
+var framesFormats = map[string]bool{"marq": true, "petmate": true, "tti": true}
+
+// savedFrames: the page's frames are now its file's (data), in order. For a
+// .tti it gives how many subpages were written anew.
+func (a *App) savedFrames(fmtID string, data []byte) (changed int) {
+	if fmtID == "tti" && a.frames != nil {
+		_, subs := ttiHead(data)
+		for i := range a.frames {
+			if i < len(subs) {
+				if !bytes.Equal(subs[i], a.frames[i].seg) {
+					changed++
+				}
+				a.frames[i].seg = subs[i]
+			}
+		}
+	}
+	for i := range a.frames {
+		a.frames[i].src = i
+	}
+	a.restructured = false
+	return changed
+}
+
+// writeTTIFrames writes the page's frames as a .tti carousel, on the file it came from.
+func (a *App) writeTTIFrames() []byte {
+	var head []byte
+	if a.srcKind == "tti" && a.source != nil {
+		head, _ = ttiHead(a.source)
+	} else {
+		head = []byte("DE,Made with CharEdit\r\n")
+	}
+	fr := make([]ttiFrame, a.nFrames())
+	for i := range fr {
+		fr[i].doc = a.frameDoc(i)
+		if a.frames != nil {
+			fr[i].hold, fr[i].seg = a.frames[i].hold, a.frames[i].seg
+		}
+	}
+	return writeTTIFrames(head, fr, a.restructured)
+}
 
 // keepFramesHint names the formats of this page that keep every frame.
 func (a *App) keepFramesHint() string {

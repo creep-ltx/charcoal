@@ -71,6 +71,12 @@ func FuzzParsers(f *testing.F) {
 		check("mode7", func() []*Doc { return one(parseMode7(b)) }) // any length (Open as)
 		check("scr", func() []*Doc { d, _ := parseSCR(b); return one(d) })
 		check("marq", func() []*Doc { return screens(parseMarq(b)) })
+		if scr, err := parseMarq(b); err == nil && len(scr) <= 64 && scr[0].doc.cols*scr[0].doc.rows <= 64000 {
+			docs := screens(scr, nil)
+			if back, err := parseMarq(writeMarqFrames(docs, false, "c64")); err != nil || len(back) != len(docs) {
+				t.Fatalf("marq frames: %d written, %d read back (%v)", len(docs), len(back), err)
+			}
+		}
 		check("xbin", func() []*Doc { return own(parseXBin(b)) })
 		check("petmate", func() []*Doc { return screens(parsePetmate(b)) })
 		check("prg", func() []*Doc { d, _, _ := parsePrg(b); return one(d) })

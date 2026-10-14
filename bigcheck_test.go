@@ -25,6 +25,7 @@ type checkResult struct {
 	mode, want       string
 	problem          string
 	rows, cols       int
+	frames           int
 	took             time.Duration
 }
 
@@ -141,7 +142,13 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 	}
 	// Save in the page's own format and open again.
 	orig := a.doc.clone()
+	var origFrames []*Doc
+	for _, d := range a.allDocs() {
+		origFrames = append(origFrames, d.clone())
+	}
+	res.frames = len(origFrames)
 	fmtID, mode := a.saveFmt, a.mode
+	a.gen = nextGen() // written by CharEdit's own writer, not the file as read
 	out, err := a.encode(fmtID)
 	if err != nil {
 		res.problem = strings.TrimSpace(res.problem + " save: " + err.Error())
@@ -168,6 +175,18 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 	}
 	if ok, why := cellsMatch(fmtID, orig, a.doc); !ok {
 		res.problem = strings.TrimSpace(res.problem + " round trip (" + fmtID + "): " + why)
+	}
+	if framesFormats[fmtID] && len(origFrames) > 1 {
+		if a.nFrames() != len(origFrames) {
+			res.problem = strings.TrimSpace(res.problem + fmt.Sprintf(" %d frames became %d", len(origFrames), a.nFrames()))
+		} else {
+			for i, d := range origFrames {
+				if ok, why := cellsMatch(fmtID, d, a.frameDoc(i)); !ok {
+					res.problem = strings.TrimSpace(res.problem + fmt.Sprintf(" frame %d round trip (%s): %s", i+1, fmtID, why))
+					break
+				}
+			}
+		}
 	}
 	if mode == "c64" && a.lower() != lower {
 		res.problem = strings.TrimSpace(res.problem + " character set changed")
@@ -274,6 +293,14 @@ func TestBigCheck(t *testing.T) {
 		s := stats[g]
 		fmt.Fprintf(&sb, "%-12s %6d %6d %5d of %4d %10s  %v\n", g, s.n, s.bad, s.rightMode, s.known, s.slow.Round(time.Millisecond), s.modes)
 	}
+	multi, frames := 0, 0
+	for _, r := range results {
+		if r.frames > 1 {
+			multi++
+			frames += r.frames
+		}
+	}
+	fmt.Fprintf(&sb, "\nfiles with several frames: %d (%d frames)\n", multi, frames)
 	sb.WriteString("\n")
 	for _, p := range problems {
 		sb.WriteString(p + "\n")

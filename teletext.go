@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -413,19 +414,177 @@ func ttiReplaceSubpage(seg []byte, d *Doc) []byte {
 	return out
 }
 
-// writeTTISubpage gives the .tti file b back with its subpage i (from 0)
-// written from d and everything else as it was.
-func writeTTISubpage(b []byte, i int, d *Doc) []byte {
-	segs := ttiSubpages(b)
-	if i < 0 || i >= len(segs) {
-		return writeTTI(d)
-	}
-	var out []byte
-	for j, s := range segs {
-		if j == i {
-			s = ttiReplaceSubpage(s, d)
+// ttiLines calls fn for every line of b with its end (newline included).
+func ttiLines(b []byte, fn func(line []byte, start int)) {
+	for i := 0; i < len(b); {
+		end := bytes.IndexByte(b[i:], '\n')
+		if end < 0 {
+			end = len(b)
+		} else {
+			end += i + 1
 		}
-		out = append(out, s...)
+		fn(b[i:end], i)
+		i = end
+	}
+}
+
+// ttiHead cuts a .tti file into the lines before the first PN (the whole
+// file's: DE, DS, SP and the subpages' defaults) and its subpages. Joined
+// together they are the file again. A file without PN is one subpage.
+func ttiHead(b []byte) (head []byte, subs [][]byte) {
+	first := -1
+	ttiLines(b, func(line []byte, start int) {
+		if first < 0 && bytes.HasPrefix(line, []byte("PN,")) {
+			first = start
+		}
+	})
+	if first < 0 {
+		return nil, [][]byte{b}
+	}
+	subs = ttiSubpages(b[first:])
+	return b[:first], subs
+}
+
+// ttiNewline is the line end a .tti file uses.
+func ttiNewline(b []byte) string {
+	if bytes.Contains(b, []byte("\n")) && !bytes.Contains(b, []byte("\r\n")) {
+		return "\n"
+	}
+	return "\r\n"
+}
+
+// ttiCT reads a CT line: the cycle time and whether it is in seconds (T) rather than cycles (C).
+func ttiCT(line []byte) (n int, seconds, ok bool) {
+	f := strings.Split(strings.TrimRight(string(line), "\r\n"), ",")
+	if len(f) < 2 || f[0] != "CT" {
+		return 0, false, false
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(f[1]))
+	if err != nil {
+		return 0, false, false
+	}
+	return n, len(f) < 3 || strings.TrimSpace(f[2]) != "C", true
+}
+
+// ttiHold is a subpage's hold time in ms: its CT,n,T line, else the file's,
+// else 0 (the default). A CT in cycles (C) is no time: 0.
+func ttiHold(seg, head []byte) int {
+	for _, b := range [][]byte{seg, head} {
+		hold, found := 0, false
+		ttiLines(b, func(line []byte, _ int) {
+			if n, secs, ok := ttiCT(line); ok && !found {
+				found = true
+				if secs && n > 0 {
+					hold = n * 1000
+				}
+			}
+		})
+		if found {
+			return hold
+		}
+	}
+	return 0
+}
+
+// ttiSetLine puts "key,value" in a subpage: over its first key line, else
+// after its SC line (or its PN line), else first.
+func ttiSetLine(seg []byte, key, value, nl string) []byte {
+	line := []byte(key + "," + value + nl)
+	var lines [][]byte
+	ttiLines(seg, func(l []byte, _ int) {
+		if !bytes.HasSuffix(l, []byte("\n")) {
+			l = append(append([]byte{}, l...), nl...)
+		}
+		lines = append(lines, l)
+	})
+	at, sc, pn := -1, -1, -1
+	for i, l := range lines {
+		switch {
+		case at < 0 && bytes.HasPrefix(l, []byte(key+",")):
+			at = i
+		case sc < 0 && bytes.HasPrefix(l, []byte("SC,")):
+			sc = i
+		case pn < 0 && bytes.HasPrefix(l, []byte("PN,")):
+			pn = i
+		}
+	}
+	switch {
+	case at >= 0:
+		lines[at] = line
+	case sc >= 0:
+		lines = slices.Insert(lines, sc+1, line)
+	default:
+		lines = slices.Insert(lines, pn+1, line) // pn -1: first
+	}
+	return bytes.Join(lines, nil)
+}
+
+// ttiRenumber gives a subpage the subpage number n: PN's last two digits and SC.
+func ttiRenumber(seg []byte, mpp string, n int, nl string) []byte {
+	pn := []byte(nil)
+	ttiLines(seg, func(l []byte, _ int) {
+		if pn == nil && bytes.HasPrefix(l, []byte("PN,")) {
+			pn = bytes.TrimRight(l[3:], "\r\n")
+		}
+	})
+	page := mpp
+	if len(pn) >= 3 {
+		page = string(pn[:len(pn)-2])
+	}
+	seg = ttiSetLine(seg, "PN", fmt.Sprintf("%s%02d", page, n%100), nl)
+	return ttiSetLine(seg, "SC", fmt.Sprintf("%04d", n), nl)
+}
+
+// ttiPage is the magazine and page (mpp) of a file's first PN line ("100" if none).
+func ttiPage(b []byte) string {
+	page := "100"
+	found := false
+	ttiLines(b, func(l []byte, _ int) {
+		if !found && bytes.HasPrefix(l, []byte("PN,")) {
+			found = true
+			if pn := bytes.TrimRight(l[3:], "\r\n"); len(pn) >= 3 {
+				page = string(pn[:len(pn)-2])
+			}
+		}
+	})
+	return page
+}
+
+// ttiFrame is a frame as writeTTIFrames needs it.
+type ttiFrame struct {
+	doc  *Doc
+	hold int    // ms, 0 the default
+	seg  []byte // the subpage it came from, nil for a new one
+}
+
+// writeTTIFrames gives a carousel: the file's head lines, then a subpage per
+// frame. A subpage read from the file keeps every line but its page rows
+// (and those too when its codes did not change), a changed hold rewrites only
+// its CT line, and renumber (frames added, deleted or moved) numbers the
+// subpages 1..n in PN and SC. A new frame is a new subpage of the file's page.
+func writeTTIFrames(head []byte, frames []ttiFrame, renumber bool) []byte {
+	all := append([]byte{}, head...)
+	for _, f := range frames {
+		all = append(all, f.seg...)
+	}
+	nl, mpp := ttiNewline(all), ttiPage(all)
+	out := append([]byte{}, head...)
+	for i, f := range frames {
+		seg := f.seg
+		if seg == nil {
+			seg = []byte(fmt.Sprintf("PN,%s%02d%sSC,%04d%s", mpp, (i+1)%100, nl, i+1, nl))
+		}
+		seg = ttiReplaceSubpage(seg, f.doc)
+		if f.hold != ttiHold(f.seg, head) && f.hold > 0 {
+			seg = ttiSetLine(seg, "CT", fmt.Sprintf("%d,T", max(1, min(99, (f.hold+500)/1000))), nl)
+		}
+		if renumber || (len(frames) > 1 && !bytes.Contains(seg, []byte("PN,"))) {
+			seg = ttiRenumber(seg, mpp, i+1, nl)
+		}
+		if len(out) > 0 && out[len(out)-1] != '\n' {
+			out = append(out, nl...)
+		}
+		out = append(out, seg...)
 	}
 	return out
 }

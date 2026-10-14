@@ -1118,11 +1118,13 @@ func (a *App) reparse() {
 		a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
 		return
 	case "marq", "petmate", "prg":
-		if scr, err := a.screens(a.source, a.srcKind); err == nil && a.srcIndex < len(scr) {
-			a.doc = scr[a.srcIndex].doc
-			if l := scr[a.srcIndex].lower; l >= 0 {
-				a.setCase(l == 1)
+		if scr, err := a.screens(a.source, a.srcKind); err == nil {
+			a.frames = make([]Frame, len(scr))
+			for i, s := range scr {
+				a.frames[i] = Frame{doc: s.doc, lower: s.lower, name: s.name, src: s.fb}
 			}
+			a.doc = a.frames[0].doc.clone()
+			a.showCase()
 		}
 		a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
 		return
@@ -1130,8 +1132,12 @@ func (a *App) reparse() {
 	if a.tt() {
 		switch {
 		case a.srcKind == "tti":
-			segs := ttiSubpages(a.source)
-			a.doc = parseTTI(segs[min(a.srcIndex, len(segs)-1)])
+			head, segs := ttiHead(a.source)
+			a.frames = make([]Frame, len(segs))
+			for i, seg := range segs {
+				a.frames[i] = Frame{doc: parseTTI(seg), hold: ttiHold(seg, head), seg: seg, lower: -1, src: -1}
+			}
+			a.doc = a.frames[0].doc.clone()
 		case isEditTF(a.source):
 			a.doc, a.ttMeta = parseEditTFMeta(a.source)
 		case isEP1(a.source):
@@ -1256,31 +1262,12 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 			a.msg("Could not read " + name + ": " + err.Error())
 			return
 		}
-		a.mode, a.srcKind, a.srcIndex = "c64", kind, 0
-		own := map[string]string{"petmate": "petmate", "marq": "marq", "prg": "prg"}[kind]
+		a.mode, a.srcKind = "c64", kind
 		a.screenMachine(scr[0].machine)
-		a.finishLoad(b, name, path, nil, own)
-		first := a.Tab
-		for i := 1; i < len(scr); i++ { // every further screen in a tab of its own
-			t := a.newTab("c64")
-			a.Tab = t
-			a.mode, a.srcKind, a.srcIndex = "c64", kind, i
-			a.screenMachine(scr[i].machine)
-			label := scr[i].name
-			if label == "" {
-				label = fmt.Sprintf("screen %d of %d", i+1, len(scr))
-			}
-			a.finishLoad(b, name+" ("+label+")", path, nil, own)
-		}
-		a.Tab = first
-		a.applyMode()
+		a.finishLoad(b, name, path, nil, kind)
 		if len(scr) > 1 {
-			if scr[0].name == "" {
-				first.name = fmt.Sprintf("%s (screen 1 of %d)", name, len(scr))
-			} else {
-				first.name = name + " (" + scr[0].name + ")"
-			}
-			a.msg(fmt.Sprintf("%s has %d screens: each is in a tab of its own; saving one keeps the others", name, len(scr)))
+			a.msg(fmt.Sprintf("%s: %d screens, opened as frames (%s and %s go through them)", name, len(scr),
+				keyName("frame_previous"), keyName("frame_next")))
 		}
 		return
 	}
@@ -1387,40 +1374,22 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		a.saveFmt = "ansi"
 	}
 	a.undo, a.redo = nil, nil
-	ttiSubs := 0
 	if a.saveFmt == "tti" && isTTI(b) {
-		a.srcKind, a.srcIndex = "tti", 0
-		ttiSubs = len(ttiSubpages(b))
+		a.srcKind = "tti"
 	}
 	a.reparse()
 	a.applyMode()
 	a.gen = nextGen()
 	a.markSaved()
 	a.scrollX, a.scrollY = 0, 0
-	if ttiSubs > 1 {
-		a.openTTISubpages(b, name, path, ttiSubs)
+	if n := a.nFrames(); n > 1 && a.srcKind == "tti" {
+		a.msg(fmt.Sprintf("%s: a carousel of %d subpages, opened as frames (%s and %s go through them)", name, n,
+			keyName("frame_previous"), keyName("frame_next")))
 		return
 	}
 	if a.doc.fullest {
 		a.msg("An animation that ends nearly empty: showing its fullest picture (Play shows it all)")
 	}
-}
-
-// openTTISubpages opens subpages 2 and on of a .tti carousel, each in a tab
-// of its own; every tab keeps the whole file, so that saving one writes the
-// file back with only its own subpage changed.
-func (a *App) openTTISubpages(b []byte, name, path string, n int) {
-	first := a.Tab
-	first.name = fmt.Sprintf("%s (subpage 1 of %d)", name, n)
-	for i := 1; i < n; i++ {
-		t := a.newTab("tt")
-		a.Tab = t
-		a.mode, a.srcKind, a.srcIndex = "tt", "tti", i
-		a.finishLoad(b, fmt.Sprintf("%s (subpage %d of %d)", name, i+1, n), path, nil, "tti")
-	}
-	a.Tab = first
-	a.applyMode()
-	a.msg(fmt.Sprintf("%s has %d subpages: each is in a tab of its own; saving one keeps the others", name, n))
 }
 
 // notArt names files that are surely not art (archives, programs, pictures), or "".
@@ -2211,8 +2180,8 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	case "scr":
 		return writeSCR(d), nil
 	case "tti":
-		if a.srcKind == "tti" && isTTI(a.source) {
-			return writeTTISubpage(a.source, a.srcIndex, d), nil
+		if a.srcKind == "tti" && isTTI(a.source) || a.nFrames() > 1 {
+			return a.writeTTIFrames(), nil
 		}
 		return writeTTI(d), nil
 	case "ep1":
@@ -2241,25 +2210,21 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	case "avt":
 		return writeAvatar(d, info.clear), nil
 	case "prg", "marq":
-		if d.cols != 40 || d.usedRows() > 25 {
-			a.msg("Only the first 40x25 cells fit a C64 screen")
-		}
 		if fmtID == "prg" {
+			if d.cols != 40 || d.usedRows() > 25 {
+				a.msg("Only the first 40x25 cells fit a C64 screen")
+			}
 			return writePrg(d, a.lower()), nil
 		}
-		if scr := a.otherScreens(fmtID, d); scr != nil {
-			docs := make([]*Doc, len(scr))
-			for i, s := range scr {
-				docs[i] = s.doc
-			}
-			return writeMarqFrames(docs, a.lower(), a.machine), nil
+		if a.unchangedSource(fmtID) {
+			return a.source, nil
 		}
-		return writeMarq(d, a.lower(), a.machine), nil
+		return writeMarqFrames(a.allDocs(), a.lower(), a.machine), nil
 	case "petmate":
-		if scr := a.otherScreens(fmtID, d); scr != nil {
-			return writePetmateFrames(a.source, scr), nil
+		if a.unchangedSource(fmtID) {
+			return a.source, nil
 		}
-		return writePetmate(d, a.lower(), strings.TrimSuffix(a.name, filepath.Ext(a.name))), nil
+		return writePetmateFrames(map[bool][]byte{true: a.source}[a.srcKind == "petmate"], a.petScreens()), nil
 	case "html":
 		return a.writeHTML(), nil
 	case "png", "png2":
@@ -2294,20 +2259,27 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 	return nil, fmt.Errorf("unknown format %s", fmtID)
 }
 
-// otherScreens: when the page is one screen of a .c or .petmate file that holds
-// several, saved in that same format, all of the file's screens with this page
-// in its place, so that saving it keeps the others (nil otherwise).
-func (a *App) otherScreens(fmtID string, d *Doc) []PetScreen {
-	if a.srcKind != fmtID || a.source == nil {
-		return nil
+// unchangedSource: the page is its file as read or last saved, in that format,
+// so saving it again gives the same bytes.
+func (a *App) unchangedSource(fmtID string) bool {
+	return a.source != nil && a.srcKind == fmtID && a.saveFmt == fmtID && a.gen == a.savedGen && !a.restructured
+}
+
+// petScreens are the frames as Petmate screens, each with its framebuf in the file it came from.
+func (a *App) petScreens() []PetScreen {
+	a.keepCase()
+	out := make([]PetScreen, a.nFrames())
+	for i := range out {
+		out[i] = PetScreen{doc: a.frameDoc(i), lower: map[bool]int{true: 1}[a.lower()], name: strings.TrimSuffix(a.name, filepath.Ext(a.name)), fb: -1}
+		if a.frames != nil {
+			f := a.frames[i]
+			out[i].name, out[i].fb = f.name, f.src
+			if f.lower >= 0 {
+				out[i].lower = f.lower
+			}
+		}
 	}
-	scr, err := a.screens(a.source, a.srcKind)
-	if err != nil || len(scr) < 2 || a.srcIndex >= len(scr) {
-		return nil
-	}
-	scr[a.srcIndex].doc = d
-	scr[a.srcIndex].lower = map[bool]int{true: 1}[a.lower()]
-	return scr
+	return out
 }
 
 // writeAtomic writes a file whole or not at all: a new file next to it,
@@ -2367,7 +2339,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		return false
 	}
 	data, err := a.encode(fmtID)
-	bakErr := error(nil)
+	bakErr, changed := error(nil), 0
 	if err == nil && !prefs.NoBackup {
 		bakErr = keepBackup(path, data)
 	}
@@ -2390,24 +2362,12 @@ func (a *App) writeOut(path, fmtID string) bool {
 	if own { // the page's own file; the others are exports
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
-		wasTTI, wasKind := a.srcKind == "tti", a.srcKind
 		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg", "pcb": "pcb", "avt": "avt", "tti": "tti"}[fmtID]
-		if (fmtID != "tti" || !wasTTI) && (fmtID != wasKind || (fmtID != "marq" && fmtID != "petmate")) {
-			a.srcIndex = 0
-		}
 		a.markSaved()
 		dropAutosave(a.Tab)
 		addRecent(path)
-		if n := ttiCount(fmtID, data); n > 1 {
-			a.name = fmt.Sprintf("%s (subpage %d of %d)", a.name, a.srcIndex+1, n)
-		}
-		if n := a.screenCount(fmtID, data); n > 1 {
-			a.name = fmt.Sprintf("%s (screen %d of %d)", a.name, a.srcIndex+1, n)
-		}
-		for _, t := range a.tabs { // the other subpages' or screens' tabs of this file now build on what was saved
-			if t != a.Tab && t.srcKind == a.srcKind && t.srcKind != "" && t.path == path {
-				t.source = data
-			}
+		if framesFormats[fmtID] {
+			changed = a.savedFrames(fmtID, data)
 		}
 	}
 	a.lastDir = filepath.Dir(path)
@@ -2422,36 +2382,16 @@ func (a *App) writeOut(path, fmtID string) bool {
 			return true
 		}
 	}
-	if n := ttiCount(fmtID, data); n > 1 {
-		a.msg(fmt.Sprintf("Saved %s (%d bytes): subpage %d written, the other %d kept as they were", path, len(data), a.srcIndex+1, n-1))
+	if fmtID == "tti" && a.nFrames() > 1 {
+		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d subpages, %d changed", path, len(data), a.nFrames(), changed))
 		return true
 	}
-	if n := a.screenCount(fmtID, data); n > 1 {
-		a.msg(fmt.Sprintf("Saved %s (%d bytes): screen %d written, the other %d kept as they were", path, len(data), a.srcIndex+1, n-1))
+	if framesFormats[fmtID] && a.nFrames() > 1 {
+		a.msg(fmt.Sprintf("Saved %s (%d bytes): %d frames", path, len(data), a.nFrames()))
 		return true
 	}
 	a.msg(fmt.Sprintf("Saved %s (%d bytes)", path, len(data)))
 	return true
-}
-
-// screenCount is how many screens a saved .c or .petmate holds (0 for other formats).
-func (a *App) screenCount(fmtID string, data []byte) int {
-	if fmtID != "marq" && fmtID != "petmate" {
-		return 0
-	}
-	scr, err := a.screens(data, fmtID)
-	if err != nil {
-		return 0
-	}
-	return len(scr)
-}
-
-// ttiCount is how many subpages a saved .tti holds (0 for other formats).
-func ttiCount(fmtID string, data []byte) int {
-	if fmtID != "tti" {
-		return 0
-	}
-	return len(ttiSubpages(data))
 }
 
 func (a *App) save(as bool) {
