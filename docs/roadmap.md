@@ -32,7 +32,7 @@ against each platform's best editor. Each step says what it wins.
 
 - [x] Windows and Mac builds, one file each (2026-10-14): GitHub Actions builds and tests Linux, Windows and
   macOS (Charcoal.app, Apple Silicon + Intel) on every push; a v* tag makes the release page. Details in HANDOFF.md.
-- [ ] The first release, tried by a Windows and a Mac user: v0.1b3 tagged 2026-10-14 (prerelease, three zips).
+- [ ] Tried by a real Windows and a real Mac user: v0.1b3-v0.1b7 released 2026-10-14 (prereleases, three zips each); not yet confirmed on real hardware.
 - [x] A start screen (2026-10-14): "New page for" with a tile per machine (Amiga, PC, Atari 8-bit, Atari ST,
   C64, PET, VIC-20, C128, ZX Spectrum, teletext) drawn in its own font and colours with its size, the last 10
   files, Open, "Drop a file here". Typing, a tool or Esc starts on the last used type. Not done: an example
@@ -106,4 +106,4 @@ against each platform's best editor. Each step says what it wins.
 - Palette editing beyond 16 colours.
 - Not planned: Shift-JIS AA (proportional, scene gone), RIPscrip (vector, not text).
 
-Last updated 2026-10-14 (coming from Moebius/PabloDraw/TheDraw, 9-pixel cells; steps 2.1 frames and animation templates, 2.2 reference picture, 2.3 own fonts and 2.4 shapes and brushes done; 0.1b3 released).
+Last updated 2026-10-14 (steps 0-2 done, plus animation templates, BBS pauses, Animate a folder, Moebius and other editors' files; 0.1b7 released; next: step 3).

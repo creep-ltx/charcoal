@@ -5,6 +5,31 @@ Charcoal = **CharEdit** (editor, `charedit`) + **CharView** (viewer, `charview`)
 program's name or `--view`). History: first a browser app called amiansi (kept in `web/`), then CharCool,
 renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remote origin, branch main).
 
+## Now (2026-10-14): 0.1b7 released
+
+- **Released:** v0.1b7 (prerelease) on GitHub with Linux, Windows and macOS zips. Roadmap steps 0, 1 and 2 are done
+  (data-loss fixes, Windows/Mac + start screen, frames, reference picture, own fonts, shapes), plus things users
+  asked for: animation templates (TheDraw's 14 scan patterns + 14 of our own), BBS pauses per board, Animate a
+  folder (random effects, budgets, random screens per board), Moebius compatibility + key presets, files for
+  other editors. **Next on the roadmap: step 3, compo-ready** (work stages from undo history, party rule check,
+  runs-on-the-machine exports), then step 4/5 (docs/roadmap.md).
+- **Release how-to:** bump `const version` in main.go (X.YbN = beta), commit, push main, `git tag -a vX.YbN -m ...`,
+  push the tag; GitHub Actions builds the three zips and a prerelease (tags with "b"). Check the run with
+  `gh run watch`, then `gh release view`. Before tagging: `go test ./...` and, after merges touching readers, the
+  big check (tools/bigcheck) compared with the previous report.
+- **How the user wants work done:** showy new features are built on a local branch (git worktrees, never pushed),
+  shown first (a video on the NAS /mnt/nas/home/*.mp4 and screenshots opened with Read: they show on the user's
+  phone), released only after the user says yes. Several helpers in parallel worktrees, then one local integration
+  branch, then the full test run and the big check on the combination (it caught a real clash twice: see
+  ~/Projects/Knowledge/claude-code/parallel-helpers-in-worktrees.md).
+- **Who uses it:** the user posts Charcoal in the Ami-Express Sysops Facebook group. Smolly Danders (a sysop, not an
+  artist, colours art in Moebius) asked for the animation templates ("exactly that"). Sysops want: effects that
+  play on the board (BBS pauses), small files, whole folders at once.
+- **Open, not done:** nothing has been played on a live board (Ami-Express 5 first: `~SMO`/`~w`/`~NS` are AE5
+  only, /X 4.x lacks them); FAME and CNet pauses (whole seconds only) - the user was asked, no answer yet; an app
+  icon; a CharView .app on the Mac (`--view` works); a 0x1A in a cell of an ANSI saved without SAUCE ends the file
+  for readers (3 old files); the 4:3 aspect preview; roadmap step 3 onwards.
+
 ## The user's wishes (keep them)
 
 - The interface stays quiet and small; the art comes first. Ctrl+H hides all gadgets.
@@ -104,11 +129,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Built-in PC fonts: `fonts/IBM_EGA_8x14.f14`, `IBM_VGA_8x8.f08`, `IBM_VGA_8x16_850.f16`, `_866.f16`, made by
   `tools/pcfonts.py` from the pack's **.otb** bitmap fonts (the Px .ttf moves capitals' accents by a row);
   checked byte for byte against DOSBox's ROM tables. `fontBySauce` with aliases (IBM VGA 437, IBM EGA43 ...).
-- Not done: the 4:3 preview (step 4; 9-pixel cells done on branch moebius), 8x8/8x14 sets of other code pages, a .prg that carries a
+- Not done: the 4:3 preview (step 4; 9-pixel cells done, 0.1b7), 8x8/8x14 sets of other code pages, a .prg that carries a
   charset (Petmate's form has none), fonts on ST/teletext pages, more than the first screen's custom font in a
   Petmate file.
 
-## Animation templates (2026-10-14, branch transitions)
+## Animation templates (2026-10-14, merged; 0.1b5-0.1b7)
 
 - TheDraw 4.63's "Easy Animation" (manual: The Animation System, Fadeout): `transitions.go` (logic),
   `transitions_ui.go` (the Animate requester, Alt+J `animate`, with a live preview: ~40 frames of the page's first
@@ -160,7 +185,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Not done: reading a draw order back from a file (it opens as the picture; the order is not recognised), Amiga
   real-terminal check, TheDraw's own animation editing (limiting, markers, include files, pauses).
 
-## Other editors' files (2026-10-14, branch exports)
+## Other editors' files (2026-10-14, merged; 0.1b5-0.1b7)
 
 - `editorformats.go`: writers `writeIDF` (runs within a row, 4+ cells or any character 1, count <= 255),
   `writeADF` (80 columns; EGA 64 with the 16 at `adfColours`), `writeTundra` (80 columns; the first cell sets both
@@ -193,7 +218,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   folders); Petmate custom charsets in its JSON; PabloDraw / TheDraw / ACiDDraw / Moebius have no own art file
   beyond ANSI, BIN, XBin (TheDraw .tdf are fonts).
 
-## Animate a folder (2026-10-14, branch batch)
+## Animate a folder (2026-10-14, merged; 0.1b5-0.1b7)
 
 - For sysops (not artists): every screen of a folder animated for the board at once. `batch.go` (logic + the
   command line), `batch_ui.go` (the requester `BatchReq`: setup, progress, report; Alt+Shift+J `animate_folder`,
@@ -221,7 +246,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Not done: the stub for a board copy of Ami-Express names the copy's versions only if renamed; Mystic needs the
   base name asked without an ending (as its menus do); PETSCII/ATASCII/VT52 versions have no board naming.
 
-## Animation size, detail levels and cost (2026-10-14, branch batch)
+## Animation size, detail levels and cost (2026-10-14, merged; 0.1b5-0.1b7)
 
 - Why: a 15 KB screen became ~630 KB with Matrix rain: minutes at 14400 bps. Measure with
   `CHARCOAL_MEASURE=1 go test -run TestMeasure -v` (animsize_test.go: every template at every level on real screens
@@ -283,7 +308,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   `<id>.font` (since 2026-10-14).
 - `.bak` on saving over a file (`prefs.no_backup` switches it off; Settings). Recent files: `prefs.recent`.
 
-## Moebius files and key presets (2026-10-14, branch moebius)
+## Moebius files and key presets (2026-10-14, merged; 0.1b5-0.1b7)
 
 - Corpus: `tools/moebius/gen.js` builds pages and writes them with Moebius's own encoders (a separate checkout of
   github.com/blocktronics/moebius, `app/libtextmode/{ansi,binary_text,xbin,textmode,palette,encodings}.js`, pure
@@ -398,4 +423,4 @@ The goal and the plan: docs/roadmap.md (the go-to editor for text artists on eve
 - ~/Projects/Knowledge/bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
 - ~/Projects/Knowledge/go/sdl2-desktop-gui.md: the GUI approach and headless testing.
 
-Last updated 2026-10-14 (Moebius files and key presets; other editors' files; reference picture, shapes and brushes; own fonts and the font editor; animation templates; frames and animation before).
+Last updated 2026-10-14 (0.1b7 released; "Now" section at the top).
