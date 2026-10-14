@@ -754,7 +754,7 @@ func (a *App) drawPage(u *UI, id string) {
 		}
 		fb.frame(r, 0xFFCCCCCC)
 	}
-	if (a.blink && viewer == nil) || a.playing != nil { // the cursor, Amiga style: an orange block
+	if (a.blink && viewer == nil && a.playing == nil) || (a.playing != nil && a.playing.frames == nil) { // the cursor, Amiga style: an orange block
 		r := cell(a.cx, a.cy, 1, 1)
 		if a.insert {
 			h := max(2*z, r.h/4)

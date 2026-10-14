@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func cellAt(a *App, i, x, y int) int { return cellCh(a.frameDoc(i).get(x, y)) }
@@ -239,5 +240,51 @@ func TestOnionPixels(t *testing.T) {
 	a.goFrame(0)
 	if c0, _ := px(); c0 != 0xFFFFFF {
 		t.Fatalf("first frame: %06x", c0)
+	}
+}
+
+// Playing the frames shows each for its hold time, loops, stops after the
+// last without Loop, and leaves the page as it was.
+func TestPlayFrames(t *testing.T) {
+	a := testApp(t, "pc")
+	a.doc.set(0, 0, a.cell('1'))
+	a.dupFrame()
+	a.doc.set(0, 0, a.cell('2'))
+	a.setHold(200)
+	a.dupFrame()
+	a.doc.set(0, 0, a.cell('3'))
+	a.goFrame(1)
+	gen := a.gen
+	a.playKey()
+	p := a.playing
+	if p == nil || p.frames == nil || cellCh(a.doc.get(0, 0)) != '1' {
+		t.Fatal("not playing from the first frame")
+	}
+	start := p.next.Add(-100 * time.Millisecond) // frame 1 holds 100 ms
+	shown := func(ms int) int {
+		a.playStepAt(start.Add(time.Duration(ms) * time.Millisecond))
+		if a.playing == nil {
+			return 0
+		}
+		return cellCh(a.doc.get(0, 0)) - '0'
+	}
+	for _, c := range []struct{ ms, want int }{{50, 1}, {100, 2}, {299, 2}, {300, 3}, {499, 3}, {500, 1}, {600, 2}} {
+		if got := shown(c.ms); got != c.want {
+			t.Fatalf("at %d ms frame %d is shown, want %d", c.ms, got, c.want)
+		}
+	}
+	a.playKey() // stops
+	if a.playing != nil || a.cur != 1 || cellCh(a.doc.get(0, 0)) != '2' || a.gen != gen {
+		t.Fatalf("after playing: cur %d, %c", a.cur, cellCh(a.doc.get(0, 0)))
+	}
+	// Without Loop it ends after the last frame, and at twice the speed sooner.
+	a.noLoop, a.playSpeed = true, 2
+	a.playKey()
+	start = a.playing.next.Add(-50 * time.Millisecond)
+	if got := shown(149); got != 2 {
+		t.Fatalf("2x: frame %d at 149 ms", got)
+	}
+	if got := shown(260); got != 0 || a.cur != 1 || cellCh(a.doc.get(0, 0)) != '2' {
+		t.Fatalf("no loop: still playing frame %d", got)
 	}
 }

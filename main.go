@@ -406,7 +406,7 @@ func keyDown(e *sdl.KeyboardEvent) {
 		return
 	}
 	if a.playing != nil {
-		if k == "Escape" || k == "M" {
+		if k == "Escape" || k == "M" || keymap[combo{modsOf(ctrl, mod&sdl.KMOD_LALT != 0, shift), k}] == "play" {
 			a.stopPlay(true)
 			return
 		}

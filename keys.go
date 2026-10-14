@@ -182,6 +182,7 @@ func init() {
 		{"frame_later", "Alt+Shift+PageDown", "Move the frame later", func() { a.moveFrame(1) }},
 		{"frame_hold_less", "Alt+[, Alt+Keypad -", "Show the frame a shorter time when played", func() { a.stepHold(-1) }},
 		{"frame_hold_more", "Alt+], Alt+Keypad +", "Show the frame a longer time when played", func() { a.stepHold(1) }},
+		{"play", "Ctrl+P", "Play the frames (one frame: play it as if it came over a modem); again or Esc stops", func() { a.playKey() }},
 		{"onion", "Alt+O", "Onion skin on / off: the frame before, faint, under the empty cells", func() { a.toggleOnion() }},
 		{"frames_strip", "Ctrl+Shift+F", "Show / hide the frame strip", func() { a.toggleStrip() }},
 

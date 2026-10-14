@@ -121,10 +121,15 @@ func (a *App) drawStrip(u *UI, r Rect) {
 		{"Copy", "Copy this frame: a new frame after it (" + keyName("frame_duplicate") + ")", false, a.dupFrame},
 		{"Delete", "Delete this frame (" + keyName("frame_delete") + ")", false, a.deleteFrame},
 		{"Onion", "Onion skin: the frame before, faint, under the empty cells (" + keyName("onion") + ")", a.onion, a.toggleOnion},
+		{"Play", "Play the frames, each for its hold time (" + keyName("play") + "; again or Esc stops)", a.playing != nil && a.playing.frames != nil, a.playKey},
+		{"Loop", "Playing starts again after the last frame", !a.noLoop, func() { a.noLoop = !a.noLoop }},
 	}
-	w := 0
+	if a.playing != nil && a.playing.frames != nil {
+		btns[4].label = "Stop"
+	}
+	w := choiceW(playSpeedNames) + 4
 	for _, b := range btns {
-		w += buttonW(b.label) + 4
+		w += max(buttonW(b.label), buttonW("Stop")) + 4
 	}
 	unit := "ms"
 	if a.tt() {
@@ -144,11 +149,17 @@ func (a *App) drawStrip(u *UI, r Rect) {
 	x = fb.text(x, y+3, unit, cText) + 12
 	for _, b := range btns {
 		bw := buttonW(b.label)
+		if b.label == "Play" || b.label == "Stop" {
+			bw = buttonW("Stop")
+		}
 		if u.button(Rect{x, y, bw, h}, b.label, b.on, b.hint) != nil {
 			b.do()
 		}
 		x += bw + 4
 	}
+	u.choice("playspeed", Rect{x, y, choiceW(playSpeedNames), h}, playSpeedNames, a.playSpeed, "How fast the frames play", func(i int) {
+		a.playSpeed = i
+	})
 	right := r.x + r.w - w - 8
 
 	// The boxes: as many as fit, the current one always on show.
@@ -182,7 +193,11 @@ func (a *App) drawStrip(u *UI, r Rect) {
 		}
 		br := Rect{x, y, bw, h}
 		bg, col := uint32(cGrey), uint32(cText)
-		if i == a.cur {
+		on := i == a.cur
+		if a.playing != nil && a.playing.frames != nil {
+			on = i == a.playing.fi // the frame being played
+		}
+		if on {
 			bg, col = cBlue, cHi
 		}
 		if stripDrag >= 0 && i != stripDrag && br.has(u.mx, u.my) {

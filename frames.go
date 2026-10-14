@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Frame is one picture of a page with several.
@@ -346,4 +347,85 @@ func (a *App) keepFramesHint() string {
 		return "no file of this page type keeps frames yet"
 	}
 	return "save as " + strings.Join(exts, ", ") + " to keep them"
+}
+
+// ---------------------------------------------------------------- playing the frames
+
+// playSpeeds are the speeds the frames play at, and their names.
+var (
+	playSpeeds     = []float64{1, 0.5, 2, 4}
+	playSpeedNames = []string{"1x", "1/2x", "2x", "4x"}
+)
+
+// playKey plays the frames, or a page of one picture as from a modem; again stops.
+func (a *App) playKey() {
+	if a.playing != nil {
+		a.stopPlay(true)
+		return
+	}
+	if a.nFrames() > 1 {
+		a.playFrames()
+		return
+	}
+	a.play()
+}
+
+// playFrames shows the frames one after the other, each for its hold time,
+// from the first; Loop starts again after the last. The page is not changed.
+func (a *App) playFrames() {
+	a.endPlay()
+	n := a.nFrames()
+	a.keepCase()
+	p := &Play{saved: a.snapshot(), frames: a.allDocs(), holds: make([]int, n), lowers: make([]int, n)}
+	for i := range p.holds {
+		p.holds[i] = a.holdOf(i)
+		p.lowers[i] = -1
+		if a.frames != nil {
+			p.lowers[i] = a.frames[i].lower
+		}
+	}
+	p.next = time.Now().Add(a.scaledHold(p.holds[0]))
+	a.playing = p
+	a.showPlayed()
+	a.sel, a.float = nil, nil
+	a.msg(fmt.Sprintf("Playing %d frames (%s or Esc stops)", n, keyName("play")))
+}
+
+// scaledHold is a hold time at the chosen speed.
+func (a *App) scaledHold(ms int) time.Duration {
+	return time.Duration(float64(ms)/playSpeeds[a.playSpeed%len(playSpeeds)]) * time.Millisecond
+}
+
+// showPlayed puts the frame being played on show.
+func (a *App) showPlayed() {
+	p := a.playing
+	a.doc = p.frames[p.fi]
+	if l := p.lowers[p.fi]; l >= 0 && a.c64() {
+		a.setCase(l == 1)
+	}
+	a.applyLook()
+}
+
+// frameStep goes on to the frames whose time has come; without Loop the last one ends it.
+func (a *App) frameStep(now time.Time) {
+	p := a.playing
+	moved := false
+	for !now.Before(p.next) {
+		p.fi++
+		if p.fi >= len(p.frames) {
+			if a.noLoop {
+				a.stopPlay(false)
+				return
+			}
+			p.fi = 0
+		}
+		p.next = p.next.Add(a.scaledHold(p.holds[p.fi]))
+		moved = true
+		if p.next.Before(now.Add(-time.Second)) { // far behind (the window was held): go on from now
+			p.next = now
+		}
+	}
+	if moved {
+		a.showPlayed()
+	}
 }

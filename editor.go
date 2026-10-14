@@ -120,6 +120,12 @@ type Play struct {
 	term  emulator
 	saved Snap
 	last  time.Time
+	// Playing the frames: each shown for its hold time.
+	frames []*Doc
+	holds  []int // ms
+	lowers []int // PETSCII case of each, -1 not said
+	fi     int
+	next   time.Time // when the next frame comes
 }
 
 // Tab is one open page with everything that belongs to it.
@@ -161,6 +167,7 @@ type Tab struct {
 	autoGen             int         // the generation the autosave holds
 	start               bool        // the start screen is shown instead of the (empty) page
 	frames              []Frame     // the page's pictures when it has several (nil: one, the doc); see frames.go
+	noLoop              bool        // playing the frames stops after the last one
 	cur                 int         // the frame being worked on: doc is it
 	restructured        bool        // frames were added, deleted or moved since the file was read or saved
 	onion               bool        // the frame before shows faint under the empty cells
@@ -183,6 +190,7 @@ type App struct {
 	flash         bool // ZX Spectrum: new cells flash
 	showCodes     bool // teletext: show the attribute codes' names in their cells
 	ttMeta        int  // teletext: edit.tf's page digit (bits 0-2 character set, bit 3 codes 0 and 16 are black)
+	playSpeed     int  // frames play at speeds[playSpeed] (0: 1x)
 	clip          *Block
 	clipText      string
 	fset, factive int
@@ -2457,9 +2465,14 @@ func (a *App) play() {
 	a.scrollY = 0
 }
 
-func (a *App) playStep() {
+func (a *App) playStep() { a.playStepAt(time.Now()) }
+
+func (a *App) playStepAt(now time.Time) {
 	p := a.playing
-	now := time.Now()
+	if p.frames != nil {
+		a.frameStep(now)
+		return
+	}
 	n := max(1, int(now.Sub(p.last).Seconds()*float64(a.baud)/10+0.5))
 	p.last = now
 	end := min(len(p.bytes), p.pos+n)
@@ -2476,12 +2489,16 @@ func (a *App) playStep() {
 
 func (a *App) stopPlay(skip bool) {
 	p := a.playing
-	if skip {
+	if skip && p.term != nil {
 		p.term.write(p.bytes[p.pos:])
 	}
 	a.playing = nil
 	// Playing does not change the page: put back the page as it was.
 	a.restore(p.saved)
+	if p.frames != nil {
+		a.msg(fmt.Sprintf("Played %d frames", len(p.frames)))
+		return
+	}
 	a.msg(fmt.Sprintf("Played %d bytes", len(p.bytes)))
 }
 
