@@ -58,7 +58,7 @@ type Confirm struct {
 
 func (d *Confirm) draw(u *UI) {
 	in := u.window(centre(500, 150), "Charcoal")
-	lines := wrap(d.text, in.w/charW)
+	lines := wrap(d.text, in.w)
 	for i, l := range lines {
 		u.fb.text(in.x, in.y+i*lineH, l, cText)
 	}
@@ -597,7 +597,7 @@ func (d *InfoReq) draw(u *UI) {
 		fl    *Field
 	}{{"Title", &d.title}, {"Author", &d.author}, {"Group", &d.group}} {
 		fb.text(in.x, y+3, f.label, cText)
-		u.field(Rect{in.x + 72, y, (f.fl.max+2)*charW + 8, gadH}, f.fl, "")
+		u.field(Rect{in.x + 72, y, digitsW(f.fl.max+2) + 8, gadH}, f.fl, "")
 		y += gadH + 6
 	}
 	y += 4
@@ -605,7 +605,7 @@ func (d *InfoReq) draw(u *UI) {
 	y += gadH + 4
 	d.clear, _ = u.check(in.x, y, "Start the file with clear screen (form feed on Amiga, ESC[2J on PC)", d.clear, "")
 	y += gadH + 10
-	for _, l := range wrap(describeSauce(a.sauce), in.w/charW) {
+	for _, l := range wrap(describeSauce(a.sauce), in.w) {
 		fb.text(in.x, y, l, cText)
 		y += lineH
 	}
@@ -786,7 +786,7 @@ Every two minutes, pages with changes are kept aside (in ` + shownDir(autosaveDi
 func (d *HelpReq) draw(u *UI) {
 	fb := u.fb
 	in := u.window(centre(900, ui.fb.h*5/6), "CharEdit "+version+" - keys and mouse")
-	lines := wrap(helpText(), in.w/charW-3)
+	lines := wrap(helpText(), in.w-digitsW(3))
 	textR := Rect{in.x, in.y, in.w - 20, in.h - gadH - 10}
 	rows := textR.h / lineH
 	if w := u.takeWheel(textR); w != 0 {
@@ -897,12 +897,12 @@ func (d *FontReq) download() {
 func (d *FontReq) draw(u *UI) {
 	in := u.window(centre(600, 260), d.title)
 	y := in.y
-	for _, l := range wrap(d.why, in.w/charW) {
+	for _, l := range wrap(d.why, in.w) {
 		u.fb.text(in.x, y, l, cText)
 		y += lineH
 	}
 	if d.err != "" {
-		for _, l := range wrap(d.err, in.w/charW) {
+		for _, l := range wrap(d.err, in.w) {
 			u.fb.text(in.x, y+6, l, cOrange)
 			y += lineH
 		}
@@ -1056,14 +1056,14 @@ func (d *SettingsReq) draw(u *UI) {
 			savePrefs()
 		})
 	y += gadH + 4
-	for _, l := range wrap("Pauses in animated files. None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text. Animate can choose for one page.", in.w/charW) {
+	for _, l := range wrap("Pauses in animated files. None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text. Animate can choose for one page.", in.w) {
 		fb.text(in.x, y, l, cText)
 		y += lineH
 	}
 	y += 6
 	x := fb.text(in.x, y+3, "Animate warns when a file plays longer than", cText) + 8
-	u.field(Rect{x, y, 4*charW + 16, gadH}, &d.warn, "Seconds at the caller's speed chosen in Animate (the speed in the bar)")
-	fb.text(x+4*charW+24, y+3, "s", cText)
+	u.field(Rect{x, y, digitsW(4) + 16, gadH}, &d.warn, "Seconds at the caller's speed chosen in Animate (the speed in the bar)")
+	fb.text(x+digitsW(4)+24, y+3, "s", cText)
 	if v, err := strconv.Atoi(d.warn.String()); err == nil && v > 0 && v != prefs.AnimWarn && v <= 9999 {
 		prefs.AnimWarn = v
 		savePrefs()
@@ -1086,7 +1086,7 @@ func (d *SettingsReq) draw(u *UI) {
 	} else if len(missing) > 0 {
 		status += " Missing: " + strings.Join(missing, ", ") + "."
 	}
-	for _, l := range wrap(status, in.w/charW) {
+	for _, l := range wrap(status, in.w) {
 		fb.text(in.x, y, l, cText)
 		y += lineH
 	}
@@ -1143,7 +1143,7 @@ func (d *SettingsReq) draw(u *UI) {
 		})
 	}
 	if d.err != "" {
-		for i, l := range wrap(d.err, in.w/charW) {
+		for i, l := range wrap(d.err, in.w) {
 			fb.text(in.x, y+lineH+gadH+12+i*lineH, l, cOrange)
 		}
 	}

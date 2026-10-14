@@ -135,7 +135,7 @@ func (a *App) drawStrip(u *UI, r Rect) {
 	if a.tt() {
 		unit = "s"
 	}
-	fieldW := 7 * charW
+	fieldW := digitsW(7)
 	w += textW("Hold") + 6 + fieldW + 4 + textW(unit) + 12
 	x := r.x + r.w - w
 	fb.text(x, y+3, "Hold", cText)

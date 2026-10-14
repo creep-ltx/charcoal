@@ -401,7 +401,7 @@ func (d *AutosaveReq) draw(u *UI) {
 		text = fmt.Sprintf("%d pages were not saved when CharEdit last stopped, but kept aside: %s. "+
 			"Open them again in tabs? (Later: ask again at the next start.)", len(d.files), d.names())
 	}
-	for i, l := range wrap(text, in.w/charW) {
+	for i, l := range wrap(text, in.w) {
 		u.fb.text(in.x, in.y+i*lineH, l, cText)
 	}
 	switch buttonRow(u, in, "Throw away", "Later", "Open again") {

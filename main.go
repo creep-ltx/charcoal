@@ -82,7 +82,7 @@ func main() {
 	loadSTFonts()
 	loadPrefs()
 	loadKeys()
-	uiFont = fontByID("topaz2")
+	setFace(bitmapFace{fontByID("topaz2")}, 16)
 	mode := prefs.Mode // the last page type, if it can be had without a download
 	switch {
 	case mode == "c64" && a.hasC64, mode == "st" && hasSTFont():

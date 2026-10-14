@@ -378,6 +378,17 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Headless screenshots: `SDL_VIDEODRIVER=offscreen XDG_CONFIG_HOME=/tmp/x CHARCOAL_SCRIPT="click x y; key ctrl+S;
   text abc; wait 300; shot /tmp/a.png; quit" ./charedit file` (script.go). Never on the user's display.
   Ubuntu's SDL2 has no offscreen driver and on a Mac it wants OpenGL: use `SDL_VIDEODRIVER=dummy` there.
+  With a fresh XDG_CONFIG_HOME the first screen is the "Commodore character sets" requester at 984x688: start the
+  script with `click 740 452; wait 300;` (Not now) or every shot is that requester.
+- Interface look (2026-10-14, step 1 of the GUI plan; mockups: https://claude.ai/artifact/RFZccPWKn8tEKNPt1ZqhHD):
+  `theme.go`. The colours `cGrey`, `cText`, `cOrange`... are variables set by `useTheme(name)` from `themes`
+  (only "Dark", today's look, so far). Interface text goes through a `face` (`draw`, `width`), today
+  `bitmapFace` (Topaz); `setFace(f, h)` also resizes `lineH`, `gadH`, `smallH`, `tileH`. Layout measures text in
+  pixels: `textW`, `digitsW(n)` for number fields and columns, `fitText`, `wrap(s, px)` (`wrapCols(s, n)` is for
+  plain-text reports). No `charW` any more: never count characters for screen layout. Checked pixel-identical
+  to 0.1b7 on 9 screens (start, page, Animate, Animate a folder, help, open, save as, info, typing).
+  Next: the menu bar generated from `keys.go`, then the Studio layout, Light/Workbench themes and a system font
+  (golang.org/x/image's opentype, already a dependency).
 - Sources: 16colo.rs packs and tags, asciiarena.se (sitemap; files at /collections/<name>/<file>),
   ~/Amiga/BBS/BBS Style (412 files), NAS /mnt/nas/home/Unsorted/Junk/Latex/Petscii* (with the PETSCII editor's
   own PNGs: rendering is pixel-identical). **Not csdb.dk and not zxart.ee files: their robots.txt forbid it.**

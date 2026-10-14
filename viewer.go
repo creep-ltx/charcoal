@@ -197,7 +197,7 @@ func (v *Viewer) scrollText() string {
 func (a *App) drawViewer(u *UI) {
 	fb := u.fb
 	W, H := fb.w, fb.h
-	fb.fill(Rect{0, 0, W, H}, 0xFF141518)
+	fb.fill(Rect{0, 0, W, H}, cStartBack)
 	bottom := H
 	if viewer.info {
 		bottom = H - lineH - 6

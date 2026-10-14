@@ -5,7 +5,6 @@ package main
 
 import (
 	"strings"
-	"unicode/utf8"
 )
 
 type Click struct {
@@ -259,20 +258,25 @@ func (u *UI) field(r Rect, fl *Field, hint string) {
 	f.bevel(r.inset(2), false)
 	in := r.inset(4)
 	f.fill(in, cGrey)
-	vis := max(1, (in.w-4)/charW)
+	// What shows is measured in pixels: the cursor stays in view, with room for its block.
+	avail := in.w - 4
+	curW := textW(" ")
+	if fl.cur < len(fl.text) {
+		curW = textW(string(fl.text[fl.cur]))
+	}
 	if fl.cur < fl.scroll {
 		fl.scroll = fl.cur
 	}
-	if fl.cur > fl.scroll+vis-1 {
-		fl.scroll = fl.cur - vis + 1
-	}
 	fl.scroll = max(0, min(fl.scroll, len(fl.text)))
-	end := min(len(fl.text), fl.scroll+vis)
+	for fl.scroll < fl.cur && textW(string(fl.text[fl.scroll:fl.cur]))+curW > avail {
+		fl.scroll++
+	}
+	end := fl.scroll + fitText(fl.text[fl.scroll:], avail)
 	ty := in.y + (in.h-lineH)/2
 	f.text(in.x+2, ty, string(fl.text[fl.scroll:end]), cText)
 	if u.focus == fl {
-		cx := in.x + 2 + (fl.cur-fl.scroll)*charW
-		f.fill(Rect{cx, ty, charW, lineH}, cOrange)
+		cx := in.x + 2 + textW(string(fl.text[fl.scroll:fl.cur]))
+		f.fill(Rect{cx, ty, curW, lineH}, cOrange)
 		if fl.cur < len(fl.text) {
 			f.text(cx, ty, string(fl.text[fl.cur]), cText)
 		}
@@ -280,7 +284,7 @@ func (u *UI) field(r Rect, fl *Field, hint string) {
 	u.setHint(r, hint)
 	if c := u.take(r); c != nil {
 		u.focus = fl
-		fl.cur = max(0, min(len(fl.text), fl.scroll+(c.x-in.x-2)/charW))
+		fl.cur = fl.scroll + fitText(fl.text[fl.scroll:], c.x-in.x-2)
 	}
 }
 
@@ -377,20 +381,27 @@ func (u *UI) window(r Rect, title string) Rect {
 	return Rect{r.x + 10, r.y + lineH + 14, r.w - 20, r.h - lineH - 24}
 }
 
-// wrap breaks text into lines of at most n characters.
-func wrap(s string, n int) []string {
+// wrap breaks text into lines at most w pixels wide (a word wider than that gets a line of its own).
+func wrap(s string, w int) []string { return wrapBy(s, w, textW) }
+
+// wrapCols breaks plain text (a report, not the screen) into lines of at most n characters.
+func wrapCols(s string, n int) []string {
+	return wrapBy(s, n, func(s string) int { return len([]rune(s)) })
+}
+
+func wrapBy(s string, w int, width func(string) int) []string {
 	var out []string
 	for _, para := range strings.Split(s, "\n") {
 		line := ""
-		for _, w := range strings.Fields(para) {
-			if line != "" && utf8.RuneCountInString(line)+1+utf8.RuneCountInString(w) > n {
+		for _, word := range strings.Fields(para) {
+			if line != "" && width(line+" "+word) > w {
 				out = append(out, line)
 				line = ""
 			}
 			if line != "" {
 				line += " "
 			}
-			line += w
+			line += word
 		}
 		out = append(out, line)
 	}

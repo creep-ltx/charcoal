@@ -104,7 +104,7 @@ func (d *AnimReq) drawCost(u *UI, r Rect, file bool) {
 	fb := u.fb
 	x, y := r.x, r.y
 	if !file {
-		for _, l := range wrap("Frames: the strip, Play, GIF and APNG. The saved file's cost shows when Make is the saved file.", r.w/charW) {
+		for _, l := range wrap("Frames: the strip, Play, GIF and APNG. The saved file's cost shows when Make is the saved file.", r.w) {
 			fb.text(x, y, l, cDim)
 			y += lineH
 		}
@@ -125,7 +125,7 @@ func (d *AnimReq) drawCost(u *UI, r Rect, file bool) {
 	y += lineH + 2
 	row := func(l, v string, col uint32) {
 		fb.text(r.x, y, l, col)
-		fb.text(r.x+12*charW, y, v, col)
+		fb.text(r.x+digitsW(12), y, v, col)
 		y += lineH
 	}
 	row("Size", kbWords(c.size), cText)
@@ -152,7 +152,7 @@ func (d *AnimReq) drawCost(u *UI, r Rect, file bool) {
 	y += 6
 	if ms := c.at(a.baud); ms > animWarnMs() {
 		warnSign(fb, r.x, y+1)
-		for i, l := range wrap(fmt.Sprintf("For fast connections: %s at %s", durWords(ms), speedName(a.baud)), (r.w-16)/charW) {
+		for i, l := range wrap(fmt.Sprintf("For fast connections: %s at %s", durWords(ms), speedName(a.baud)), r.w-16) {
 			fb.text(r.x+16, y+i*lineH, l, cOrange)
 		}
 		u.setHint(Rect{r.x, y, r.w, 2 * lineH}, fmt.Sprintf("Longer than %d s at the caller's speed (Settings): a smaller detail level or a lighter template plays sooner", animWarnMs()/1000))

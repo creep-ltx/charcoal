@@ -534,7 +534,7 @@ func (d *FontAsk) draw(u *UI) {
 	if d.err != nil {
 		text = filepath.Base(d.path) + " looks like a font, but not one for this page: " + d.err.Error()
 	}
-	for i, l := range wrap(text, in.w/charW) {
+	for i, l := range wrap(text, in.w) {
 		u.fb.text(in.x, in.y+i*lineH, l, cText)
 	}
 	labels := []string{"Use as font", "Open as art", "Cancel"}

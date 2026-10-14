@@ -842,7 +842,7 @@ func (r *batchRun) reportText() string {
 	}
 	if s.Variants > 1 {
 		fmt.Fprintf(&sb, "Versions: %d of each screen\n", s.Variants)
-		for _, l := range wrap(variantNote(r.board), 90) {
+		for _, l := range wrapCols(variantNote(r.board), 90) {
 			fmt.Fprintf(&sb, "          %s\n", l)
 		}
 	}

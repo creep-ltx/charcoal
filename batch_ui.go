@@ -185,11 +185,11 @@ func (d *BatchReq) drawSetup(u *UI) {
 	x0, y := in.x, in.y
 	label := func(x int, s string) int { return fb.text(x, y+3, s, cText) + 8 }
 	field := func(x, chars int, f *Field, hint string) int {
-		u.field(Rect{x, y, chars*charW + 16, gadH}, f, hint)
-		return x + chars*charW + 24
+		u.field(Rect{x, y, digitsW(chars) + 16, gadH}, f, hint)
+		return x + digitsW(chars) + 24
 	}
 	line := func(s string, col uint32) {
-		for _, l := range wrap(s, in.w/charW) {
+		for _, l := range wrap(s, in.w) {
 			fb.text(x0, y, l, col)
 			y += lineH
 		}

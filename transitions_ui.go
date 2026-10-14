@@ -331,7 +331,7 @@ func (d *AnimReq) draw(u *UI) {
 	if d.pat < nTheDraw {
 		help = "TheDraw: " + help
 	}
-	for _, l := range wrap(help, pw/charW) {
+	for _, l := range wrap(help, pw) {
 		fb.text(px, y, l, cText)
 		y += lineH
 	}
@@ -401,8 +401,8 @@ func (d *AnimReq) draw(u *UI) {
 		x := px
 		label := func(s string) { x = fb.text(x, y+3, s, cText) + 8 }
 		field := func(f *Field, chars int, hint string) {
-			u.field(Rect{x, y, chars*charW + 16, gadH}, f, hint)
-			x += chars*charW + 24
+			u.field(Rect{x, y, digitsW(chars) + 16, gadH}, f, hint)
+			x += digitsW(chars) + 24
 		}
 		switch {
 		case isEffect(d.pat):
@@ -449,15 +449,15 @@ func (d *AnimReq) draw(u *UI) {
 	} else {
 		if isEffect(d.pat) {
 			fb.text(px, y+3, "Frames", cText)
-			x := px + 7*charW + 8
-			u.field(Rect{x, y, 3*charW + 16, gadH}, &d.length, "How many frames the effect takes")
-			d.shuffleButton(u, x+3*charW+24, y)
-			fb.text(x+3*charW+32+buttonW("Shuffle"), y+3, "The file draws each frame's changes only.", cText)
+			x := px + digitsW(7) + 8
+			u.field(Rect{x, y, digitsW(3) + 16, gadH}, &d.length, "How many frames the effect takes")
+			d.shuffleButton(u, x+digitsW(3)+24, y)
+			fb.text(x+digitsW(3)+32+buttonW("Shuffle"), y+3, "The file draws each frame's changes only.", cText)
 			y += gadH + 8
 		}
 		y = d.drawPauses(u, px, y, pw)
 		for _, l := range wrap(fmt.Sprintf("Play (%s) shows it at %s%s. Kept with the page until changed or cleared.", keyName("play"), speedName(a.baud),
-			map[bool]string{true: ", with the board's pauses"}[d.board() != ""]), pw/charW) {
+			map[bool]string{true: ", with the board's pauses"}[d.board() != ""]), pw) {
 			fb.text(px, y, l, cText)
 			y += lineH
 		}
@@ -569,8 +569,8 @@ func (d *AnimReq) drawPauses(u *UI, x, y, w int) int {
 		fx := x
 		label := func(s string) { fx = fb.text(fx, y+3, s, cText) + 8 }
 		field := func(fl *Field, chars int, hint string) {
-			u.field(Rect{fx, y, chars*charW + 16, gadH}, fl, hint)
-			fx += chars*charW + 24
+			u.field(Rect{fx, y, digitsW(chars) + 16, gadH}, fl, hint)
+			fx += digitsW(chars) + 24
 		}
 		if isEffect(d.pat) {
 			label("Hold")
@@ -585,7 +585,7 @@ func (d *AnimReq) drawPauses(u *UI, x, y, w int) int {
 		}
 		y += gadH + 6
 		if b != nil && b.shows(f) {
-			for _, l := range wrap(b.name+": "+b.note+".", w/charW) {
+			for _, l := range wrap(b.name+": "+b.note+".", w) {
 				fb.text(x, y, l, cText)
 				y += lineH
 			}
@@ -606,7 +606,7 @@ func (d *AnimReq) drawPauses(u *UI, x, y, w int) int {
 		cx += cw + 16
 	}
 	y += gadH + 6
-	for _, l := range wrap("None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text.", w/charW) {
+	for _, l := range wrap("None is the safe choice for art packs, 16colo.rs and several boards: another board's codes show as junk text.", w) {
 		fb.text(x, y, l, cText)
 		y += lineH
 	}

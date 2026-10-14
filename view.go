@@ -157,7 +157,8 @@ func (a *App) paintCells(fb *FB, x0, y0, z int, get func(x, y int) uint32, w, h 
 
 // ---------------------------------------------------------------- layout
 
-const gadH = lineH + 6
+// gadH and smallH follow the interface text's height (setFace).
+var gadH = lineH + 6
 
 var fieldCols = &Field{max: 4}
 var fieldRows = &Field{max: 6}
@@ -538,14 +539,14 @@ func (a *App) drawBar(u *UI) int {
 			a.setCols([]int{38, 40}[i])
 		})
 	default:
-		r := fl.place(textW("W") + 8 + 6*charW + 8)
+		r := fl.place(textW("W") + 8 + digitsW(6) + 8)
 		fb.text(r.x, r.y+3, "W", cText)
 		if u.focus != fieldCols {
 			fieldCols.set(strconv.Itoa(a.doc.cols))
 		}
 		u.field(Rect{r.x + 16, r.y, r.w - 16, r.h}, fieldCols, "Page width in columns (Enter sets it)")
 	}
-	rh := fl.place(textW("H") + 8 + 7*charW + 8)
+	rh := fl.place(textW("H") + 8 + digitsW(7) + 8)
 	fb.text(rh.x, rh.y+3, "H", cText)
 	if u.focus != fieldRows {
 		fieldRows.set(strconv.Itoa(a.doc.rows))
@@ -703,7 +704,7 @@ func (a *App) drawPage(u *UI, id string) {
 	old := fb.clip
 	fb.clip = p.and(old)
 	if viewer != nil && viewer.shrink > 1 { // art wider than the window, shown smaller
-		fb.fill(p, 0xFF141518)
+		fb.fill(p, cStartBack)
 		px, w, h := viewer.shrunk()
 		for y := 0; y < p.h && a.scrollY+y < h; y++ {
 			src := (a.scrollY+y)*w + a.scrollX
@@ -715,7 +716,7 @@ func (a *App) drawPage(u *UI, id string) {
 		fb.clip = old
 		return
 	}
-	fb.fill(p, 0xFF141518) // outside the page
+	fb.fill(p, cStartBack) // outside the page
 	ox, oy := p.x-a.scrollX, p.y-a.scrollY
 	rowPx, colPx := H*z, a.cellW()*z
 	pageR := Rect{ox, oy, a.doc.cols * colPx, a.doc.rows * rowPx}
@@ -981,7 +982,7 @@ func (a *App) paneHeight() int {
 	return max(8*a.cellH(), 5*(smallH+4)) + 14
 }
 
-const smallH = lineH + 4
+var smallH = lineH + 4
 
 var tools = []struct{ id, name, hint string }{
 	{"type", "Type", "Type: click to place the cursor, then type"},
@@ -1257,7 +1258,7 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		if a.printable(c) {
 			a.pageGlyph(fb, x, y, c)
 		}
-		x = fb.text(x+charW*2, y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
+		x = fb.text(x+digitsW(2), y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 	}
 	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum", "tt": "Teletext"}[a.mode]
 	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, a.doc.rows), cText) + 24

@@ -246,12 +246,11 @@ func (a *App) openRecent(p string) {
 }
 
 const (
-	cDim       = 0xFF6B707A // quiet text: folders, notes
-	cStartBack = 0xFF141518 // as outside the page
 	tileW      = 196
 	tileScreen = 64 // the height of a tile's little screen
-	tileH      = tileScreen + 12 + lineH + 8
 )
+
+var tileH = tileScreen + 12 + lineH + 8
 
 // drawStart draws the start screen in r.
 func (a *App) drawStart(u *UI, r Rect) {
@@ -317,10 +316,15 @@ func (a *App) drawStart(u *UI, r Rect) {
 			col = cHi
 		}
 		x := fb.text(rr.x+8, rr.y+3, name, col)
-		room := (rr.x + rr.w - 8 - (x + 16)) / charW
-		if room > 3 {
-			if len([]rune(dir)) > room {
-				dir = "..." + string([]rune(dir)[len([]rune(dir))-room+3:])
+		room := rr.x + rr.w - 8 - (x + 16)
+		if room > textW("....") {
+			if textW(dir) > room {
+				rs := []rune(dir)
+				i := 0
+				for i < len(rs) && textW(string(rs[i:])) > room-textW("...") {
+					i++
+				}
+				dir = "..." + string(rs[i:])
 			}
 			fb.text(x+16, rr.y+3, dir, map[bool]uint32{true: cText, false: cDim}[sel])
 		}
