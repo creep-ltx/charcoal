@@ -165,6 +165,25 @@ func (d *Doc) lastCol(y int) int {
 	return -1
 }
 
+// empty: nothing is drawn on the page. An empty Spectrum page is white paper
+// (not blank to usedRows), so a page of one space cell everywhere is empty too.
+func (d *Doc) empty() bool {
+	if d.usedRows() == 0 {
+		return true
+	}
+	cells := d.cells[:d.rows*d.cols]
+	first := cells[0]
+	if ch := first & 255; (ch != 32 && ch != 0) || (ch == 0 && d.glyph0) || first&underline != 0 {
+		return false
+	}
+	for _, v := range cells {
+		if v != first {
+			return false
+		}
+	}
+	return true
+}
+
 // usedRows counts the rows up to the last non-blank one.
 func (d *Doc) usedRows() int {
 	for y := d.rows - 1; y >= 0; y-- {

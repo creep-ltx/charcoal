@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -132,5 +133,92 @@ func TestCloseTabNeverShowsOneTabTwice(t *testing.T) {
 	a.closeTab(t1)
 	if a.layout != "one" || a.Tab != t2 {
 		t.Errorf("layout %s, shown %v %v", a.layout, a.shown[0], a.shown[1])
+	}
+}
+
+// Saving a .c or .petmate file with several screens from one screen's tab
+// keeps every other screen (it once wrote that one screen over the file).
+func TestSaveOneScreenKeepsTheOthers(t *testing.T) {
+	withFonts(t, false)
+	s1, s2 := newDoc(40, 25), newDoc(40, 25)
+	s1.set(0, 0, makeCell(1, 3, 0, 0))
+	s2.set(5, 5, makeCell(2, 4, 0, 0))
+	pmSrc := []byte(`{"version":4,"screens":[0,1],"framebufs":[` +
+		`{"width":40,"height":25,"backgroundColor":6,"borderColor":14,"charset":"upper","name":"one","zoom":{"zoomLevel":2},"framebuf":[]},` +
+		`{"width":40,"height":25,"backgroundColor":6,"borderColor":14,"charset":"upper","name":"two","framebuf":[]}],` +
+		`"customFonts":{"x":{"name":"mine"}},"somethingNew":[1,2]}`)
+	// Fill the Petmate framebufs from the two pages.
+	pmSrc = writePetmateFrames(pmSrc, []PetScreen{{doc: s1, fb: 0}, {doc: s2, fb: 1}})
+	for _, c := range []struct {
+		ext  string
+		data []byte
+	}{{".c", writeMarqFrames([]*Doc{s1, s2}, false, "c64")}, {".petmate", pmSrc}} {
+		for tab := 0; tab < 2; tab++ {
+			a := testApp(t, "pc")
+			a.hasC64 = true
+			p := filepath.Join(t.TempDir(), "two"+c.ext)
+			if err := os.WriteFile(p, c.data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			a.openPath(p, "auto")
+			if len(a.tabs) != 2 || a.tabs[1].path != p {
+				t.Fatalf("%s: %d tabs", c.ext, len(a.tabs))
+			}
+			a.focusTab(a.tabs[tab])
+			a.pushUndo()
+			a.doc.set(9, 9, makeCell(7, 1, 0, 0)) // an edit in this screen
+			a.save(false)
+			b, _ := os.ReadFile(p)
+			kind := map[string]string{".c": "marq", ".petmate": "petmate"}[c.ext]
+			scr, err := a.readScreens(b, kind)
+			if err != nil || len(scr) != 2 {
+				t.Fatalf("%s tab %d: %d screens back, %v", c.ext, tab, len(scr), err)
+			}
+			if scr[0].doc.get(0, 0) != s1.get(0, 0) || scr[1].doc.get(5, 5) != s2.get(5, 5) {
+				t.Fatalf("%s tab %d: a screen lost its cells", c.ext, tab)
+			}
+			if scr[tab].doc.get(9, 9) != makeCell(7, 1, 0, 0) || scr[1-tab].doc.get(9, 9) == makeCell(7, 1, 0, 0) {
+				t.Fatalf("%s tab %d: the edit is not where it was made", c.ext, tab)
+			}
+			if kind == "petmate" {
+				for _, keep := range []string{`"customFonts":{"x":{"name":"mine"}}`, `"somethingNew":[1,2]`, `"zoom":{"zoomLevel":2}`, `"name":"two"`} {
+					if !bytes.Contains(b, []byte(keep)) {
+						t.Fatalf("petmate lost %s: %s", keep, b[:200])
+					}
+				}
+			}
+			// The other tab now builds on what was saved: saving it keeps this edit.
+			a.focusTab(a.tabs[1-tab])
+			a.pushUndo()
+			a.doc.set(8, 8, makeCell(6, 1, 0, 0))
+			a.save(false)
+			b, _ = os.ReadFile(p)
+			scr, _ = a.readScreens(b, kind)
+			if len(scr) != 2 || scr[tab].doc.get(9, 9) != makeCell(7, 1, 0, 0) || scr[1-tab].doc.get(8, 8) != makeCell(6, 1, 0, 0) {
+				t.Fatalf("%s tab %d: the second save lost the first one's edit", c.ext, tab)
+			}
+		}
+	}
+}
+
+// An empty page whose cells have a paper colour (a Spectrum's white, an ST's)
+// is still empty: the page type buttons give it the new type's size.
+func TestEmptyPaperPageTakesNewType(t *testing.T) {
+	withFonts(t, true)
+	for _, from := range []string{"zx", "st"} {
+		a := testApp(t, from)
+		if !a.doc.empty() || !a.pristine() {
+			t.Fatalf("%s: a new page is not empty", from)
+		}
+		a.setMode("pc")
+		if a.doc.cols != 80 || a.doc.rows != 25 {
+			t.Fatalf("%s to PC: %dx%d", from, a.doc.cols, a.doc.rows)
+		}
+		a = testApp(t, from)
+		a.pushUndo()
+		a.doc.set(1, 1, a.cell('x'))
+		if a.doc.empty() {
+			t.Fatalf("%s: a drawn page counts as empty", from)
+		}
 	}
 }

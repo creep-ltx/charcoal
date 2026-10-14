@@ -1240,14 +1240,19 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 			a.screenMachine(scr[i].machine)
 			label := scr[i].name
 			if label == "" {
-				label = fmt.Sprintf("screen %d", i+1)
+				label = fmt.Sprintf("screen %d of %d", i+1, len(scr))
 			}
-			a.finishLoad(b, name+" ("+label+")", "", nil, own)
+			a.finishLoad(b, name+" ("+label+")", path, nil, own)
 		}
 		a.Tab = first
 		a.applyMode()
 		if len(scr) > 1 {
-			a.msg(fmt.Sprintf("%s has %d screens: each is in a tab of its own", name, len(scr)))
+			if scr[0].name == "" {
+				first.name = fmt.Sprintf("%s (screen 1 of %d)", name, len(scr))
+			} else {
+				first.name = name + " (" + scr[0].name + ")"
+			}
+			a.msg(fmt.Sprintf("%s has %d screens: each is in a tab of its own; saving one keeps the others", name, len(scr)))
 		}
 		return
 	}
@@ -1441,7 +1446,7 @@ func (a *App) screens(b []byte, kind string) ([]PetScreen, error) {
 	if len(b) > 0 && screensCache.data == &b[0] && screensCache.n == len(b) && screensCache.kind == kind {
 		out := make([]PetScreen, len(screensCache.scr))
 		for i, s := range screensCache.scr { // each tab gets a page of its own
-			out[i] = PetScreen{doc: s.doc.clone(), lower: s.lower, name: s.name, machine: s.machine}
+			out[i] = PetScreen{doc: s.doc.clone(), lower: s.lower, name: s.name, machine: s.machine, fb: s.fb}
 		}
 		return out, nil
 	}
@@ -1450,7 +1455,7 @@ func (a *App) screens(b []byte, kind string) ([]PetScreen, error) {
 		screensCache.data, screensCache.n, screensCache.kind, screensCache.scr = &b[0], len(b), kind, scr
 		out := make([]PetScreen, len(scr))
 		for i, s := range scr {
-			out[i] = PetScreen{doc: s.doc.clone(), lower: s.lower, name: s.name, machine: s.machine}
+			out[i] = PetScreen{doc: s.doc.clone(), lower: s.lower, name: s.name, machine: s.machine, fb: s.fb}
 		}
 		return out, nil
 	}
@@ -1539,7 +1544,7 @@ func (a *App) setMode(m string) {
 	switch {
 	case a.source != nil && !a.dirty:
 		a.reparse()
-	case a.source == nil && !a.dirty && a.doc.usedRows() == 0:
+	case a.source == nil && !a.dirty && a.doc.empty():
 		// An empty page takes the new machine's width and colours.
 		switch {
 		case m == "c64":
@@ -1596,7 +1601,7 @@ func (a *App) setMachine(id string) {
 		a.forceCols = m.cols
 		a.reparse()
 		a.setCase(lower)
-	case a.source == nil && !a.dirty && a.doc.usedRows() == 0:
+	case a.source == nil && !a.dirty && a.doc.empty():
 		a.doc = newDoc(m.cols, m.rows)
 		a.applyMode()
 	case a.doc.cols != m.cols && a.srcKind != "marq" && a.srcKind != "petmate":
@@ -1636,7 +1641,7 @@ func (a *App) setSTRes(id string) {
 	case a.source != nil && !a.dirty:
 		a.forceCols = r.cols
 		a.reparse()
-	case a.source == nil && !a.dirty && a.doc.usedRows() == 0:
+	case a.source == nil && !a.dirty && a.doc.empty():
 		a.doc = newSTDoc(r)
 	case a.doc.cols != r.cols:
 		a.pushUndo()
@@ -1745,7 +1750,7 @@ func (a *App) makeTab(mode string) *Tab {
 
 // pristine: an untitled tab nobody has touched, which an opened file may take over.
 func (t *Tab) pristine() bool {
-	return t.path == "" && !t.dirty && t.source == nil && t.doc.usedRows() == 0 && len(t.undo) == 0
+	return t.path == "" && !t.dirty && t.source == nil && t.doc.empty() && len(t.undo) == 0
 }
 
 // focusTab makes t the tab being worked on, and shows it in the active pane.
@@ -2217,8 +2222,18 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		if fmtID == "prg" {
 			return writePrg(d, a.lower()), nil
 		}
+		if scr := a.otherScreens(fmtID, d); scr != nil {
+			docs := make([]*Doc, len(scr))
+			for i, s := range scr {
+				docs[i] = s.doc
+			}
+			return writeMarqFrames(docs, a.lower(), a.machine), nil
+		}
 		return writeMarq(d, a.lower(), a.machine), nil
 	case "petmate":
+		if scr := a.otherScreens(fmtID, d); scr != nil {
+			return writePetmateFrames(a.source, scr), nil
+		}
 		return writePetmate(d, a.lower(), strings.TrimSuffix(a.name, filepath.Ext(a.name))), nil
 	case "html":
 		return a.writeHTML(), nil
@@ -2252,6 +2267,22 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 		return buf.Bytes(), nil
 	}
 	return nil, fmt.Errorf("unknown format %s", fmtID)
+}
+
+// otherScreens: when the page is one screen of a .c or .petmate file that holds
+// several, saved in that same format, all of the file's screens with this page
+// in its place, so that saving it keeps the others (nil otherwise).
+func (a *App) otherScreens(fmtID string, d *Doc) []PetScreen {
+	if a.srcKind != fmtID || a.source == nil {
+		return nil
+	}
+	scr, err := a.screens(a.source, a.srcKind)
+	if err != nil || len(scr) < 2 || a.srcIndex >= len(scr) {
+		return nil
+	}
+	scr[a.srcIndex].doc = d
+	scr[a.srcIndex].lower = map[bool]int{true: 1}[a.lower()]
+	return scr
 }
 
 // writeAtomic writes a file whole or not at all: a new file next to it,
@@ -2325,9 +2356,9 @@ func (a *App) writeOut(path, fmtID string) bool {
 	if strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") { // the page's own file; the others are exports
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
-		wasTTI := a.srcKind == "tti"
+		wasTTI, wasKind := a.srcKind == "tti", a.srcKind
 		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg", "pcb": "pcb", "avt": "avt", "tti": "tti"}[fmtID]
-		if fmtID != "tti" || !wasTTI {
+		if (fmtID != "tti" || !wasTTI) && (fmtID != wasKind || (fmtID != "marq" && fmtID != "petmate")) {
 			a.srcIndex = 0
 		}
 		a.markSaved()
@@ -2335,10 +2366,13 @@ func (a *App) writeOut(path, fmtID string) bool {
 		addRecent(path)
 		if n := ttiCount(fmtID, data); n > 1 {
 			a.name = fmt.Sprintf("%s (subpage %d of %d)", a.name, a.srcIndex+1, n)
-			for _, t := range a.tabs { // the other subpages' tabs of this file now build on what was saved
-				if t != a.Tab && t.srcKind == "tti" && t.path == path {
-					t.source = data
-				}
+		}
+		if n := a.screenCount(fmtID, data); n > 1 {
+			a.name = fmt.Sprintf("%s (screen %d of %d)", a.name, a.srcIndex+1, n)
+		}
+		for _, t := range a.tabs { // the other subpages' or screens' tabs of this file now build on what was saved
+			if t != a.Tab && t.srcKind == a.srcKind && t.srcKind != "" && t.path == path {
+				t.source = data
 			}
 		}
 	}
@@ -2358,8 +2392,24 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg(fmt.Sprintf("Saved %s (%d bytes): subpage %d written, the other %d kept as they were", path, len(data), a.srcIndex+1, n-1))
 		return true
 	}
+	if n := a.screenCount(fmtID, data); n > 1 {
+		a.msg(fmt.Sprintf("Saved %s (%d bytes): screen %d written, the other %d kept as they were", path, len(data), a.srcIndex+1, n-1))
+		return true
+	}
 	a.msg(fmt.Sprintf("Saved %s (%d bytes)", path, len(data)))
 	return true
+}
+
+// screenCount is how many screens a saved .c or .petmate holds (0 for other formats).
+func (a *App) screenCount(fmtID string, data []byte) int {
+	if fmtID != "marq" && fmtID != "petmate" {
+		return 0
+	}
+	scr, err := a.screens(data, fmtID)
+	if err != nil {
+		return 0
+	}
+	return len(scr)
 }
 
 // ttiCount is how many subpages a saved .tti holds (0 for other formats).

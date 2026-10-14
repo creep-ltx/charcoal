@@ -81,34 +81,46 @@ func marqName(machine string) (name string, colours bool) {
 	return "C64", true
 }
 
-// writeMarq gives the C array Marq's PETSCII editor and Petmate read, at the page's own size
-// (a 40-column page at least 25 rows, a whole C64 screen), for the page's machine.
+// writeMarq gives the C array Marq's PETSCII editor and Petmate read, at the page's own size,
+// for the page's machine.
 func writeMarq(d *Doc, lower bool, machine string) []byte {
-	w, h := d.cols, max(d.rows, 1)
+	return writeMarqFrames([]*Doc{d}, lower, machine)
+}
+
+// writeMarqFrames gives the C array of several screens, as Petmate writes them: frame0000,
+// frame0001 ... in order and one META line at the end. Marq's format has one size for all
+// screens: the widest and tallest; smaller screens are padded with empty cells.
+func writeMarqFrames(docs []*Doc, lower bool, machine string) []byte {
+	w, h := 1, 1
+	for _, d := range docs {
+		w, h = max(w, d.cols), max(h, d.rows)
+	}
 	name, colours := marqName(machine)
 	var b strings.Builder
-	parts := 1
-	if colours {
-		parts = 2
-		b.WriteString("unsigned char frame0000[]={// border,bg,chars,colors\n")
-		fmt.Fprintf(&b, "%d,%d,\n", d.borderColour(), d.bg)
-	} else {
-		b.WriteString("unsigned char frame0000[]={\n")
-	}
-	for part := 0; part < parts; part++ {
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
-				v := d.get(x, y)
-				if part == 0 {
-					fmt.Fprintf(&b, "%d,", cellCh(v))
-				} else {
-					fmt.Fprintf(&b, "%d,", cellFg(v))
-				}
-			}
-			b.WriteString("\n")
+	for i, d := range docs {
+		parts := 1
+		if colours {
+			parts = 2
+			fmt.Fprintf(&b, "unsigned char frame%04d[]={// border,bg,chars,colors\n", i)
+			fmt.Fprintf(&b, "%d,%d,\n", d.borderColour(), d.bg)
+		} else {
+			fmt.Fprintf(&b, "unsigned char frame%04d[]={\n", i)
 		}
+		for part := 0; part < parts; part++ {
+			for y := 0; y < h; y++ {
+				for x := 0; x < w; x++ {
+					v := d.get(x, y)
+					if part == 0 {
+						fmt.Fprintf(&b, "%d,", cellCh(v))
+					} else {
+						fmt.Fprintf(&b, "%d,", cellFg(v))
+					}
+				}
+				b.WriteString("\n")
+			}
+		}
+		b.WriteString("};\n")
 	}
-	b.WriteString("};\n")
 	set := "upper"
 	if lower {
 		set = "lower"
@@ -435,6 +447,34 @@ type PetScreen struct {
 	lower   int // -1 not said, 0 upper, 1 lower
 	name    string
 	machine string // the machine the file says it is for ("" not said), see machines
+	fb      int    // .petmate: its framebuf's place in the file (-1 for a new screen)
+}
+
+// petmateOrder is the framebufs in the order of the workspace's screens (Petmate
+// writes screens 0..n-1, but an older file may name them otherwise).
+func petmateOrder(screens []int, n int) []int {
+	seen := map[int]bool{}
+	var out []int
+	for _, i := range screens {
+		if i >= 0 && i < n && !seen[i] {
+			seen[i] = true
+			out = append(out, i)
+		}
+	}
+	if len(out) == 0 {
+		for i := 0; i < n; i++ {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// petmateLower: the character set name Petmate (and Petmate9) gives says lower case.
+func petmateLower(charset string) int {
+	if strings.Contains(strings.ToLower(charset), "lower") {
+		return 1
+	}
+	return 0
 }
 
 func parsePetmate(b []byte) ([]PetScreen, error) {
@@ -444,7 +484,8 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 	}
 	var out []PetScreen
 	total := 0 // cells in all screens, kept under one largest page
-	for _, s := range f.Framebufs {
+	for _, i := range petmateOrder(f.Screens, len(f.Framebufs)) {
+		s := f.Framebufs[i]
 		w := max(1, min(s.Width, 1000))
 		h := max(1, min(s.Height, 10000)) // like parseMarq
 		if total += w * h; total > maxPageCells {
@@ -459,11 +500,7 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 				}
 			}
 		}
-		lower := 0
-		if s.Charset == "lower" {
-			lower = 1
-		}
-		out = append(out, PetScreen{doc: d, lower: lower, name: s.Name})
+		out = append(out, PetScreen{doc: d, lower: petmateLower(s.Charset), name: s.Name, fb: i})
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("the Petmate file has no screens")
@@ -473,21 +510,73 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 
 // writePetmate gives a Petmate workspace with this one page as its screen.
 func writePetmate(d *Doc, lower bool, name string) []byte {
-	rows := max(d.rows, 1)
-	s := petmateScreen{Width: d.cols, Height: rows, BackgroundColor: d.bg, BorderColor: d.borderColour(),
-		Charset: "upper", Name: name}
-	if lower {
-		s.Charset = "lower"
+	return writePetmateFrames(nil, []PetScreen{{doc: d, lower: map[bool]int{true: 1}[lower], name: name, fb: -1}})
+}
+
+// writePetmateFrames gives a Petmate workspace of the screens in order. With the
+// workspace they came from (src), every screen keeps its framebuf's fields that
+// CharEdit does not know (zoom, columnMode, a Petmate9 guide layer ...), and the
+// file keeps its custom fonts and other top-level fields; screens become 0..n-1,
+// as Petmate writes them.
+func writePetmateFrames(src []byte, scr []PetScreen) []byte {
+	top := map[string]json.RawMessage{}
+	var oldFbs []map[string]json.RawMessage
+	var oldUI []json.RawMessage
+	if src != nil && json.Unmarshal(src, &top) == nil {
+		json.Unmarshal(top["framebufs"], &oldFbs)
+		json.Unmarshal(top["framebufUIStates"], &oldUI)
+	} else {
+		top = map[string]json.RawMessage{}
 	}
-	for y := 0; y < rows; y++ {
-		row := make([]petmatePixel, d.cols)
-		for x := range row {
-			v := d.get(x, y)
-			row[x] = petmatePixel{cellCh(v), cellFg(v)}
+	raw := func(v any) json.RawMessage { b, _ := json.Marshal(v); return b }
+	if _, ok := top["version"]; !ok {
+		top["version"] = raw(2)
+	}
+	if _, ok := top["customFonts"]; !ok {
+		top["customFonts"] = raw(map[string]any{})
+	}
+	fbs := make([]map[string]json.RawMessage, len(scr))
+	ui := make([]json.RawMessage, len(scr))
+	screens := make([]int, len(scr))
+	for i, s := range scr {
+		d := s.doc
+		fb := map[string]json.RawMessage{}
+		if s.fb >= 0 && s.fb < len(oldFbs) {
+			for k, v := range oldFbs[s.fb] {
+				fb[k] = v
+			}
 		}
-		s.Framebuf = append(s.Framebuf, row)
+		if s.fb >= 0 && s.fb < len(oldUI) {
+			ui[i] = oldUI[s.fb]
+		} else {
+			ui[i] = raw(nil)
+		}
+		rows := max(d.rows, 1)
+		cells := make([][]petmatePixel, rows)
+		for y := range cells {
+			row := make([]petmatePixel, d.cols)
+			for x := range row {
+				v := d.get(x, y)
+				row[x] = petmatePixel{cellCh(v), cellFg(v)}
+			}
+			cells[y] = row
+		}
+		fb["width"], fb["height"], fb["framebuf"] = raw(d.cols), raw(rows), raw(cells)
+		fb["backgroundColor"], fb["borderColor"] = raw(d.bg), raw(d.borderColour())
+		var cs string
+		if json.Unmarshal(fb["charset"], &cs) != nil || petmateLower(cs) != max(s.lower, 0) {
+			fb["charset"] = raw(map[bool]string{true: "lower", false: "upper"}[s.lower == 1])
+		}
+		if s.name != "" {
+			fb["name"] = raw(s.name)
+		}
+		fbs[i], screens[i] = fb, i
 	}
-	out, _ := json.Marshal(petmateFile{Version: 2, Screens: []int{0}, Framebufs: []petmateScreen{s}, CustomFonts: map[string]any{}})
+	top["framebufs"], top["screens"] = raw(fbs), raw(screens)
+	if _, ok := top["framebufUIStates"]; ok {
+		top["framebufUIStates"] = raw(ui)
+	}
+	out, _ := json.Marshal(top)
 	return out
 }
 

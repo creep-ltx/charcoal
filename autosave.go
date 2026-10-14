@@ -49,6 +49,8 @@ type autosaveMeta struct {
 	Clear      bool      `json:"clear,omitempty"`
 	Notes      []string  `json:"notes,omitempty"`
 	Subpage    int       `json:"tti_subpage,omitempty"` // a .tti carousel's subpage, from 1 (saving keeps the others)
+	Screen     int       `json:"screen,omitempty"`      // a .c / .petmate file's screen, from 1 (saving keeps the others)
+	SrcKind    string    `json:"source_kind,omitempty"` // "marq" or "petmate" with Screen
 }
 
 // An autosave on disk: id.json and id.cells (the cells, 4 bytes each, little-endian).
@@ -82,6 +84,9 @@ func writeAutosave(t *Tab) error {
 		Clear: t.info.clear, Notes: t.info.notes}
 	if t.srcKind == "tti" {
 		m.Subpage = t.srcIndex + 1
+	}
+	if t.srcKind == "marq" || t.srcKind == "petmate" {
+		m.Screen, m.SrcKind = t.srcIndex+1, t.srcKind
 	}
 	js, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -220,6 +225,14 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 		// A subpage of a carousel: the file as it is now gives the other subpages.
 		if b, err := os.ReadFile(m.Path); err == nil && isTTI(b) && m.Subpage <= len(ttiSubpages(b)) {
 			a.source, a.srcKind, a.srcIndex = b, "tti", m.Subpage-1
+		}
+	}
+	if m.Screen > 0 && m.Path != "" && (m.SrcKind == "marq" || m.SrcKind == "petmate") {
+		// A screen of a file with several: the file as it is now gives the others.
+		if b, err := os.ReadFile(m.Path); err == nil {
+			if scr, err := a.screens(b, m.SrcKind); err == nil && m.Screen <= len(scr) {
+				a.source, a.srcKind, a.srcIndex = b, m.SrcKind, m.Screen-1
+			}
 		}
 	}
 	a.gen = nextGen() // changed, not saved
