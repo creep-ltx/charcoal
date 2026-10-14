@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Every detail level of every template that can be a saved file, in every
@@ -300,4 +301,99 @@ func TestBatchBudgetCommandLine(t *testing.T) {
 			t.Errorf("%v: exit %d", bad, st)
 		}
 	}
+}
+
+// Play and the requester's preview play the stream at the caller's speed
+// with the board's pauses: done after bytes x 10 / bps plus the pauses (over
+// telnet, the pauses alone).
+func TestPlayAtSpeedWithPauses(t *testing.T) {
+	a := testApp(t, "pc")
+	randomPage(a, rand.New(rand.NewSource(8)), 80, 25)
+	noControls(a.doc)
+	a.order = &drawOrder{Pattern: "drop", Seed: 3, Detail: "small", BBS: "mystic"}
+	for _, bps := range []int{2400, 14400, telnet} {
+		a.baud = bps
+		c := a.costOf("ansi", a.order, "mystic")
+		want := playMs(len(a.playBytes()), c.pauseMs, bps)
+		if c.pauseMs == 0 {
+			t.Fatal("no pauses")
+		}
+		a.play()
+		p := a.playing
+		if len(p.pauses) == 0 {
+			t.Fatal("Play has no pauses")
+		}
+		start := p.last
+		now := start
+		for a.playing != nil && now.Sub(start) < time.Hour {
+			now = now.Add(10 * time.Millisecond)
+			a.playStepAt(now)
+		}
+		got := int(now.Sub(start) / time.Millisecond)
+		if got < want-30 || got > want+30*len(p.pauses)+30 {
+			t.Errorf("Play at %s: done after %d ms, want %d", speedName(bps), got, want)
+		}
+		// The requester's preview of the same.
+		openAnimate()
+		d := a.dialog.(*AnimReq)
+		d.pat, d.detail, d.bbs, d.seed = patDrop, detailSmall, "mystic", 3
+		d.syncDefaults()
+		sp := d.speedPreview()
+		if string(sp.bytes) != string(a.playBytes()) {
+			t.Fatal("the preview plays other bytes than Play")
+		}
+		now = time.Now()
+		sp.restart(now)
+		start = now
+		for sp.pos < len(sp.bytes) && now.Sub(start) < time.Hour {
+			now = now.Add(10 * time.Millisecond)
+			sp.advance(now)
+		}
+		got = int(now.Sub(start) / time.Millisecond)
+		if got < want-30 || got > want+30*len(sp.ps)+30 {
+			t.Errorf("preview at %s: done after %d ms, want %d", speedName(bps), got, want)
+		}
+		closeDialog()
+	}
+}
+
+// The requester's cost is the cost of what Apply sets, and it warns past the time in Settings.
+func TestAnimateRequesterCost(t *testing.T) {
+	a := testApp(t, "pc")
+	randomPage(a, rand.New(rand.NewSource(12)), 80, 25)
+	noControls(a.doc)
+	openAnimate()
+	d := a.dialog.(*AnimReq)
+	d.pat, d.detail = patMatrix, detailLarge
+	d.syncDefaults()
+	c, ok := d.cost(d.pat, true)
+	if !ok {
+		t.Fatal("no cost")
+	}
+	if want := a.costOf("ansi", d.orderFor(d.pat), ""); c != want {
+		t.Fatalf("cost %+v, want %+v", c, want)
+	}
+	if c.at(14400) <= animWarnMs() {
+		t.Fatalf("a large Matrix rain plays in %d ms", c.at(14400))
+	}
+	prefs.AnimWarn = 9999
+	if c.at(14400) > animWarnMs() {
+		t.Error("the setting is not taken")
+	}
+	d.apply()
+	if a.order == nil || a.order.Detail != "large" {
+		t.Fatalf("order %+v", a.order)
+	}
+	b, _ := a.encode("ansi")
+	if len(b) != c.size {
+		t.Errorf("saved %d bytes, the requester said %d", len(b), c.size)
+	}
+	if prefs.AnimLevel != "large" {
+		t.Errorf("the level is not remembered: %q", prefs.AnimLevel)
+	}
+	openAnimate() // opens at the page's level
+	if d := a.dialog.(*AnimReq); d.detail != detailLarge {
+		t.Errorf("reopened at %s", detailNames[d.detail])
+	}
+	closeDialog()
 }

@@ -142,7 +142,8 @@ func (o *drawOrder) String() string {
 	if isEffect(o.pat()) {
 		s += fmt.Sprintf(", %d frames", effectLengthAt(o.pat(), o.Frames, o.detail()))
 	}
-	if o.Detail != "" && o.pat() != patTop && o.pat() != patType {
+	if o.Detail != "" && o.pat() != patType && (o.pat() != patTop || o.Reverse) { // a level changes nothing else
+
 		s += ", " + strings.ToLower(detailNames[o.detail()])
 	}
 	return s

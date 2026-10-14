@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 )
 
 // The detail levels. Large is the zero value: pages saved before there were
@@ -253,4 +254,37 @@ func (a *App) playPauses(b []byte) []pause {
 		return nil
 	}
 	return ps
+}
+
+// stepLine sends Play's bytes the line has carried by now at bps (telnet:
+// all of them), stopping at the board's next pause and waiting it out; the
+// time of a byte is kept exactly, so a stream takes bytes x 10 / bps plus
+// its pauses. It says whether nothing could be sent.
+func (p *Play) stepLine(now time.Time, bps int) bool {
+	if now.Before(p.wait) {
+		return true
+	}
+	if p.last.Before(p.wait) {
+		p.last = p.wait
+	}
+	n := len(p.bytes)
+	if bps > 0 {
+		n = int(now.Sub(p.last).Seconds() * float64(bps) / 10)
+	}
+	end := min(len(p.bytes), p.pos+n)
+	if p.pi < len(p.pauses) {
+		end = min(end, max(p.pos, p.pauses[p.pi].at))
+	}
+	if bps > 0 {
+		p.last = p.last.Add(time.Duration(end-p.pos) * 10 * time.Second / time.Duration(bps))
+	} else {
+		p.last = now
+	}
+	p.term.write(p.bytes[p.pos:end])
+	p.pos = end
+	if p.pi < len(p.pauses) && p.pos >= p.pauses[p.pi].at {
+		p.wait = p.last.Add(time.Duration(p.pauses[p.pi].ms) * time.Millisecond)
+		p.pi++
+	}
+	return false
 }

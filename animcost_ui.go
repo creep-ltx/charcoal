@@ -251,8 +251,8 @@ func (sp *speedPreview) restart(now time.Time) {
 	sp.last, sp.wait, sp.done = now, time.Time{}, time.Time{}
 }
 
-// advance sends the bytes the line carries by now (none during a pause);
-// the finished picture rests a moment, then it starts again.
+// advance sends the bytes the line carries by now (none during a pause), as
+// Play does; the finished picture rests a moment, then it starts again.
 func (sp *speedPreview) advance(now time.Time) {
 	if sp.pos >= len(sp.bytes) {
 		if sp.done.IsZero() {
@@ -263,26 +263,7 @@ func (sp *speedPreview) advance(now time.Time) {
 		}
 		return
 	}
-	if now.Before(sp.wait) {
-		sp.last = now
-		return
-	}
-	n := int(now.Sub(sp.last).Seconds() * float64(a.baud) / 10)
-	if a.baud <= 0 {
-		n = len(sp.bytes)
-	}
-	if n <= 0 {
-		return
-	}
-	sp.last = now
-	end := min(len(sp.bytes), sp.pos+n)
-	if sp.pi < len(sp.ps) {
-		end = min(end, max(sp.pos, sp.ps[sp.pi].at))
-	}
-	sp.term.write(sp.bytes[sp.pos:end])
-	sp.pos = end
-	if sp.pi < len(sp.ps) && sp.pos >= sp.ps[sp.pi].at {
-		sp.wait = now.Add(time.Duration(sp.ps[sp.pi].ms) * time.Millisecond)
-		sp.pi++
-	}
+	p := &Play{bytes: sp.bytes, pos: sp.pos, term: sp.term, last: sp.last, pauses: sp.ps, pi: sp.pi, wait: sp.wait}
+	p.stepLine(now, a.baud)
+	sp.pos, sp.last, sp.pi, sp.wait = p.pos, p.last, p.pi, p.wait
 }

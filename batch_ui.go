@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -34,6 +35,10 @@ type BatchReq struct {
 	run                *batchRun
 	report             []string // the finished report's lines
 	top                int
+	detail             int    // the detail level (animcost.go)
+	maxKB, maxSecs     Field  // the budget (empty: none)
+	at                 int    // the budget's and the report's speed
+	weight             string // "" any, "light", "medium"
 }
 
 // openAnimateFolder opens the requester, on the folder of the page's file (or the last one).
@@ -57,6 +62,11 @@ func openAnimateFolder() {
 	d.pause.set("40")
 	d.variants.set("1")
 	d.aePath.set("BBS:Node0/Screens/")
+	d.maxKB.max, d.maxSecs.max = 5, 4
+	d.at = a.baud
+	if d.detail = detailByID(prefs.AnimLevel); prefs.AnimLevel == "" || d.detail < 0 {
+		d.detail = detailMedium
+	}
 	d.syncOut()
 	a.dialog = d
 }
@@ -124,6 +134,14 @@ func (d *BatchReq) spec() batchSpec {
 	if s.Replace {
 		s.Out = ""
 	}
+	s.Detail = detailIDs[d.detail]
+	if d.maxKB.String() != "" {
+		s.MaxKB = fieldInt(&d.maxKB, 0, 1, 1<<20)
+	}
+	if d.maxSecs.String() != "" {
+		s.MaxSeconds = fieldInt(&d.maxSecs, 0, 1, 99999)
+	}
+	s.AtBps, s.MaxWeight = d.at, d.weight
 	return s
 }
 
@@ -163,7 +181,7 @@ func (d *BatchReq) draw(u *UI) {
 func (d *BatchReq) drawSetup(u *UI) {
 	fb := u.fb
 	d.syncOut()
-	in := u.window(centre(1000, 720), "Animate a folder")
+	in := u.window(centre(1000, 790), "Animate a folder")
 	x0, y := in.x, in.y
 	label := func(x int, s string) int { return fb.text(x, y+3, s, cText) + 8 }
 	field := func(x, chars int, f *Field, hint string) int {
@@ -231,17 +249,69 @@ func (d *BatchReq) drawSetup(u *UI) {
 	if d.effect == 0 && d.fromTicked {
 		cols := 6
 		cw := in.w / cols
+		ws := typicalWeights(d.detail)
 		for i, p := range pats {
 			cx, cy := x0+(i%cols)*cw, y+(i/cols)*(gadH+2)
-			on, _ := u.check(cx, cy, patterns[p].name, d.ticked[p], patterns[p].help)
+			on, _ := u.check(cx, cy, patterns[p].name, d.ticked[p], fmt.Sprintf("%s (%s on a typical screen at %s)", patterns[p].help, weightNames[ws[p]], detailNames[d.detail]))
 			d.ticked[p] = on
+			weightBars(fb, cx+cw-30, cy+6, ws[p])
 		}
-		y += (len(pats)+cols-1)/cols*(gadH+2) + 6
+		y += (len(pats)+cols-1)/cols*(gadH+2) + 2
+		lx := x0
+		for i, n := range weightNames {
+			weightBars(fb, lx, y+3, i)
+			lx = fb.text(lx+22, y, n, cDim) + 12
+		}
+		fb.text(lx, y, "on a made-up 80x25 screen at "+detailNames[d.detail]+"; Effects below weighs each screen itself", cDim)
+		y += lineH + 6
 	} else if d.effect > 0 {
 		line(patterns[pats[d.effect-1]].help, cText)
 		y += 4
 	}
 	y += 4
+	// The size: the level, the weights taken, the budget.
+	x = label(x0, "Detail")
+	var levels []string
+	cur := 0
+	for i, l := range detailsUp {
+		levels = append(levels, detailNames[l])
+		if l == d.detail {
+			cur = i
+		}
+	}
+	u.choice("batchdetail", Rect{x, y, choiceW(levels), gadH}, levels, cur,
+		"Small: fewer frames and changes, a draw order in runs of cells (for modems); Large: the full look",
+		func(i int) { d.detail = detailsUp[i] })
+	x += choiceW(levels) + 16
+	x = label(x, "Effects")
+	weights := []string{"any weight", "light only", "light and medium"}
+	wcur := map[string]int{"light": 1, "medium": 2}[d.weight]
+	u.choice("batchweight", Rect{x, y, choiceW(weights), gadH}, weights, wcur,
+		"Light: at most 1.5x the screen's plain file; medium: at most 4x (weighed on each screen, lower levels tried)",
+		func(i int) { d.weight = []string{"", "light", "medium"}[i] })
+	y += gadH + 6
+	x = label(x0, "Budget: at most")
+	x = field(x, 5, &d.maxKB, "Each version of a screen at most this many KB (empty: no limit)")
+	x = label(x, "KB a screen, plays in under")
+	x = field(x, 4, &d.maxSecs, "Each version plays in at most this many seconds at the speed (empty: no limit)")
+	x = label(x, "s at")
+	var speeds []string
+	scur := 2
+	for i, b := range bauds {
+		speeds = append(speeds, speedName(b))
+		if b == d.at {
+			scur = i
+		}
+	}
+	u.choice("batchat", Rect{x, y, choiceW(speeds), gadH}, speeds, scur, "The caller's speed, for the budget and the report's times",
+		func(i int) { d.at = bauds[i] })
+	y += gadH + 4
+	if d.maxKB.String() != "" || d.maxSecs.String() != "" || d.weight != "" {
+		line("With a budget an effect that does not fit is played at a lower level, then another is tried; a screen nothing fits is skipped, and the report says why.", cDim)
+	} else {
+		line("Empty fields: no budget. The report gives each file's size and play time at the speed.", cDim)
+	}
+	y += 6
 	// The pace and the board.
 	x = label(x0, "A pause of")
 	x = field(x, 5, &d.pause, "How long the board waits each time, in ms")
@@ -252,7 +322,7 @@ func (d *BatchReq) drawSetup(u *UI) {
 	label(x, "ms a frame (empty: their own)")
 	y += gadH + 8
 	boards := []string{"My BBS (" + boardName(prefs.MyBBS) + ")", "None"}
-	cur := 0
+	cur = 0
 	if d.board == "none" {
 		cur = 1
 	}
@@ -441,4 +511,47 @@ func (d *BatchReq) key(k string, ctrl, shift bool) bool {
 		return false
 	}
 	return true
+}
+
+// typicalWeights are the templates' weights at a level on a typical screen
+// (made up: 80x25, runs of blocks and letters in a few colours), for the
+// ticked list; worked out once per level.
+var typicalW = map[int][]int{}
+
+func typicalWeights(detail int) []int {
+	if w, ok := typicalW[detail]; ok {
+		return w
+	}
+	w := make([]int, nPatterns)
+	withScratch(func() {
+		a.Tab = a.makeTab("pc")
+		a.doc = typicalScreen()
+		for p := 0; p < nPatterns; p++ {
+			if framesOnly(p, false) {
+				continue
+			}
+			w[p] = a.costOf("ansi", &drawOrder{Pattern: patterns[p].id, Seed: 1, Detail: detailIDs[detail]}, "").weight()
+		}
+	})
+	typicalW[detail] = w
+	return w
+}
+
+// typicalScreen is a made-up screen of ANSI art: runs of shades, blocks and letters.
+func typicalScreen() *Doc {
+	d := newDoc(80, 25)
+	r := rand.New(rand.NewSource(1994))
+	glyphs := []int{176, 177, 178, 219, 220, 223, 'A', 'n', 's', 'i', '.', ':'}
+	for y := 1; y < 23; y++ {
+		for x := r.Intn(6); x < 80; {
+			n := 2 + r.Intn(9)
+			fg, bg, ch := r.Intn(16), r.Intn(3), glyphs[r.Intn(len(glyphs))]
+			for i := 0; i < n && x < 80; i++ {
+				d.set(x, y, makeCell(ch, fg, bg, 0))
+				x++
+			}
+			x += r.Intn(5)
+		}
+	}
+	return d
 }

@@ -2576,24 +2576,8 @@ func (a *App) playStepAt(now time.Time) {
 		a.frameStep(now)
 		return
 	}
-	if now.Before(p.wait) {
-		p.last = now
+	if p.stepLine(now, a.baud) {
 		return
-	}
-	n := max(1, int(now.Sub(p.last).Seconds()*float64(a.baud)/10+0.5))
-	if a.baud <= 0 { // telnet: everything up to the next pause at once
-		n = len(p.bytes)
-	}
-	p.last = now
-	end := min(len(p.bytes), p.pos+n)
-	if p.pi < len(p.pauses) {
-		end = min(end, max(p.pos, p.pauses[p.pi].at))
-	}
-	p.term.write(p.bytes[p.pos:end])
-	p.pos = end
-	if p.pi < len(p.pauses) && p.pos >= p.pauses[p.pi].at {
-		p.wait = now.Add(time.Duration(p.pauses[p.pi].ms) * time.Millisecond)
-		p.pi++
 	}
 	x, y := p.term.cursor()
 	a.cx, a.cy = min(x, a.doc.cols-1), max(0, min(y, maxRowsFor(a.doc.cols)-1))
