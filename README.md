@@ -11,11 +11,13 @@ and file formats.
 | | |
 |---|---|
 | ![Amiga ASCII in Topaz](docs/screenshots/amiga.png) | ![C64 PETSCII](docs/screenshots/c64.png) |
-| <sub>Amiga page in Topaz 2+: *aBSiNTHE 40K* by aNACHRONiST / iMPURE!ASCII1940 (2022), impure81 on 16colo.rs.</sub> | <sub>C64 PETSCII with a block selected (Mirror, Upside down, Turn, Invert): *Uncle Nash*, an example picture from Marq's PETSCII editor.</sub> |
+| <sub>Amiga page in Topaz 2+, the Workbench theme, the Animate menu open: *aBSiNTHE 40K* by aNACHRONiST / iMPURE!ASCII1940 (2022), impure81 on 16colo.rs.</sub> | <sub>C64 PETSCII with a block selected (Mirror, Upside down, Turn, Invert): *Uncle Nash*, an example picture from Marq's PETSCII editor.</sub> |
 | ![Teletext](docs/screenshots/teletext.png) | ![Atari ATASCII](docs/screenshots/atari.png) |
 | <sub>Teletext (BBC Micro Mode 7 / Ceefax): *Rio*, an example page from QTeletextMaker.</sub> | <sub>Atari 8-bit ATASCII: *Turbo* (TEXTPIC1_CAR), from the ATASCII collection at breakintochat.com.</sub> |
 | ![Two pages side by side](docs/screenshots/split.png) | ![CharView](docs/screenshots/viewer.png) |
 | <sub>Tabs, and two pages side by side (Ctrl+L).</sub> | <sub>CharView, the viewer: *Jeroen Tel* by The Knight / Fuel (2019), fuel30 on 16colo.rs.</sub> |
+| ![The Light theme](docs/screenshots/light.png) | ![The Focus layout](docs/screenshots/focus.png) |
+| <sub>The Light theme: *Jeroen Tel* by The Knight / Fuel (2019), fuel30 on 16colo.rs.</sub> | <sub>The Focus layout (the page as wide as the window, the gadgets under it) on a teletext page: *Rio*, from QTeletextMaker.</sub> |
 
 ![The start screen](docs/screenshots/start.png)
 
@@ -71,9 +73,14 @@ rows a second); these are remembered. Art wider than the window is shown smaller
 smooth. A folder gives every art file in it (.ans .asc .nfo .diz .txt .bin .seq
 .pet .ice ...). It never changes the editor's other settings.
 
-A native program (Go + SDL2, one binary; needs only the SDL2 library that every Linux desktop has). The whole
-interface is drawn in Topaz, kept dark and small so the art comes first; **Ctrl+H** hides every gadget.
-Press the **?** gadget for every key.
+A native program (Go + SDL2, one binary; needs only the SDL2 library that every Linux desktop has). Every
+command is in the menu bar (File, Edit, View, Page, Draw, Animate, Help) with its keys beside it; one toolbar
+row holds the everyday ones. Two layouts (View menu or Settings): **Studio**, the tools in a rail on the left and
+the page's settings, colours, characters and the tool's options in a panel on the right, and **Focus**, the page
+as wide as the window with the gadgets under it. Three themes: **Dark**, **Light** and **Workbench**. The
+interface text is the system's font by default, or the Go font, Topaz, or any .ttf / .otf, in sizes 11 to 20
+(Settings); the art always keeps its own fonts. **Ctrl+H** hides every gadget. **Help > Keys and mouse** (F12)
+lists every key.
 
 ## Build
 
@@ -471,7 +478,7 @@ The colour keys (Ctrl+0-7, Alt+0-7, Alt+U, Ctrl+D, Ctrl+Shift+X, Ctrl+E), Ctrl+a
 Right for columns, Ctrl+K crop and Ctrl+I info are the same in all of them. An action the other editor does not
 have keeps CharEdit's key unless the preset gave that key to another action; then it has no key until the keys
 file gives it one: Moebius: Half; PabloDraw: Turn, Invert, Onion, Fill, Half, shape style; TheDraw: Mirror, Turn,
-Invert, Pick, Half; ACiDDraw: Info (the Info button stays), Mirror, Turn, Fill, Half. What cannot be matched: the plain-letter block keys of Moebius and PabloDraw (M move, C
+Invert, Pick, Half; ACiDDraw: Info (File > Info stays), Mirror, Turn, Fill, Half. What cannot be matched: the plain-letter block keys of Moebius and PabloDraw (M move, C
 copy, F fill, R rotate, X / Y flip, S stamp ... while a block is up) and Moebius's tool letters (K B I P), because
 plain letters type in CharEdit (use the block buttons or Alt+H / V / R); Alt+F4 stays the window manager's, so
 F-key set 4 is Ctrl+F4 in every preset.
@@ -517,6 +524,8 @@ come back cell for cell after saving in their own format.
 | `animcost.go`, `animcost_ui.go` | animation detail levels, the cost of a saved animation (size, time at a speed, weight), Play's line timing, the Animate requester's cost, marks and preview at a speed |
 | `autosave.go` | autosave and offering it back, `.bak` on save, recent files |
 | `paths.go`, `keymods.go`, `platform_*.go` | per system: the settings and data folders, Cmd and AltGr, drives, is a CharEdit still running |
+| `menus.go`, `layout.go`, `panel.go` | the menu bar (built from the actions in keys.go), the Studio and Focus layouts, the drawing gadgets both arrange |
+| `theme.go`, `uifont.go` | the themes, the interface text through a face (Topaz, or TrueType / OpenType: the system's, the Go font, a file) |
 | `script.go` | `CHARCOAL_SCRIPT` test steps, for checking it headless with `SDL_VIDEODRIVER=offscreen` |
 | `web/` | the first version, called amiansi, that ran in the browser (Python server + HTML/JS), kept for reference |
 
@@ -527,6 +536,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | Part | From | Licence |
 |---|---|---|
 | Amiga fonts (Topaz 1/1+/2/2+, MicroKnight/+, P0T-NOoDLE, mO'sOul) | TrueSchool's *Multi Platform Amiga Fonts* raw conversions, dMG/t!s^dS!, github.com/rewtnull/amigafonts (256 glyphs × 16 rows, each row of the 8×8 original doubled) | GPL with the font exception, `fonts/amigafonts-NOTICE.txt` |
+| The Go font (the interface's bundled font) | golang.org/x/image/font/gofont, by Bigelow & Holmes for the Go project | BSD 3-clause, in the module |
 | IBM VGA 8×16 | rendered from Px437_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` |
 | IBM EGA 8×14, IBM VGA 8×8, IBM VGA 8×16 code pages 850 and 866 (`fonts/IBM_*.f08/.f14/.f16`) | drawn from Bm437_IBM_EGA_8x14, Bm437_IBM_VGA_9x8 and BmPlus_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* v2.2 (int10h.org), by `tools/pcfonts.py` | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` (the pack's licence) |
 | Atari 8-bit fonts | AltirraOS, from the Altirra emulator | all-permissive, `fonts/AltirraOS-LICENSE.txt` |

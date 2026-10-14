@@ -420,6 +420,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Requesters (step 5, 2026-10-14): explanations go in the gadget's hint, not in paragraphs (the BBS
   "safe choice" text in Animate and Settings); secondary notes in cDim. While a requester is open the hint
   shows as a tooltip by the mouse (`drawTooltip`, main.go): a big requester covers the status line.
+- README screenshots in the new look: hero, start, amiga (Workbench theme, Animate menu), light, focus. Still in
+  the old look: c64, teletext, atari, split, viewer, frames, reference, fonteditor, animate-cost, animate-folder,
+  animate.gif. Headless recipe with the prefs written first: an absolute XDG_CONFIG_HOME with
+  charcoal/prefs.json holding `"c64asked": true` (no first-run requester), `width`/`height`, `theme`, `ui_layout`.
+  An 80-column page at 2x needs about 1720 pixels of window in the Studio layout.
 - Sources: 16colo.rs packs and tags, asciiarena.se (sitemap; files at /collections/<name>/<file>),
   ~/Amiga/BBS/BBS Style (412 files), NAS /mnt/nas/home/Unsorted/Junk/Latex/Petscii* (with the PETSCII editor's
   own PNGs: rendering is pixel-identical). **Not csdb.dk and not zxart.ee files: their robots.txt forbid it.**
