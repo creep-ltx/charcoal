@@ -134,6 +134,9 @@ func FuzzParsers(f *testing.F) {
 		f.Add(writeATR(d, nil)[:16+40*128])
 		f.Add(writeTap(make([]byte, 6912), 3, "f"))
 	}
+	{ // a drawing session's page (collab.go)
+		f.Add([]byte(`{"columns":3,"rows":2,"palette":[],"compressed_data":{"code":[[65,5]],"fg":[[7,2],[4,2]],"bg":[[0,5]]}}`))
+	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		check := func(name string, run func() []*Doc) {
 			start := time.Now()
@@ -197,6 +200,7 @@ func FuzzParsers(f *testing.F) {
 			}
 		}
 		check("xbin", func() []*Doc { return own(parseXBin(b)) })
+		check("collab", func() []*Doc { return one(collabFDocOf(b)) }) // a drawing session's page (collab.go)
 		check("icy", func() []*Doc { return own(parseIcy(b)) })
 		check("pd", func() []*Doc { // PabloDraw, TheDraw, BSAVE (othformats.go)
 			if p, err := parsePD(b); err == nil {
