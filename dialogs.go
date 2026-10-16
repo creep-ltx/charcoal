@@ -144,8 +144,10 @@ type FileReq struct {
 	pickDir bool              // pick takes a folder: the one listed (Animate a folder, batch_ui.go)
 }
 
-var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "tt", "c64"}
-var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "Atari ST VT52", "ZX Spectrum", "Teletext", "C64 PETSCII"}
+var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "tt", "c64",
+	"pcb", "avt", "pipe", "ctrla", "wwiv", "wildcat", "celerity"}
+var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "Atari ST VT52", "ZX Spectrum", "Teletext", "C64 PETSCII",
+	"PC: PCBoard @X", "PC: Avatar", "PC: pipe codes |07", "PC: Synchronet Ctrl-A", "PC: WWIV hearts", "PC: Wildcat! @XX@", "PC: Celerity |x"}
 
 func openOpenRequester() {
 	d := &FileReq{sel: -1}
@@ -487,11 +489,19 @@ func (d *FileReq) draw(u *UI) {
 		u.choice("fmt", Rect{in.x + colAfter(64, "Format"), y, choiceW(names), gadH}, names, d.choice, "", d.setFormat)
 	} else {
 		fb.text(in.x, y+3, "Open as", cText)
-		names := openAsNames
-		if !a.hasC64 {
-			names = names[:7]
+		var names []string
+		var shown []int // openAs indexes on offer (C64 only with its ROMs)
+		cur := 0
+		for i, n := range openAsNames {
+			if openAs[i] == "c64" && !a.hasC64 {
+				continue
+			}
+			if i == d.choice {
+				cur = len(shown)
+			}
+			names, shown = append(names, n), append(shown, i)
 		}
-		u.choice("as", Rect{in.x + colAfter(72, "Open as"), y, choiceW(names), gadH}, names, d.choice, "", func(i int) { d.choice = i })
+		u.choice("as", Rect{in.x + colAfter(72, "Open as"), y, choiceW(names), gadH}, names, cur, "", func(i int) { d.choice = shown[i] })
 		bx := in.x + 72 + choiceW(names) + 16
 		if len(prefs.Recent) > 0 {
 			r := Rect{bx, y, buttonW("Recent files"), gadH}
@@ -770,10 +780,10 @@ ZX Spectrum pages are its 32 x 24 screen: a character per cell with ink (left cl
 Teletext pages are 40 x 25 cells of 7-bit codes as on a BBC Micro in Mode 7 or a TV teletext page. Codes 0-31 are attributes that act from their cell to the right, as the teletext chip reads a row: text or graphics colour (F-key sets 1 and 2), double height, flash, conceal, separated, hold, new background. Codes shows their names in their cells. The Sixel tool paints the 2x3 graphics pixels of a cell (the row needs a graphics colour to its left). Files: .tti, .ep1, edit.tf links (.url; a text holding an edit.tf link opens too) and BBC Mode 7 dumps (1000-byte .bin). The characters are Bedstead's (public domain).
 
 SAVE AS
-ANSI, plain text, UTF-8 text, PC .bin, PCBoard .pcb, Avatar .avt, ATASCII .ata, Atari ST .vt, ZX Spectrum .scr, teletext .tti, .ep1 and edit.tf links (.url), XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border), a web page (.html) and an animation of the frames (.gif, or APNG .png). Typing a file ending picks the format. Saving under the name of another file that is already there asks first.
+ANSI, plain text, UTF-8 text, PC .bin, PCBoard .pcb, Avatar .avt, BBS colour codes (pipe codes |07 for Mystic and Renegade, Synchronet Ctrl-A .msg, WWIV .msg, Wildcat! .bbs, Celerity), ATASCII .ata, Atari ST .vt, ZX Spectrum .scr, teletext .tti, .ep1 and edit.tf links (.url), XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border), a web page (.html) and an animation of the frames (.gif, or APNG .png). Typing a file ending picks the format. Saving under the name of another file that is already there asks first.
 For other editors (at the end of the list, only for the pages they fit): iCEDraw .idf, ArtWorx .adf (80 columns) and TundraDraw .tnd (80 columns, 24-bit colours, no font) for PC and Amiga pages; IcyDraw .icy (font, palette and iCE inside; opens in IcyDraw as the page); REXPaint .xp (PC); Playscii .psci (PC, Amiga, PETSCII, Atari; every frame with its hold; Playscii's own charsets and palettes by name, so an own font stays with CharEdit); and for a C64: the PETSCII editor's .pet, its BASIC listing (.bas, for petcat) and ACME source (.s), and Petmate's JSON export (.json, every screen). The ones that open again (.idf, .adf, .tnd, .icy, .xp, .psci, .pet, .json) become the page's file: Save writes the same format again.
 OPENING
-Everything above that holds characters opens again: ANSI, text, .bin, XBin, .pcb, .avt, .ata (also as .txt, recognised by its bytes), .vt, .scr, .tti, .ep1, edit.tf links, .seq, .c, .petmate, and C64 programs saved by CharEdit; also iCEDraw .idf, ArtWorx .adf, TundraDraw .tnd, IcyDraw .icy (PC pages; its layers are put together into one page, picture layers and layer effects are left out), REXPaint .xp (layers put together), Playscii .psci (charsets dos, amiga_topaz, atari, the C64 ones and commodore_pet; layers put together, frames kept), the PETSCII editor's .pet and Petmate's JSON export. A .c, .petmate, .psci or Petmate .json with several screens and a .tti carousel open as frames. Web pages do not open; a picture opened or dropped can be the page's reference (below).
+Everything above that holds characters opens again: ANSI, text, .bin, XBin, .pcb, .avt, BBS colour codes (found by their bytes, also mixed with ANSI; Open as picks one; a board's code that cannot be shown stays as text and is saved back), .ata (also as .txt, recognised by its bytes), .vt, .scr, .tti, .ep1, edit.tf links, .seq, .c, .petmate, and C64 programs saved by CharEdit; also iCEDraw .idf, ArtWorx .adf, TundraDraw .tnd, IcyDraw .icy (PC pages; its layers are put together into one page, picture layers and layer effects are left out), REXPaint .xp (layers put together), Playscii .psci (charsets dos, amiga_topaz, atari, the C64 ones and commodore_pet; layers put together, frames kept), the PETSCII editor's .pet and Petmate's JSON export. A .c, .petmate, .psci or Petmate .json with several screens and a .tti carousel open as frames. Web pages do not open; a picture opened or dropped can be the page's reference (below).
 REFERENCE PICTURE
 A picture (PNG, JPEG, GIF, BMP, WebP) to trace over: the Ref gadget, ` + keyName("ref_open") + `, or drop it on the window. It shows in the page's empty cells (or faintly over everything), and can be faded, hidden, shown in greys, moved (` + keyName("ref_move") + `: drag or arrows, Shift a pixel, + and - size it; or Ctrl+drag) and sized (fit width, fit page, 1:1, bigger, smaller). It is only shown: never turned into characters, never saved or exported with the art. CharEdit remembers it with the art file (in prefs.json) and in the autosave.
 FRAMES

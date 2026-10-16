@@ -293,6 +293,49 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   ATASCII / VT52 writers have no reprint trick (their moves are 1 byte anyway); the weight of a frame strip saved
   as a stream is not shown.
 
+## BBS colour codes (2026-10-16, branch r1-bbscodes)
+
+- `bbscodes.go`: five kinds, ids = format ids = Open as values (`bbsCodeIDs`): `pipe` (|00-|31, |CL, |PI),
+  `ctrla` (Synchronet Ctrl-A), `wwiv` (Ctrl-C hearts, |nn, |#n), `wildcat` (@BF@, @CLS@), `celerity` (|k..|W,
+  |S). Reading: `codeTerm` wraps the PC `Term` and takes each kind's codes out of the byte stream before the
+  terminal (only while `Term.state == 0`, so ANSI escapes pass untouched: mixed files work); colours are set on
+  the Term's own fields (`setFg/setBg/setAttr` in BIOS order, `bios()` reads them back), clears/moves are fed to
+  the Term as ANSI. A code cut by writeWatching's chunks waits in `pend`; `flush` at the end. Hooked in by one
+  field, `ParseOpts.codes` (parseArt; UTF-8 width guessing is off with codes) and `Tab.codes` (reparse passes it).
+- **Shown as text**: a code the board acts on but CharEdit cannot show (pauses, MCI like |UN/|PO, Ctrl-A P , ; .
+  T D, WWIV |@ macros, ☼ macros, @FIRST@) is not a code to the reader; the writers write those characters raw
+  (e.g. ☺ before a letter `ctrlaActs` rejects), so the bytes go back as they came. `pipeActs`, `ctrlaActs`,
+  `wildcatActs` are shared by reader and writer: keep them in step.
+- **Writing** (`writeBBSCodes`): codes where the attribute changes (`appendCodes`; Ctrl-A: N only when bright or
+  blink must go off, I or E (ice) for bit 7), CR LF after rows that do not fill the width, the board's clear if
+  Info's clear is set, normal colours at the end. Escapes: pipe `|` -> `|PI` when it could join a code or meet one
+  within two bytes (Mystic takes any two bytes after a `|`, printing all three when they are no code; also at
+  the end of a full row: `cellAt` looks into the next row); WWIV `|` before a digit/`#`, Wildcat `@` before two
+  hex digits or CLS, Celerity `|` before a code letter: the same colours written again right after it
+  (`force`); Ctrl-A ☺ -> Ctrl-A A, 0x1A -> Ctrl-A z. Loss (`bbsLoss`): Celerity has no bit 7, WWIV cannot write ♥
+  (a heart + printable byte is always a code there): spaces; the save's message says how many.
+- **Loading** (`loadBytes`): `bbsCodesKind` after the PCBoard/Avatar check, or Open as a kind. Codes only ->
+  `saveFmt` = the kind; with ANSI escapes too -> saveFmt stays ansi (the file stays viewable anywhere) and the
+  status line says Save as has the codes. Ctrl-A E sets the page's iCE. Save in another own format clears
+  `Tab.codes` (writeOut). Open as now also lists PCBoard and Avatar; the C64 entry is skipped (not cut off) when
+  the ROMs are missing (`shown` in dialogs.go).
+- **Detection** rules (checked on the big check's 8479 files: only 13 WWIV ANSIs from 1990 with real hearts are
+  taken, test `TestBBSCodesBigCheck`): 3 codes (1 with .msg/.bbs), at least 2 different and more than different+1
+  (text art numbers its boxes |01| |02|), codes >= 1/4 of the file's | or @, Ctrl-A/hearts >= 1/2 of the ☺/♥
+  bytes, a heart takes one digit not followed by a digit or comma (mIRC), no other machines' endings, no binary.
+  Celerity is never guessed.
+- Tests: `bbscodes_test.go` (each board's table, round trips of random pages heavy in | @ ☺ digits and code
+  letters, unknown codes kept, shortest codes, losses, detection, open/save/Open as in the app, a model of Mystic
+  1.10's OutFile showing the pipe writer's files as the page). Real files when fetched (skipped otherwise; set
+  `CHARCOAL_BBS_FILES`, default /tmp/charcoal-bbs): IcyDraw's benches/data Members01 in .pcb/.avt/.an1/.msg give
+  one page (`TestBBSCodesIcyDrawMembers`; IcyDraw writes @ as @@ in Ctrl-A, let off), Synchronet's text/menu
+  (85 Ctrl-A files, every board's look) and WWIV's install/gfiles round-trip (`TestBBSCodesRealFiles`). Fuzz:
+  every kind in FuzzParsers. How to fetch them and the board facts: the knowledge note on BBS colour codes in ~/Projects/Knowledge/bbs/.
+- Not done: "Save for board X" writing the board's colour codes (bbspause's boards: Mystic pipe, Synchronet
+  Ctrl-A, PCBoard @X; proposed only); PCBoard's @X00/@XFF save/restore (pcformats.go reads them as colours);
+  Telegard's backtick codes; Renegade's ^0-^9 user colours and Mystic's |T0-|T9 theme colours (shown as text);
+  Animate a folder counts a codes file as "other" (written as .ans with ANSI colours).
+
 ## Keys and safety (2026-10-13, evening)
 
 - `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's

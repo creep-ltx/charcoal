@@ -72,6 +72,9 @@ func FuzzParsers(f *testing.F) {
 		check("ata", func() []*Doc { return one(parseAta(b, 40)) })
 		check("pcb", func() []*Doc { return one(parsePCBoard(b, 80)) })
 		check("avt", func() []*Doc { return one(parseAvatar(b, 80)) })
+		for _, k := range bbsCodeIDs { // BBS colour codes (bbscodes.go)
+			check("codes "+k, func() []*Doc { d, _, _ := parseArt(b, ParseOpts{codes: k}); return one(d) })
+		}
 		check("idf", func() []*Doc { return own(parseIDF(b)) })
 		check("adf", func() []*Doc { return own(parseADF(b)) })
 		check("tnd", func() []*Doc { return own(parseTundra(b)) })

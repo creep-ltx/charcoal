@@ -52,8 +52,8 @@ Settings, keys and autosaves are kept in `%AppData%\Charcoal` on Windows,
 
 ## What it is
 
-An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw,
-IcyDraw, REXPaint, Playscii),
+An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, the BBS colour codes of Mystic,
+Renegade, Synchronet, WWIV, Wildcat! and Celerity, XBin, iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii),
 Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens and teletext
 (BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA, EGA 8x14,
@@ -150,6 +150,20 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   TundraDraw (.tnd) open with their own fonts and colours and save (see Files for other editors). The same art
   in five formats (ansilove's test files, `testdata/alove`) gives the same page in all of them. PC attribute
   bytes are in BIOS colour order and are converted.
+- **BBS colour codes** (PC pages, open and save): the codes boards turn into ANSI for their callers, as sysops
+  keep menus and screens in them. Found by their bytes (and `.msg` / `.bbs` endings), also in files that mix
+  them with ANSI escapes (common on Mystic); **Open as** picks one for any file, **Save as** writes each with the
+  shortest codes. A file of codes only saves back in them; one with ANSI escapes too saves as ANSI (Save as has
+  the codes). A board's code CharEdit cannot show (a pause, the caller's name, `|PO`, Ctrl-A `P`) stays on the
+  page as text and is written back as it came, so it still works on the board.
+
+  | Format | Codes | Read as |
+  |---|---|---|
+  | Pipe codes (`.ans`) | `\|00`-`\|15` foreground, `\|16`-`\|23` background, `\|24`-`\|31` bright background / blink, `\|CL` clear, `\|PI` a `\|` | Mystic, Renegade, WWIV 5, Synchronet, IcyDraw's `.an1` (a `\|` that could join a code is written `\|PI`, Mystic's way) |
+  | Synchronet Ctrl-A (`.msg`) | Ctrl-A + `K R G Y B M C W`, `H` bright, `I` blink, `E` bright background, `0`-`7` background, `N` normal, `+ - _`, `L` clear, cursor moves | Synchronet's `ctrl_a()`; a `☺` is written Ctrl-A `A` |
+  | WWIV (`.msg`) | Ctrl-C (♥) + `0`-`9` (each caller's colours: the defaults are read), `\|nn`, `\|#n` | WWIV 5's `outstr`; written with `\|nn` only, since hearts differ per caller (a ♥ in the art becomes a space) |
+  | Wildcat! (`.bbs`) | `@BF@`, background and foreground as capital hex digits, `@CLS@` | Synchronet's Wildcat! mode |
+  | Celerity (`.ans`, Open as only) | `\|k \|b \|g \|c \|r \|m \|y \|w`, `\|d \|B ... \|W` bright, `\|S` swap | Synchronet's Celerity mode (no blink: it is dropped, and the save says so) |
 - **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
   character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's
   ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its
@@ -520,6 +534,7 @@ come back cell for cell after saving in their own format.
 | `fontfile.go`, `fontedit.go` | a page's own font: font files read and written, kept with the art; the font editor (`fontfile_test.go`); `tools/pcfonts.py` makes the built-in EGA/VGA fonts |
 | `viewer.go` | CharView |
 | `export.go` | `.prg`, the `.c` array, XBin, HTML (`export_test.go` runs the `.prg` in a small 6502 emulator) |
+| `bbscodes.go` | BBS colour codes: pipe, Synchronet Ctrl-A, WWIV, Wildcat!, Celerity, read in front of the ANSI terminal and written (`bbscodes_test.go`; real files when fetched, see HANDOFF) |
 | `editorformats.go` | other editors' files: iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii, Marq's `.pet`/`.bas`/`.s`, Petmate JSON (`editorformats_test.go`; `editorformats_ext_test.go` checks against ansilove, IcyDraw's engine and Playscii's loader when they are there) |
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |

@@ -80,6 +80,9 @@ against each platform's best editor. Each step says what it wins.
 
 - [x] 9-pixel VGA cells (2026-10-14): from the SAUCE letter-spacing flag, Alt+9, kept on save with the aspect bits.
 - The 4:3 aspect preview (from the SAUCE aspect bits, which are kept on save).
+- [x] BBS colour codes (2026-10-16, bbscodes.go): pipe codes (Mystic, Renegade, WWIV 5), Synchronet Ctrl-A,
+  WWIV hearts, Wildcat! @XX@, Celerity |x read (also mixed with ANSI) and written; Open as lists PCBoard, Avatar
+  and each of them. Next: "Save for board X" could write the board's own colour codes (proposed, not done).
 - [x] More PC fonts (done 2026-10-14): EGA 8x14, VGA50 8x8 (80x50), code pages 850 and 866; SAUCE font names
   honoured on opening and written on saving (IBM VGA, IBM EGA, IBM VGA50, IBM EGA43, IBM VGA 850 ...). Not yet:
   other code pages' 8x8/8x14 sets (Moebius's names open in the CP437 font of the same size and are kept on save), the 4:3 aspect above.

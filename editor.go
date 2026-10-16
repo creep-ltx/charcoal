@@ -148,7 +148,8 @@ type Tab struct {
 	dirty               bool
 	source              []byte // the file as read (or last saved), to read again with other rules
 	sourceBin           bool
-	sourceUTF8          bool // source was decoded from a UTF-8 file
+	sourceUTF8          bool   // source was decoded from a UTF-8 file
+	codes               string // the source's BBS colour codes (bbscodes.go: "pipe", "ctrla" ...), "" none
 	sauce               *Sauce
 	sauceFlags          int  // the file's SAUCE letter spacing and aspect ratio bits (TFlags 1-4), written back
 	rawCtl              bool // the file (with SAUCE) held ○ ◘ • or character 0 as glyphs: saved so again
@@ -1237,7 +1238,7 @@ func (a *App) reparse() {
 			a.setCase(lower == 1)
 		}
 	} else {
-		d, _, fr := parseArt(a.source, ParseOpts{amiga: a.amiga(), binary: a.sourceBin, forceCols: a.forceCols, utf8: a.sourceUTF8})
+		d, _, fr := parseArt(a.source, ParseOpts{amiga: a.amiga(), binary: a.sourceBin, forceCols: a.forceCols, utf8: a.sourceUTF8, codes: a.codes})
 		a.doc = d
 		if fr >= 0 {
 			for _, f := range fonts {
@@ -1256,6 +1257,7 @@ var seqExt = regexp.MustCompile(`(?i)\.(seq|pet)$`)
 // loadBytes reads a file into the current tab; as is "auto", "amiga", "pc" or "c64".
 func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.srcKind, a.ownFont, a.ownLower, a.ownPal = "", nil, nil, nil
+	a.codes = ""
 	if a.loadEditor(b, name, path, as) { // other editors' files (editorformats.go)
 		return
 	}
@@ -1293,9 +1295,11 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		return
 	}
 	// PCBoard and Avatar: text with their own colour codes.
-	if as == "auto" || as == "pc" {
+	if as == "auto" || as == "pc" || as == "pcb" || as == "avt" {
 		k := ""
 		switch {
+		case as == "pcb" || as == "avt":
+			k = as
 		case strings.HasSuffix(lname, ".pcb") || (isPCBoard(b) && !bytes.Contains(b, []byte("\x1b["))):
 			k = "pcb"
 		case strings.HasSuffix(lname, ".avt") || (isAvatar(b) && !bytes.Contains(b, []byte("\x1b["))):
@@ -1305,6 +1309,14 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 			a.mode, a.srcKind, a.ice = "pc", k, false
 			a.finishLoad(b, name, path, nil, k)
 			return
+		}
+	}
+	// Other boards' colour codes (bbscodes.go): read in front of the ANSI terminal.
+	if isBBSCodes(as) {
+		a.codes, as = as, "pc"
+	} else if as == "auto" || as == "pc" {
+		if k := bbsCodesKind(b, name); k != "" {
+			a.codes, as = k, "pc"
 		}
 	}
 	kind := ""
@@ -1452,12 +1464,22 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		if r := guessSTRes(b); r != "" {
 			a.stres = r
 		}
+	case a.codes != "" && !bytes.Contains(b, []byte("\x1b[")):
+		// Codes only: saved in them again. With ANSI escapes too, the file stays
+		// ANSI (the codes' colours become ANSI's); Save as offers the codes.
+		a.saveFmt = a.codes
 	case binary:
 		a.saveFmt = "bin"
 	case textExt.MatchString(name) && !bytes.ContainsAny(head, "\x1b\x9b"):
 		a.saveFmt = "text"
 	default:
 		a.saveFmt = "ansi"
+	}
+	if a.codes != "" {
+		a.msg(bbsOpenNote(a.codes, a.saveFmt))
+		if a.codes == "ctrla" && ctrlaUsesIce(b) {
+			a.ice = true // Ctrl-A E: bright backgrounds
+		}
 	}
 	a.undo, a.redo = nil, nil
 	if a.saveFmt == "tti" && isTTI(b) {
@@ -2222,6 +2244,11 @@ var formats = []Format{
 	{"bin", "PC binary (.bin)", ".bin", "pc"},
 	{"pcb", "PCBoard @X codes (.pcb)", ".pcb", "pc"},
 	{"avt", "Avatar (.avt)", ".avt", "pc"},
+	{"pipe", "Pipe codes |07: Mystic, Renegade (.ans)", ".ans", "pc"},
+	{"ctrla", "Synchronet Ctrl-A codes (.msg)", ".msg", "pc"},
+	{"wwiv", "WWIV pipe codes (.msg)", ".msg", "pc"},
+	{"wildcat", "Wildcat! @XX@ codes (.bbs)", ".bbs", "pc"},
+	{"celerity", "Celerity |x codes (.ans)", ".ans", "pc"},
 	{"xbin", "XBin, font and palette inside (.xb)", ".xb", "amiga pc"},
 	{"prg", "C64 program that shows it (.prg)", ".prg", "c64 (C64)"},
 	{"marq", "C array: PETSCII editor, Petmate (.c)", ".c", "c64"},
@@ -2371,6 +2398,12 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		return writePCBoard(d, info.clear), nil
 	case "avt":
 		return writeAvatar(d, info.clear), nil
+	case "pipe", "ctrla", "wwiv", "wildcat", "celerity":
+		out, loss := writeBBSCodes(fmtID, d, info.clear, a.ice)
+		if n := loss.note(fmtID); n != "" {
+			a.msg("Saved, but " + n)
+		}
+		return out, nil
 	case "prg", "marq":
 		if fmtID == "prg" {
 			if d.cols != 40 || d.usedRows() > 25 {
@@ -2514,7 +2547,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID]
+	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID] || isBBSCodes(fmtID)
 	if own && a.nFrames() > 1 && !framesFormats[fmtID] {
 		// One picture: written as an export, so the page is not taken for saved.
 		a.lastDir = filepath.Dir(path)
@@ -2530,6 +2563,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		if editorOwn[fmtID] {
 			a.srcKind = fmtID
 		}
+		a.codes = map[bool]string{true: fmtID}[isBBSCodes(fmtID)] // the source is now in these codes (or none)
 		a.markSaved()
 		dropAutosave(a.Tab)
 		a.rememberRef() // the reference goes with the file's new name
