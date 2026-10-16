@@ -2,8 +2,8 @@ package main
 
 import (
 	"os"
-	"slices"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"

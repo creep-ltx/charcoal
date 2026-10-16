@@ -950,7 +950,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   SAUCE (written when not 80, FileType 8). PabloDraw ids map to CharEdit fonts (`pdFonts`); amiga-* open on an
   Amiga page. `.td` (TheDraw 4.x only; 3.x refused with a message): header 367 bytes (w at 39, h at 41), then
   chunks u16 size + crunched data (UNCRUNCH.PAS) read until they stop fitting; byte 56 is **not** the page count
-  (SHADING.TD says 2, holds 3). Pages -> frames; read only: path cleared, Ctrl+S asks for an `.ans`. TheDraw
+  (SHADING.TD says 2, holds 3). Pages -> frames; written since round 7 (see "TheDraw .td writing and the font editor"). TheDraw
   writes 255 between words (shown as blank). `.bsv` = FD, seg B800, offset, length + screen bytes (80 columns,
   at most 409 rows). ACiDDraw has no own format (ANSI/BIN/ASM/...); its `.adf` is ArtWorx's: no clash.
 - **Petmate9** (`petmate9.go`, export.go): charsets name the machine (`petmate9Machine`: c16*, vic20*, petGfx/
@@ -1238,9 +1238,65 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   (folders, zip, bad files, prefs, open .tdf, find), download (httptest), requesters drawing headless.
   `TestTDFRealFiles` (CHARCOAL_TDF, default ~/.cache/charcoal-tdf/roysac; CHARCOAL_THEDRAW for TDFONTS.TDF):
   every glyph of 3,536 fonts in every style, TheDraw's Outline 'Q' and its descender. FuzzParsers reads "tdf".
-- **Not done**: a font editor for .tdf (IcyDraw has one), FIGlet fonts, TheDraw's own fonts menu keys in the
+- **Not done**: (the font editor: done in round 7, see below), FIGlet fonts, TheDraw's own fonts menu keys in the
   TheDraw key preset, a ghost of the next letter under the mouse, kerning. Not checked against TheDraw running
   (no DOS emulator here): the box fill and spacing columns follow IcyDraw and the manual.
+
+## TheDraw .td writing and the font editor (2026-10-16, branch r7-fonted)
+
+- **Checked in TheDraw itself**: QEMU (`qemu-system-i386`) boots FreeDOS 1.3's boot floppy (its FDCONFIG.SYS /
+  FDAUTO.BAT replaced by mtools) with TheDraw 4.63 on drive B, keys by the QEMU monitor's `sendkey`, the screen
+  by `screendump`. Arrow keys need `kp_6` etc. (TheDraw ignores the E0-prefixed ones). Recipe: the knowledge base
+  (bbs/, the TheDraw note). Not in the repo; the env-gated tests below take its output.
+- **`.td` writing** (`othformats.go`: `tdHeader`, `crunchTD`, `writeTD`, `tdSize`; format "td" in `formats` by
+  init, `editorOwn`, `framesFormats`; `othEncode` "td"; `encodeEditor`'s pd/bsv case also routes td/tdf).
+  Header 367 bytes: `0x15 "TheDraw Save File." CR LF 1A` (the period!), Pascal "4.60", cursor, page shown (31),
+  8/1/1, w/h at 39/41 and again at 340/342, **bytes 55-62 = the 8 page layers (2 used, 1 not)** (not "a count at
+  56"), two 80-column tab rulers; the rest zeros (TheDraw's own files hold junk there). Width 80 or 160 (TheDraw's
+  worksheets), height the tallest frame's, frames padded with blank cells, 8 frames at most. **Every cell is
+  written, blank ones too**: TheDraw clears its worksheet to white on black (0x0F), so a cell left out came back
+  0x0F, not CharEdit's grey blank (*verified*). TheDraw shows only its worksheet (80x25 by default): taller or
+  wider pages are kept in the file but cut in TheDraw. A page that crunches past 64 KB is refused.
+  `saveNote`/`takeSaveNote` (othformats.go): an encoder's addition to writeOut's "Saved ..." message.
+- **The font editor** (`fed.go`): `fedTabs` maps a tab to its `fedFont` (no new Tab field). `fedFont.slots[94]`
+  (doc, desc per row, defined, raw + orig: the file's bytes, written back while the page is unchanged; undo/redo).
+  **t.doc is the live current letter** (as frames). `fedGo` (switch: takes the page into its slot, swaps undo/redo,
+  a new letter gets the last one's size), `fedCopyTo` (refuses a letter in the font), `fedDelete` (clears, not
+  defined; undo brings the cells and "defined" comes back from non-blank), `fedSetDesc` (the last n rows),
+  `fedRefused` (not a PC page, frames, layers). A letter is defined when read or once non-blank (`fedTake`).
+  `fedOpen/fedOpenHere/fedOpenFont` (a file of one `.tdf` font: saved in place; else path "" and `<name>.tdf`),
+  `openFedNew` (`FedNewReq`), `openFedEdit` (TDFReq with `editing` and `all`: Edit is the main button; also an
+  Edit... button in the normal list). Save: format "tdf" (modes "tdf": never listed for other pages; a font tab's
+  `modeFormats` is only it), `fedEncode` via othEncode; `reparseEditor`/`othReparse` "tdf" keep the page.
+  `setCols` allows 1-255 columns on a font tab. Autosave: `<id>.tdfed` (letter index + the .tdf), restored by
+  `restoreFedAutosave` after `restoreAutosave`'s applyMode; removeAutosave deletes it. The strip (`drawFedStrip`,
+  `fedStripH`) is drawn above the frame strip in both layouts (layout.go, view.go), with a preview
+  (`ff.tdf(a.doc)` = the font re-read through parseTDF, rendered by `render`, cached per gen). Actions
+  `font_tdf_new`, `font_tdf_edit` (no keys), Draw menu.
+- **Writing** (`tdf.go`): `encodeTDFGlyph` (width byte = cols, height byte = rows that are not descenders, rows'
+  transparent ends trimmed: a space in block/outline, a space with bg 0 in colour; a last empty row keeps one
+  space (the reader drops a last empty line); a row ending in `&` gets a space after it, or loses the `&` at the
+  right edge; character 0 -> 0xFF; 13 -> space (loss); a colour `&` with attribute 0 or 13 -> 0xFF (13: loss)),
+  `encodeTDFFont` (the name's real length, 12 bytes, 4 zeros, kind, spacing byte, block <= 64 KB),
+  `tdfFileBytes` (**no 0 after the fonts**: TDFONTS 4.63 says "Header read fault" on a file with one; IcyDraw's
+  retrofont writes one), `rawGlyph`.
+- **Spacing fix**: the file's spacing byte is the gap + 1 (TDFONTS shows Outline's 2 as "1 character"; TheDraw
+  types its letters 1 column apart: *verified*). `tdfFont.gap()`; the Logo tool, the font picker's label and the
+  editor's field use it. tdf_test's TestBlock now has byte 2.
+- **Tests** (`fed_test.go`, helpers `fedF...`): .td round trips of random pages/frames/sizes, header, TheDraw's
+  files written back, SHADING.TD open-edit-Ctrl+S; glyph round trips of all three kinds (`fedFLook`: what the
+  font can keep); `TestFedRealFonts` (Roy/SAC's 3,547 fonts and TDFONTS.TDF: unchanged letters byte for byte,
+  every letter re-encoded draws the same in two styles); new font, per-letter undo, save/open/save byte-identical,
+  copy/delete/name/spacing, multi-font files, refusals, autosave, the strip and the picker's Edit. Env-gated:
+  `CHARCOAL_FED_TDOUT` (writes sample .td/.tdf for TheDraw), `CHARCOAL_FED_TDBIN="x.td x.bin [page]"` (TheDraw's
+  `.bin` save of a loaded .td = CharEdit's reading; all 5 samples and 3 page layers pass), `CHARCOAL_FED_ICY` +
+  `CHARCOAL_ICYDIR` (retrofont, the cctdf example built in the bwrap sandbox, dumps glyph parts: 1,838 letters
+  equal). FuzzParsers: .td written back, and every letter of a fuzzed font re-encoded draws the same.
+- **Not done**: editing several fonts of one file together (a font from a file of several saves as its own file:
+  the user may want them kept together); outline letters are edited as their letters A-P (the preview shows the
+  style), no picker for TheDraw's outline pieces; no "test typing" box beyond the preview (save, then the Logo
+  tool lists the file if it is in the library); TheDraw 3 `.td`, `.tdl` libraries; a `.td` taller than 100 lines
+  or wider than 160 is written but TheDraw cannot show all of it.
 
 ## Drawing together: Moebius's collaboration protocol (2026-10-16, branch r5-collab)
 

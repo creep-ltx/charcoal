@@ -380,7 +380,7 @@ open again become the page's file (Save writes the same format again).
 | IcyDraw | `.icy` | PC, Amiga | every layer (name, shown or hidden; empty cells invisible, black that shows below transparent), font, palette, iCE or blink; a picture of the first 80 rows | yes (version 1 with or without zstd, and the older version 0; layers kept when CharEdit's show them as IcyDraw does, else put together; picture layers and effects left out) | IcyDraw's reader; files IcyDraw 0.6 wrote; IcyDraw's engine reads a layered file cell for cell as CharEdit shows it |
 | IcyDraw | `.icy` | PETSCII (C64, C128 40/80, VIC-20, PET 40/80, Plus/4 as IcyDraw's C16), Atari, Atari ST | IcyDraw's page of that machine: its machine and case, screen colour and border, the character set (a page's own set too), the machine's colour numbers (the C16's 128, the VDC's own order), flash | yes, on that machine's page (an XEP80 page of 80 columns shows its first 40; the VDC's per-cell set: the one most cells use) | IcyDraw's engine reads all 18 page kinds cell for cell and draws them pixel for pixel as CharEdit; files its engine wrote |
 | PabloDraw | `.pd` | PC, Amiga | PabloDraw's own file: its font (by PabloDraw's name, or the font itself), palette, cells with 24-bit colours; SAUCE for other widths | yes (an Amiga font opens on an Amiga page) | its source (Pablo.cs, Tundra.cs, BitFont.cs, Eto's Palette) |
-| TheDraw | `.td` | PC | (read only) TheDraw 4's own save file: every page layer, as frames | yes | TheDraw 4.63's own example files; abydos' reader |
+| TheDraw | `.td` | PC | TheDraw 4's own save file: the frames as its page layers (8 at most), 80 or 160 columns, as tall as the tallest frame; Ctrl+S on an opened `.td` writes it again | yes, every page layer as a frame | TheDraw 4.63 itself (run in a PC emulator): it loads CharEdit's files and saves them as `.bin` cell for cell, every page layer; TheDraw's example files; abydos' reader |
 | TheDraw, ACiDDraw | `.bsv` | PC, 80 columns | a BASIC BSAVE screen dump (`BLOAD` loads it into the text screen) | yes | TheDraw's manual |
 | REXPaint | `.xp` | PC | every shown layer (empty cells in REXPaint's transparent pink; 9 at most), 24-bit colours | yes (layers kept when CharEdit's show them as REXPaint does, else put together) | IcyDraw's reader |
 | Playscii | `.psci` | PC (dos), Amiga (amiga_topaz), PETSCII (c64_real_*, commodore_pet), Atari (atari) | every frame with its hold; a page of layers (PC, Amiga, ST): every layer, empty cells transparent; Playscii's own charset and palette by name | yes, also c64_petscii, c64_edscii (Playscii's defaults) and jpetscii; other charsets open as a PC page; the layers of a file of one frame kept when CharEdit's show them as they are, else put together | Playscii's own loader (art.py); its glyph order compared with the ROM fonts |
@@ -400,7 +400,8 @@ evens out colours that do not show when it saves and writes NUL as a space; an A
 80 columns; Playscii and REXPaint files cannot hold a font (CharEdit keeps a page's own font for the file, as
 for `.ans`); PabloDraw cannot store characters 1-6 in a `.pd` (left out, the save says how many). Moebius and
 ACiDDraw have no files of their own beyond ANSI/BIN/XBin (ACiDDraw's `.adf` is ArtWorx's); TheDraw's `.tdf`
-are fonts (see TheDraw fonts). Not done: TheDraw 3's `.td` and libraries (`.tdl`), its COM/OBJ/C/Pascal/ASM exports; IcyDraw's
+are fonts (see TheDraw fonts; CharEdit edits them too). TheDraw shows as much of a `.td` as its worksheet holds
+(80x25 unless its Setup says 160 columns or up to 100 lines). Not done: TheDraw 3's `.td` and libraries (`.tdl`), its COM/OBJ/C/Pascal/ASM exports; IcyDraw's
 Viewdata and Mode 7 pages, sixel layers, live text and effects; Playscii's teletext_uk, ultima4, ui and
 osamu-micro sets (glyphs wider than a cell: they open by number); Marq's DirArt as a disk. Playscii's `msx` set
 opens on the MSX page, its `sharp` set (the Japanese MZ's, with kana and kanji) on a PC page with the set as its font.
@@ -512,6 +513,31 @@ The **Logo tool** (Alt+G, the Logo button, Draw > Logo) types in one on PC, Amig
 - **Amiga pages** show Latin-1, which has no block or line characters: only 118 of Roy/SAC's fonts can be
   typed there (the list shows those unless you tick *Also fonts an Amiga page cannot show*); a letter needing a
   character the page lacks is refused, not changed. **Unicode pages** take every font (CP437 to Unicode).
+- **Spacing** is counted as TheDraw counts it: a font whose file says 2 puts one column between its letters
+  (TheDraw's own font editor shows it as "1 character"). Earlier versions put one column too many.
+
+### Making and changing TheDraw fonts
+
+Draw > **New TheDraw font...** (name, Block / Colour / Outline, spacing) or **Edit a TheDraw font...** (the font
+list: pick one, *Edit*) opens the font in a tab of its own. Each letter is a small PC page: draw it with every
+tool, W and H set its width and height (1 to 255 columns). The **letter strip** under the page shows `!` to `~`
+in two rows, as TheDraw's TDFONTS does: letters in the font in boxes, the others faint; a click goes to a letter
+(one not yet in the font starts blank, the size of the last one, and joins the font once something is drawn on
+it). Each letter keeps its own undo. On the strip's last row: the font's name (12 characters), its kind, its
+spacing, the letter's size, its **descender lines** (the last lines of g, j, p, q, y that hang below: TheDraw
+leaves them out when it lines letters up), *Copy to* (then click the letter to copy to) and *Delete*. At the
+right, the letter as the Logo tool will type it (outline fonts in the Logo tool's outline style).
+
+- Block fonts keep characters only (they are typed in the brush's colours); colour fonts keep each cell's
+  colours. A space is see-through (a space on black, in a colour font): the page below shows; TheDraw's solid
+  space is character 255. Outline fonts are drawn with the letters A-P and @, which become the outline style's
+  lines when typed (TheDraw's manual, "Editing outline type fonts").
+- **Ctrl+S** writes the `.tdf`: a file of one font is saved in place; a font from a file of several (or from a
+  `.zip`) is saved as a file of its own. Letters you did not change are written byte for byte as they were.
+  Character 13 and an `&` at a block letter's right edge cannot be stored (TheDraw would read a line's end):
+  the save says how many became spaces.
+- Checked: every letter of Roy/SAC's 3,547 fonts written anew draws the same; TheDraw 4.63's TDFONTS opens
+  CharEdit's fonts; IcyDraw's font library reads them letter for letter.
 
 ## Animation templates
 
@@ -750,7 +776,7 @@ Delete, Insert, Esc. The defaults, the PC ANSI editors' (Moebius, PabloDraw, The
 | Ctrl+Home, Ctrl+End | top, bottom of the page |
 | Alt+Up / Alt+Down, Alt+Left / Alt+Right | delete / insert a row, delete / insert a column |
 | Alt+T, D, K, L, P, S, B | tools: Type, Draw, Colour, Fill, Pick, Select, Half (PC, Unicode) / Sixel (teletext, Viewdata, Minitel) |
-| Alt+G, Alt+Shift+G, Ctrl+Shift+G | Logo tool (TheDraw fonts), the font list, a whole line to stamp |
+| Alt+G, Alt+Shift+G, Ctrl+Shift+G | Logo tool (TheDraw fonts), the font list, a whole line to stamp (Draw > New / Edit a TheDraw font: no keys) |
 | Ctrl+Alt+PgUp / PgDn | Unicode page: the character table's previous / next block |
 | Ctrl+Up / Ctrl+Down, Ctrl+Left / Ctrl+Right | foreground -/+, background -/+ |
 | Ctrl+0-7, Alt+0-7 | foreground, background colour (again: the bright one; Plus/4: the hue, its luminance kept) |
@@ -850,6 +876,7 @@ resizing and chat went both ways in each.
 | `c64bbs.go`, `boardcolours.go` | the C64 boards' pauses (Image BBS, C*Base) and Image's £ codes read and written; the PC boards' own colour codes in their animated files (`c64bbs_test.go` with models of Image's and C*Base's display code) |
 | `bbscodes.go` | BBS colour codes: pipe, Synchronet Ctrl-A, WWIV, Wildcat!, Celerity, read in front of the ANSI terminal and written (`bbscodes_test.go`; real files when fetched, see HANDOFF) |
 | `editorformats.go` | other editors' files: iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii, Marq's `.pet`/`.bas`/`.s`, Petmate JSON (`editorformats_test.go`; `editorformats_ext_test.go` checks against ansilove, IcyDraw's engine and Playscii's loader when they are there) |
+| `fed.go` | the TheDraw font editor: a `.tdf` font in a tab, each letter a page, the letter strip; `.td` writing is in `othformats.go` (`fed_test.go`) |
 | `icymach.go`, `psciown.go`, `othformats.go`, `petmate9.go` | IcyDraw's PETSCII/ATASCII/ST pages, Playscii's other sets and palettes, PabloDraw `.pd` / TheDraw `.td` / BSAVE `.bsv`, Petmate9's machines (`oth_test.go`) |
 | `skypix.go`, `skyfonts.go` | SkyPix pages and the Amiga fonts they name (`oth_test.go`) |
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
