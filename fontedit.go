@@ -495,7 +495,7 @@ func openFontSaveRequester(back Dialog) {
 	if own := a.ownInUse(); own != nil && a.c64() {
 		up, low = a.ownFont, a.ownLower
 	}
-	d := &FileReq{save: true, sel: -1, title: "Save the font", note: "The name's ending says the kind: .psf, .f08/.f14/.f16, .64c, .fnt, .ch8, .udg"}
+	d := &FileReq{save: true, sel: -1, title: "Save the font", note: "The name's ending says the kind: .psf, .f08/.f14/.f16, .64c, .chrs, .fnt, .ch8, .udg"}
 	dir := a.lastDir
 	if f.src != "" {
 		dir = filepath.Dir(f.src)

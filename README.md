@@ -144,7 +144,8 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
 - Pages for a machine's screen keep its width: PETSCII the machine's, Atari 38 or 40; only Amiga, PC and Unicode
   pages can be any width (W).
 - **PETSCII page** (the Machine gadget): PET 40/80 columns (green, amber or white screen), VIC-20 (22x23, 8 text
-  colours), C64 (40x25; Pepto or Colodore colours), C128 40 columns, C128 80 columns (VDC, RGBI colours), Plus/4.
+  colours), C64 (40x25; Pepto or Colodore colours), C128 40 columns, C128 80 columns (VDC, RGBI colours), Plus/4,
+  DirArt (below).
   Each machine's own character set, upper/graphics and lower/upper, from VICE (first run or Settings, 34 KB, SHA-1
   checked). Rendering checked against 125 pictures exported by Marq's PETSCII editor: all of the same version
   identical, cell by cell.
@@ -164,7 +165,21 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   hue, FLASH ON / OFF are 0x82 / 0x84; the save says how many cells show another luminance), PNG / GIF / APNG
   as VICE's screenshots (384x288, the screen at 32,40). Open as "Plus/4 PETSCII" reads any file as a Plus/4
   prints it; changing a page between the C64 and the Plus/4 turns its colours into the nearest (Ctrl+Z
-  undoes it).
+  undoes it). **A character set of its own** (Load a font..., or the font editor; TED Screen Editor's `.chrs`,
+  `.64c`, `.bin` of 1024 bytes for 128 characters or 2048 for 256): the font editor changes a character and its
+  reverse together, as the TED shows them. It goes with the page in CharEdit's own Plus/4 `.prg` (and `.d64`:
+  the TED reads the set from RAM at `$2000`, 128 characters with the TED's own reverse or, when the reversed
+  half is drawn differently, all 256), in the `.scrn` (TEDSE's project: `NAME.chrs` next to it, 128 characters,
+  as TEDSE saves it) and in the BASIC listing (the set POKEd to `$E000`) and ACME source (the set at `$2000`);
+  all checked in VICE's xplus4, pixel for pixel.
+- **DirArt** (Model: DirArt): art made of a C64 disk's directory. `LOAD"$",8` and `LIST` show one line per file,
+  its 16-character name in quotes: the page is 16 columns wide, a row per file (up to 144), light blue on blue.
+  Save as *C64 disk whose directory shows it* (`.d64`): each row a DEL file of 0 blocks, the disk named after the
+  file. Characters a name cannot hold (the quote, and reversed characters other than the control codes: as Marq's
+  editor and Petmate9 mark them) become spaces, and the save says how many. A `.d64` without a screen program
+  of CharEdit's opens as a DirArt page (Open as "C64 DirArt" opens any disk's directory); saved again, it is
+  written over that disk: its programs, and the names that did not change, stay as they were. Marq's `DIRART`
+  `.c` files and Petmate9's `dirart` screens open on it. Checked in VICE: the listing shows the page.
 - **Atari ST page**: the ST's VT52 terminal in low (40x25, 16 colours), medium (80x25, 4) or high resolution
   (80x25, mono); each cell its own colours; `.vt` streams read and written, the resolution guessed from the pens
   and columns used. Font: EmuTOS's, downloaded on first use (GPL, so not built in), SHA-1 checked.
@@ -244,7 +259,8 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   foreground and a background of the 8 colours. The character table shows both sets (512 characters; the
   second from 256 on); typing gives the first set (Sharp's display codes: letters, digits, lower case). The
   font: Sharp's character ROM may not be passed on, so the first set is Russell Marks's public domain
-  look-alike (`fonts/mz700-NOTICE.txt`) and the second set's characters show their code in a box; with Sharp's
+  look-alike (`fonts/mz700-NOTICE.txt`) and the second set is CharEdit's own look-alike, drawn for it from the
+  character table (CC0, `fonts/mz700-set2-NOTICE.txt`; real MZ art such as "Princess" looks right); with Sharp's
   ROM (`mz700fon.int`, 4096 bytes) in CharEdit's data folder or MAME's `roms` (`mz700.zip`), CharEdit draws
   both sets with it ("MZ-700 (Sharp ROM)"). Saved as a **tape file** (`.mzf`: load it with the monitor's `L`,
   or in an emulator): a program at $1200 that copies the display codes to $D000 and the attributes to $D800.
@@ -363,8 +379,9 @@ open again become the page's file (Save writes the same format again).
 | CharPad | `.ctm` (v5-v9) | C64 | (read only) the character set, mode, colours; the map laid out as characters | yes, as a font or a page | CharPad 2.7's format pages; c64lib's test projects (`testdata/charpad`), every version the same page |
 | Petmate | `.json` | PETSCII | every screen (Petmate's JSON export) | yes | its source (exporters/json.ts) |
 | Marq's PETSCII editor | `.prg`, `.c`, `.bas`, `.s` | Plus/4 | the program of its Plus/4 template (screen codes, attributes, border, background, case); the C array with `PLUS4` (no flash: the editor has none); its BASIC 3.5 listing (`petcat -w3`) and ACME source (data only for sizes other than 40x25), attributes with their flash bit | `.prg` and `.c` | its source (m_plus4.pde) and template; the `.prg`, the BASIC listing (tokenised by VICE's petcat) and the ACME program (ACME 0.96.4) run in VICE's xplus4: screenshots identical to CharEdit's PNG |
-| TED Screen Editor | `.scrn` + `.proj` | Plus/4 | attributes, its 24-byte signature, screen codes ("save screen"); the project's size, colours, case | yes (without a `.proj`: 40 columns, black) | its source and README; its own title and help screens |
+| TED Screen Editor | `.scrn` + `.proj` (+ `.chrs`) | Plus/4 | attributes, its 24-byte signature, screen codes ("save screen"); the project's size, colours, case, and its character set (`NAME.chrs`, 128 characters from `$B800`) when the project says it changed | yes (without a `.proj`: 40 columns, black) | its source and README; its own title and help screens |
 | Petmate9 | `.petmate` | Plus/4 | `c16Upper` / `c16Lower` screens with the TED's attribute bytes and colours | yes | its source |
+| Marq's PETSCII editor, Petmate9 | `.c`, `.petmate` | DirArt | Marq's `DIRART` machine (16 columns, no colours) and Petmate9's `dirart` charset open on the DirArt page | yes | their sources (m_dirart.pde, Petmate9's d64 exporter) |
 | Petmate9 | `.petmate` | VIC-20, PET 40/80, C128 40/80 | the machine's charset name (`vic20Upper`, `petBiz`, `c128Lower` ...); the VDC's colour numbers and attribute byte | yes, on that machine's page | its source (presetExport.ts, vdcAttr.ts) |
 
 Traps: Petmate's `.pet` export says 0 for lower case where Marq's says 1 (CharEdit follows Marq); IcyDraw
@@ -745,6 +762,7 @@ C-BIOS, and MZ-700 `.mzf` files in MAME's mz700 with a stand-in monitor that loa
 | `gtia.go`, `atari8.go`, `zxtap.go` | Atari GTIA colours and the colour registers; the Atari `.xex`/`.atr` and the OS ROM's font; the Spectrum `.tap` (`mach_test.go` runs the Atari program in a small 6502 with a model of ANTIC and compares its screen with the PNG export pixel for pixel) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
 | `msx.go`, `mz.go` | MSX pages (screens, colours, the `.rom`/`.bin` programs, Playscii's msx charset) and Sharp MZ-700 pages (two character sets, the `.mzf`); `tools/msxmz-fonts.py` makes their fonts (`msx_test.go`, `mz_test.go` run the programs in a small Z80) |
+| `tedchars.go`, `dirart.go` | a Plus/4 page's own character set (CharEdit's Plus/4 program, TEDSE's `.chrs`, the BASIC/ACME exports, the TED's reverse in the font editor); C64 DirArt (the 16-column page, the `.d64` directory read and written); `tools/mz700-set2.py` makes the MZ-700's second set from `tools/mz700-set2.txt` (`chs_test.go`; with `CHARCOAL_EMU=1` both run in VICE) |
 | `minitel.go`, `minitel_ui.go`, `viewdata.go` | Minitel pages (the screen, a small Minitel that reads `.vdt`, the `.vdt` writer) and Viewdata pages (streams, 960-byte frames, Telstar frames); the editor's side of both (`minitel_test.go`, `viewdata_test.go`) |
 | `keys.go` | the table of actions and their default keys, the keys file, the help's key list |
 | `rowscols.go`, `blockjobs.go` | insert/delete rows and columns; fill, move and crop a block |
@@ -776,6 +794,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | Amstrad CPC font | the CPC firmware ROM's character set (the same in the 464, 664 and 6128) | © Amstrad; Amstrad has kindly given its permission for its copyrighted material to be redistributed but Amstrad retains its copyright, `fonts/amstrad-cpc-NOTICE.txt` |
 | MSX fonts (`fonts/msx-cbios*.font`) | C-BIOS 0.29a's character sets (international by Eric Boon, Japanese, Brazilian), cbios.sourceforge.net | BSD 2-clause, `fonts/msx-cbios-NOTICE.txt` |
 | Sharp MZ-700 font (`fonts/mz700-rjm.font`) | Russell Marks's hand-drawn MZ-700-like set from mz700em (1996), kept in github.com/mkoeppe/mz800em | public domain, `fonts/mz700-NOTICE.txt` |
+| Sharp MZ-700 second set (`fonts/mz700-set2.font`) | CharEdit's own look-alike, drawn for it in `tools/mz700-set2.txt` (2026) | CC0 1.0, `fonts/mz700-set2-NOTICE.txt` |
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |
 | Minitel font (`minitel_font.go`) | Minitel-Canvas's Minitel font, Frédéric Bisson (github.com/Zigazou/Minitel-Canvas), drawn into 8x10 cells by `tools/minitel-font.py` | CC0, `fonts/minitel-NOTICE.txt` |
 | Unicode page font (`fonts/unifont-art.hex.gz`) | GNU Unifont 17.0.05, Roman Czyborra, Paul Hardy et al. (unifoundry.com): the blocks text art uses, cut by `tools/unifont.sh` | SIL Open Font License 1.1 (Unifont is dual-licensed OFL / GPL-2+ with the font exception; used under the OFL), `fonts/unifont-NOTICE.txt` |

@@ -115,15 +115,20 @@ against each platform's best editor. Each step says what it wins.
   - [x] **C64 beyond PETSCII** (2026-10-16, c64x*.go): multicolour and ECM pages drawn as the VIC-II shows them
     (Screen, MC/BG gadgets), custom character sets (.64c/.bin, CharPad .ctm v5-v9 as a font or a page, pixel
     pairs in the font editor), CharEdit's own .prg (set at $2000, VIC registers) and .d64, the ACME source and
-    BASIC listing with sets and modes; [x] run in VICE (2026-10-16). Later: DirArt, CharPad .ctm writing, Petmate files with modes.
+    BASIC listing with sets and modes; [x] run in VICE (2026-10-16). Later: CharPad .ctm writing, Petmate files with modes.
+  - [x] **DirArt** (2026-10-16, dirart.go): a 16-column DirArt page; a `.d64` whose directory listing is the page
+    (DEL entries), written over the disk it came from (its programs kept); any `.d64` without a screen program
+    opens as one; Marq's and Petmate9's DirArt read. `LOAD"$",8` + `LIST` in VICE shows the page.
   - [x] **Plus/4, C16, C116 (TED)** (done 2026-10-16, ted.go, ted_formats.go): a PETSCII model with the TED's
     121 colours (hue x luminance grid in the Colours, the wheel for luminance) and flash per cell, screen and
     border colours, the ROM's characters from VICE; VICE's computed palette (identical to xplus4's screenshots),
     YAPE's and Colodore's; Marq's Plus/4 .prg (run in VICE's xplus4: pixel-identical to CharEdit's PNG) and .c,
     a .d64, TED Screen Editor's .scrn + .proj, Petmate9's c16 screens, .seq with the KERNAL's colours and FLASH
-    codes, Marq's BASIC and ACME exports (run in xplus4 too), PNG at VICE's 384x288. Later: custom character
-    sets on the Plus/4 (TEDSE's .chrs, a .prg with a set), the screen editor's ESC commands in .seq,
-    multicolour text mode.
+    codes, Marq's BASIC and ACME exports (run in xplus4 too), PNG at VICE's 384x288. Later: the screen
+    editor's ESC commands in .seq, multicolour text mode.
+  - [x] **Plus/4 custom character sets** (2026-10-16, tedchars.go): a page's own set (128 characters with the
+    TED's reverse, or 256) in CharEdit's Plus/4 .prg/.d64, TEDSE's .chrs beside the .scrn, the BASIC and ACME
+    exports; the font editor keeps a character and its reverse together; all run in xplus4, pixel for pixel.
 - [x] **Amstrad CPC (AMSCII)** (done 2026-10-16, cpc.go): mode 1 40x25 4 inks, mode 0 20x25 16 inks, mode 2
   80x25 2 inks; the 27 colours, inks and border in the Colours panel; the ROM font built in (Amstrad's
   permission, as the Spectrum's); .bin that runs on a CPC, .dsk, Playscii .psci with Logiker's exporter; reads
@@ -136,7 +141,8 @@ against each platform's best editor. Each step says what it wins.
   for pixel), Playscii's msx charset. Later: a .dsk/.cas, an MSX BASIC listing, MSX2 blink.
 - [x] **Sharp MZ-700** (2026-10-16, mz.go): 40x25, both character sets, 8 colours per cell; .mzf that shows the
   page (run in MAME's mz700: pixel for pixel), other .mzf pictures read; a public domain look-alike of the first
-  set, Sharp's ROM when the user has it. Later: the second set's look without the ROM.
+  set, Sharp's ROM when the user has it. [x] The second set's look without the ROM (2026-10-16): CharEdit's own
+  CC0 look-alike, drawn from the character table (fonts/mz700-set2.font).
 - **Spectrum**: UDG/charset editing; attributes-only painting.
 - [x] **Atari 8-bit** (2026-10-16, gtia.go, atari8.go): the real OS ROM font when present, the 128-colour palette
   (PAL and NTSC, atari800's model) with the machine's colour registers, custom fonts (load, edit, save .fnt; in the .xex).
@@ -164,10 +170,10 @@ against each platform's best editor. Each step says what it wins.
   reads and draws all 18 kinds as CharEdit does); Playscii's other sets as the page's own font (fetched) and its
   palettes; PabloDraw's .pd; TheDraw 4's .td (read, page layers as frames); BSAVE .bsv; Petmate9's VIC-20, PET
   and C128 screens; SkyPix (Amiga BBS graphics) as a picture under the cells, the Amiga fonts fetched. Later:
-  IcyDraw's Viewdata/Mode 7 pages, TheDraw 3 and .tdl, Playscii's teletext set on the teletext page, Marq's
-  DirArt as a .d64. (Playscii's msx set opens on the MSX page; sharp, the Japanese MZ set, stays a PC page.)
-- **Sharp MZ-700**: a free look-alike of the second character set (Sharp's ROM cannot be shipped; without it those
-  cells show hex boxes, and real MZ art uses that set a lot).
+  IcyDraw's Viewdata/Mode 7 pages, TheDraw 3 and .tdl, Playscii's teletext set on the teletext page.
+  [x] Marq's DirArt as a .d64 (2026-10-16, dirart.go). (Playscii's msx set opens on the MSX page; sharp, the Japanese MZ set, stays a PC page.)
+- [x] **Sharp MZ-700**: a free look-alike of the second character set (2026-10-16, fonts/mz700-set2.font, CC0;
+  drawn by hand from the character table in tools/mz700-set2.txt).
 
 ## Later
 

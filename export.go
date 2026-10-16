@@ -79,6 +79,8 @@ func marqName(machine string) (name string, colours bool) {
 		return "VIC20", true
 	case "plus4":
 		return "PLUS4", true
+	case "dirart": // no colours, as Marq's DirArt (dirart.go)
+		return "DIRART", false
 	}
 	return "C64", true
 }

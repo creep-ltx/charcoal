@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -543,5 +544,350 @@ func TestEmuChsPlus4(t *testing.T) {
 			}
 			emuFCheck(t, s, emuFCaseFor(a, c.name, [2]int{1, 1}, [2]int{1, 1}), emuFReadPNG(t, shot))
 		})
+	}
+}
+
+// ---------------------------------------------------------------- DirArt
+
+// chsFDirArtCodes are the screen codes a name can show.
+func chsFDirArtCodes() []int {
+	var out []int
+	for sc := 0; sc < 256; sc++ {
+		if screenToName(sc) >= 0 {
+			out = append(out, sc)
+		}
+	}
+	return out
+}
+
+// chsFDirArtPage is a DirArt page of random cells a name can show.
+func chsFDirArtPage(seed int64, rows int) *Doc {
+	r := rand.New(rand.NewSource(seed))
+	ok := chsFDirArtCodes()
+	d := newDoc(dirartCols, rows)
+	d.glyph0, d.border = true, 1
+	for i := range d.cells {
+		d.cells[i] = makeCell(ok[r.Intn(len(ok))], 1, 0, 0)
+	}
+	return d
+}
+
+func chsFSameCodes(a, b *Doc) string {
+	if a.rows != b.rows || a.cols != b.cols {
+		return fmt.Sprintf("%dx%d, want %dx%d", b.cols, b.rows, a.cols, a.rows)
+	}
+	for y := 0; y < a.rows; y++ {
+		for x := 0; x < a.cols; x++ {
+			if cellCh(a.get(x, y)) != cellCh(b.get(x, y)) {
+				return fmt.Sprintf("cell %d,%d: %d, want %d", x, y, cellCh(b.get(x, y)), cellCh(a.get(x, y)))
+			}
+		}
+	}
+	return ""
+}
+
+func TestChsDirArtNames(t *testing.T) {
+	// The characters a name cannot show are Marq's and Petmate9's list.
+	forbidden := []int{34, 128, 141, 148, 205}
+	for c := 160; c < 192; c++ {
+		forbidden = append(forbidden, c)
+	}
+	for c := 224; c < 256; c++ {
+		forbidden = append(forbidden, c)
+	}
+	for sc := 0; sc < 256; sc++ {
+		b := screenToName(sc)
+		if (b < 0) != slices.Contains(forbidden, sc) {
+			t.Errorf("screen code %d: byte %d", sc, b)
+		}
+		if b >= 0 && (petsciiToScreen(byte(b)) != sc || b == 0xA0 || b == 0 || b == 0x22 || b == 0x0D || b == 0x8D || b == 0x14) {
+			t.Errorf("screen code %d is written as %02X, which LIST shows as %d", sc, b, petsciiToScreen(byte(b)))
+		}
+	}
+}
+
+func TestChsDirArtDisk(t *testing.T) {
+	for _, rows := range []int{1, 8, 9, 40, 144} {
+		d := chsFDirArtPage(int64(rows), rows)
+		img, note := writeDirArt(d, nil, "/x/my art.d64")
+		if len(img) != d64Size || note.String() != "" {
+			t.Fatalf("%d rows: %d bytes, %s", rows, len(img), note)
+		}
+		back, err := readDirArt(img)
+		if err != nil || chsFSameCodes(d, back) != "" {
+			t.Fatalf("%d rows: %v %s", rows, err, chsFSameCodes(d, back))
+		}
+		// Every entry a closed DEL of 0 blocks; the BAM: 664 blocks free, the
+		// directory's sectors taken; the disk's name.
+		ents, _, sectors, _ := dirartEntries(img)
+		for _, e := range ents {
+			if e.kind != 0x80 || e.blocks != 0 {
+				t.Fatalf("%d rows: entry %02X of %d blocks", rows, e.kind, e.blocks)
+			}
+		}
+		if len(sectors) != (rows+7)/8 {
+			t.Errorf("%d rows: %d directory sectors", rows, len(sectors))
+		}
+		bam := d64Offset(18, 0, 35)
+		free := 0
+		for tr := 1; tr <= 35; tr++ {
+			if tr != 18 {
+				free += int(img[bam+4*tr])
+			}
+		}
+		used := 0
+		for s := 0; s < 19; s++ {
+			if img[bam+4*18+1+s/8]&(1<<(s%8)) == 0 {
+				used++
+			}
+		}
+		if free != 664 || used != 1+len(sectors) || int(img[bam+4*18]) != 19-used {
+			t.Errorf("%d rows: %d blocks free, %d sectors of track 18 used (count %d)", rows, free, used, img[bam+4*18])
+		}
+		if d64Text(img[bam+0x90:bam+0xA0]) != "MY ART" {
+			t.Errorf("disk name %q", d64Text(img[bam+0x90:bam+0xA0]))
+		}
+		if _, _, err := d64Art(img); err == nil {
+			t.Error("a DirArt disk taken for a screen program")
+		}
+	}
+	// Past 144 rows: left out, and said.
+	d := chsFDirArtPage(3, 150)
+	img, note := writeDirArt(d, nil, "x")
+	if back, _ := readDirArt(img); back.rows != 144 || !strings.Contains(note.String(), "6 rows") {
+		t.Errorf("150 rows: %d back, %s", back.rows, note)
+	}
+	// Cells a name cannot show are spaces, and counted.
+	d = chsFDirArtPage(4, 2)
+	d.set(0, 0, makeCell(34, 1, 0, 0))
+	d.set(1, 1, makeCell(0xA0, 1, 0, 0))
+	img, note = writeDirArt(d, nil, "x")
+	back, _ := readDirArt(img)
+	if cellCh(back.get(0, 0)) != 32 || cellCh(back.get(1, 1)) != 32 || !strings.Contains(note.String(), "2 cells") {
+		t.Errorf("forbidden cells: %d %d %s", cellCh(back.get(0, 0)), cellCh(back.get(1, 1)), note)
+	}
+}
+
+// TestChsDirArtOverDisk: a page from a disk with files on it is written back
+// over that disk: the files, their data and the names that did not change
+// ($A0 padding and all) stay.
+func TestChsDirArtOverDisk(t *testing.T) {
+	prg := append([]byte{0x01, 0x08}, bytes.Repeat([]byte("DEMO"), 2000)...)
+	src := writeD64("demo", prg)
+	// A second entry: a DEL of 0 blocks named with $A0 padding.
+	dir := d64Offset(18, 1, 35)
+	copy(src[dir+32+2:], []byte{0x80, 0, 0})
+	copy(src[dir+32+5:dir+32+21], petsciiName("HELLO"))
+	page, err := readDirArt(src)
+	if err != nil || page.rows != 2 || cellCh(page.get(0, 1)) != 8 || cellCh(page.get(5, 1)) != 32 {
+		t.Fatalf("read: %v %d rows", err, page.rows)
+	}
+	// Unchanged: the same bytes.
+	if img, _ := writeDirArt(page, src, "x"); !bytes.Equal(img, src) {
+		t.Error("an unchanged page changed the disk")
+	}
+	// A third row and a changed first: the program is still there, HELLO keeps its $A0s.
+	more := newDoc(16, 3)
+	copy(more.cells, page.cells)
+	for x := 0; x < 16; x++ {
+		more.set(x, 0, makeCell(0x51, 1, 0, 0))
+		more.set(x, 2, makeCell(0x66, 1, 0, 0))
+	}
+	img, note := writeDirArt(more, src, "x")
+	back, _ := readDirArt(img)
+	if chsFSameCodes(more, back) != "" || note.String() != "" {
+		t.Fatalf("written over the disk: %s %s", chsFSameCodes(more, back), note)
+	}
+	files, _ := d64Dir(img)
+	if len(files) != 1 || !bytes.Equal(files[0].data, prg) {
+		t.Fatal("the program on the disk was lost")
+	}
+	if !bytes.Equal(img[dir+32+5:dir+32+21], petsciiName("HELLO")) {
+		t.Error("an unchanged name lost its padding")
+	}
+	// One row: the DEL entry goes, the program stays listed (and the note says so).
+	one := newDoc(16, 1)
+	copy(one.cells, more.cells[:16])
+	img, note = writeDirArt(one, src, "x")
+	if back, _ := readDirArt(img); back.rows != 1 || note.kept != 0 {
+		t.Errorf("one row: %d rows, %s", back.rows, note)
+	}
+	// A full sector (8 entries) and one more row: a new directory sector, linked.
+	full := chsFDirArtPage(5, 8)
+	img8, _ := writeDirArt(full, nil, "x")
+	nine := chsFDirArtPage(6, 9)
+	img9, _ := writeDirArt(nine, img8, "x")
+	if back, _ := readDirArt(img9); chsFSameCodes(nine, back) != "" {
+		t.Errorf("a ninth row: %s", chsFSameCodes(nine, back))
+	}
+	if _, _, sectors, _ := dirartEntries(img9); len(sectors) != 2 || sectors[1] != [2]int{18, 4} {
+		t.Errorf("directory sectors %v", sectors)
+	}
+}
+
+func TestChsDirArtEditor(t *testing.T) {
+	a := c64xFApp(t)
+	a.setMachine("dirart")
+	if !a.dirart() || a.doc.cols != 16 || a.pal[0] != 0xFF352879 || a.pal[1] != 0xFF6C5EB5 {
+		t.Fatalf("a DirArt page: %s %dx%d", a.machine, a.doc.cols, a.doc.rows)
+	}
+	var ids []string
+	for _, f := range a.modeFormats() {
+		ids = append(ids, f.id)
+	}
+	if !slices.Contains(ids, "dirart") || slices.Contains(ids, "d64") || slices.Contains(ids, "prg") {
+		t.Errorf("formats on a DirArt page: %v", ids)
+	}
+	a.doc = chsFDirArtPage(7, 12)
+	d := a.doc.clone()
+	p := filepath.Join(t.TempDir(), "art.d64")
+	if !a.writeOut(p, "dirart") || a.srcKind != "dirart" {
+		t.Fatal(a.message)
+	}
+	b := chsFOpen(t, p)
+	if !b.dirart() || b.saveFmt != "dirart" || chsFSameCodes(d, b.doc) != "" {
+		t.Fatalf("reopened: %s %s %s", b.machine, b.saveFmt, chsFSameCodes(d, b.doc))
+	}
+	// Ctrl+S after a change: written over the same disk.
+	b.doc.set(0, 0, makeCell(0x41, 1, 0, 0))
+	b.dirty = true
+	if !b.writeOut(p, b.saveFmt) {
+		t.Fatal(b.message)
+	}
+	if c := chsFOpen(t, p); cellCh(c.doc.get(0, 0)) != 0x41 || c.doc.rows != 12 {
+		t.Error("Ctrl+S")
+	}
+	// Other pages do not offer it; a disk with a screen program still opens as the screen.
+	c := c64xFApp(t)
+	for _, f := range c.modeFormats() {
+		if f.id == "dirart" {
+			t.Error("DirArt offered on a C64 page")
+		}
+	}
+	p2 := filepath.Join(t.TempDir(), "screen.d64")
+	if !c.writeOut(p2, "d64") || chsFOpen(t, p2).machine == "dirart" {
+		t.Error("a screen's disk opened as DirArt")
+	}
+	// Open as DirArt shows that disk's directory.
+	raw, _ := os.ReadFile(p2)
+	e := c64xFApp(t)
+	e.loadBytes(raw, "screen.d64", p2, "dirart")
+	if !e.dirart() || e.doc.rows != 1 || cellCh(e.doc.get(0, 0)) != 19 { // "SCREEN"
+		t.Errorf("Open as DirArt: %s %d rows %d", e.machine, e.doc.rows, cellCh(e.doc.get(0, 0)))
+	}
+	// Marq's and Petmate9's DirArt.
+	marq := []byte("unsigned char frame0000[]={\n" + strings.Repeat("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,\n", 2) + "};\n// META: 16 2 DIRART upper\n")
+	m := c64xFApp(t)
+	m.loadBytes(marq, "x.c", "", "auto")
+	if !m.dirart() || m.doc.cols != 16 || cellCh(m.doc.get(15, 1)) != 16 {
+		t.Errorf("Marq's DirArt: %s %d", m.machine, m.doc.cols)
+	}
+	if out, _ := m.encodeFor("marq", "", nil); !strings.Contains(string(out), "META: 16 2 DIRART upper") {
+		t.Errorf("Marq's DirArt written: %s", out)
+	}
+}
+
+// TestEmuChsDirArt: LOAD"$",8 and LIST of CharEdit's DirArt disk in VICE
+// (CHARCOAL_EMU=1) show the page: the listing's lines are found on VICE's
+// screen as CharEdit draws them.
+func TestEmuChsDirArt(t *testing.T) {
+	s := emuFStart(t)
+	x64 := emuFNeed(t, "x64sc")
+	a := c64xFApp(t)
+	page := chsFDirArtPage(8, 8)
+	for x, r := range "CHAREDIT DIRART!" { // a row to read in the picture
+		page.set(x, 0, makeCell(int(petsciiToScreen(byte(r))), 1, 0, 0))
+	}
+	img, _ := writeDirArt(page, nil, "dirart test")
+	dir := t.TempDir()
+	disk := filepath.Join(dir, "art.d64")
+	os.WriteFile(disk, img, 0o644)
+	// The listing as LIST shows it (light blue on blue): the header line
+	// reversed from its quote, a line per entry, the blocks free.
+	want := newDoc(40, page.rows+2)
+	want.bg, want.border, want.glyph0 = 6, 14, true
+	put := func(x, y int, text string, rev bool) int {
+		for _, r := range []byte(text) {
+			sc := petsciiToScreen(r)
+			if r == 0xA0 {
+				sc = 32
+			}
+			if rev {
+				sc |= 0x80
+			}
+			want.set(x, y, makeCell(sc, 14, 0, 0))
+			x++
+		}
+		return x
+	}
+	for i := range want.cells {
+		want.cells[i] = makeCell(32, 14, 0, 0)
+	}
+	bam := d64Offset(18, 0, 35)
+	put(put(0, 0, "0 ", false), 0, "\""+string(img[bam+0x90:bam+0xA0])+"\" CE 2A", true)
+	for y := 0; y < page.rows; y++ {
+		x := put(0, y+1, "0    \"", false)
+		for i := 0; i < 16; i++ {
+			want.set(x+i, y+1, makeCell(cellCh(page.get(i, y)), 14, 0, 0))
+		}
+		put(x+16, y+1, "\" DEL", false)
+	}
+	put(0, page.rows+1, "664 BLOCKS FREE.", false)
+	a.doc = want
+	fb := a.renderDoc(want, 1)
+	bx, top, _ := a.borderSize(40*8, max(want.rows, 25)*8, 1)
+	c := emuFCase{name: "c64-dirart-list", want: fb, x0: bx, y0: top, w: 40 * 8, h: (page.rows + 2) * 8,
+		sxN: 1, sxD: 1, syN: 1, syD: 1, cellW: 8, cellH: 8}
+	home := t.TempDir()
+	shot := filepath.Join(home, "shot.png")
+	out := emuFRun(t, 120, home, emuFEnv(home), x64, "-default", "-console", "-warp", "+sound", "-8", disk,
+		"-keybuf", `load"$",8\nlist\n`, "-limitcycles", "40000000", "-exitscreenshot", shot)
+	if _, err := os.Stat(shot); err != nil {
+		t.Fatalf("x64sc gave no screenshot:\n%s", out)
+	}
+	emuFCheck(t, s, c, emuFReadPNG(t, shot))
+}
+
+// TestChsSamples writes sample files to look at (CHARCOAL_CHS_SAMPLES=dir):
+// a DirArt disk and a Plus/4 program with a set of its own.
+func TestChsSamples(t *testing.T) {
+	dir := os.Getenv("CHARCOAL_CHS_SAMPLES")
+	if dir == "" {
+		t.Skip("CHARCOAL_CHS_SAMPLES not set")
+	}
+	art := []string{
+		"     DIRART     ",
+		"  \x12CHARCOAL\x92 DISK",
+	}
+	d := newDoc(16, 12)
+	d.glyph0, d.border = true, 1
+	for i := range d.cells {
+		d.cells[i] = makeCell(32, 1, 0, 0)
+	}
+	for y, l := range art {
+		x, rev := 0, 0
+		for _, r := range []byte(l) {
+			switch r {
+			case 0x12:
+				rev = 0x80
+				continue
+			case 0x92:
+				rev = 0
+				continue
+			}
+			d.set(x, y, makeCell(petsciiToScreen(r)|rev, 1, 0, 0))
+			x++
+		}
+	}
+	for y := 3; y < 12; y++ { // a ramp of blocks a name can show
+		for x := 0; x < 16; x++ {
+			sc := []int{0x20, 0x66, 0x5F, 0x69, 0x51, 0x57, 0x6C, 0x7B, 0x7E, 0x7C, 0x62, 0x79, 0x6F, 0x64, 0x63, 0x77}[(x+y)%16]
+			d.set(x, y, makeCell(sc, 1, 0, 0))
+		}
+	}
+	img, _ := writeDirArt(d, nil, "charcoal")
+	os.WriteFile(filepath.Join(dir, "dirart.d64"), img, 0o644)
+	if a, _ := chsFTEDApp(t, 3, false); a != nil {
+		os.WriteFile(filepath.Join(dir, "plus4-own-set.prg"), tedxPrg(a.doc, a.ownInUse()), 0o644)
 	}
 }

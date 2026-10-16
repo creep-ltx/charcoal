@@ -74,6 +74,9 @@ func newMachineDoc(m Machine) *Doc {
 		d.bg, d.border = tedStartBg, tedStartBorder
 		fillCells(d.cells, tedCell(32, 0))
 	}
+	if m.id == "dirart" { // the listing's light blue border (dirart.go)
+		d.border = 1
+	}
 	return d
 }
 
