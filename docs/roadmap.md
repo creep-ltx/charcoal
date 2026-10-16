@@ -171,7 +171,8 @@ against each platform's best editor. Each step says what it wins.
 
 ## Later
 
-- Collaboration in Moebius's protocol (IcyDraw and Moebius speak it).
+- [x] Collaboration in Moebius's protocol (IcyDraw and Moebius speak it) (2026-10-16): File > Join a drawing
+  session (Moebius and IcyDraw servers) and Host a drawing session (Moebius and IcyDraw join), cursors, chat.
 - Palette editing beyond 16 colours.
 - Not planned: Shift-JIS AA (proportional, scene gone), RIPscrip (vector, not text).
 

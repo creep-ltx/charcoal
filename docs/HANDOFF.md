@@ -1059,6 +1059,70 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   not found), Playscii's "sharp" charset (another layout), flips of second-set characters (they use the first
   set's mirror table), the 2nd set's look without Sharp's ROM (codes in boxes).
 
+## Drawing together: Moebius's collaboration protocol (2026-10-16, branch r5-collab)
+
+- What: File > **Join a drawing session** (CharEdit as a client of a Moebius or IcyDraw server), **Host a drawing
+  session** (CharEdit as the server; Moebius and IcyDraw clients join), **End the drawing session**; the session
+  line above the status line (where, who, last chat line, chat field: Ctrl+Return `collab_chat`); the others'
+  cursors on the page. `collab.go` (protocol, client, host, the per-pass sync), `collab_ui.go` (requesters, the
+  line, cursors). Library: github.com/coder/websocket v1.8.15 (ISC, no dependencies, Go 1.23).
+- Protocol (read in blocktronics/moebius app/server.js + app/document/doc.js, IcyDraw's
+  icy_engine_edit/src/collaboration): `{"type": n, "data": {...}}` JSON text frames; types 0 CONNECTED ... 21
+  SET_BG (consts `cbConnected`...); a cell `{code, fg, bg}` = CP437 code, BIOS colours (`cbCell`/`cbBlockOf`
+  through `biosANSI`; a code > 255 from IcyDraw is mapped to CP437 or `?`); the page on joining is
+  libtextmode.compress (`cbDoc`: runs `[value, repeats]` per stream, `cbExpand` refuses anything not exactly
+  cols*rows), palette 16 x {r,g,b} in 6 bits (IcyDraw may send 8: `cbPalette` guesses by the maximum; the
+  standard EGA one keeps the tab's palette, any other becomes the page's own, "file").
+- **Sync without hooks** (the design to keep): `collabSession.shadow` is the page as the others have it. Each main
+  loop pass (`collabTick`, main.go; the loop waits at most 30 ms while a session is on) first applies what came
+  in to the page *and* the shadow (`collabApply`, `collabPut`), then `collabSendChanges` sends a DRAW for every
+  cell where page and shadow differ, SET_CANVAS_SIZE when the size differs (the new area marked `cbUnknown`, so
+  it is sent in full: IcyDraw's server fills new cells with code 0 on black, Moebius's with 32/7/0), and
+  ICE_COLORS / USE_9PX_FONT / CHANGE_FONT / SAUCE when the tab's differ from the last sent, CURSOR when the text
+  cursor moves (HIDE_CURSOR when the tab is not the one worked on). So every tool, undo, paste, effect is shared.
+  Remote cells are also written into the tab's undo/redo snapshots of the same width, so Ctrl+Z here takes back
+  only this user's steps. A remote resize clears undo (as Moebius).
+- The session's tab: joining makes a new PC tab named after the session's path (`collabFileName`, "art.ans"), with
+  `source` nil (so setMode/setCols never reparse it); an empty untouched start tab gives way. One session at a time
+  (`collab` global). It ends (`collabEnd`) when the tab is closed, gets frames or stops being a PC page, the
+  connection drops, or the user ends it; a joined page then stays, dirty.
+- Hosting (`collabHost`): `net.Listen` on 127.0.0.1:port, or every address only when the user picks "Others on
+  the network" (then a password is required by the requester). Any path is accepted (Moebius serves one path per
+  file). Ids from `nextID`, the host is 0. Per Moebius's Joint.message: CONNECTED -> password check (REFUSED and
+  close), CONNECTED {id, doc, users, chat_history, status} (lists never null: Moebius's chat.welcome iterates
+  them and IcyDraw refuses a null list), JOIN to the others; DRAW/SAUCE/ICE/9PX/FONT/CANVAS_SIZE applied then
+  passed on rebuilt from the checked values with the guest's real id (never the id it sent); CURSOR/SELECTION/
+  OPERATION/HIDE/ROTATE/FLIP/STATUS passed on; PASTE_AS_SELECTION checked cell by cell; CHAT cleaned, kept 32.
+  Web viewers (no nick) are refused when there is a password (Moebius lets them watch) and never draw.
+- Untrusted input (~/Projects/Knowledge/go/untrusted-input-traps.md): read limits 48 MB (the page on joining,
+  2M cells of runs that never repeat) and 16 MB per guest message; `collabMaxCells` 2M, 1000 columns; strings
+  through `clean` (no control characters, nicks 32 runes, chat 1000, SAUCE fields 35/20/20 trimmed of the record's
+  space padding: `sauceField`); 32 guests; a guest that does not log in within 30 s is closed; a connection that
+  cannot take its queue (65536 messages) is closed; up to 20000 messages a pass. Passwords are never saved
+  (prefs keep server, nick, group, port, who) or logged.
+- Traps found: Moebius's server sends SAUCE fields padded with spaces; its server reads UTF-8 comment lines by
+  characters where the record has bytes (the corpus' sauce-utf8.ans comment loses its first letter) and **writes
+  the page back over the file it serves when closed** (tools/collab/moebius-server.js never closes it; the tests
+  serve copies); Moebius's client swaps author and group of a SAUCE message it receives (doc.js emits
+  title, group, author); a null chat_history stops Moebius's client and IcyDraw's.
+- Tests (`collab_test.go`, helpers `collabF*`): runs, cells, page limits, palettes, addresses, names; hosting with
+  raw clients (password, two users, false ids, hostile messages, host edits/resize/SAUCE/iCE/chat reach both,
+  remote cursor, undo keeps the other's cell, resize from a guest, leave, web viewer, only 127.0.0.1 listens,
+  pages that cannot be shared, the port closed afterwards); joining a fake server built from app/server.js
+  (scenario `collabFJoinScenario`: page, raw client, both draw, resize, chat, cursor, a late joiner gets the same
+  page); refusals; hostile servers; `FuzzCollab` (messages to a joined and a hosted session) and FuzzParsers'
+  "collab" (the page on joining). **Real servers** (tools/collab/README.md): `CHARCOAL_COLLAB_MOEBIUS` (node +
+  Moebius's app/ + ws 8.15 + two stubs) runs `TestCollabMoebiusServer` (42 corpus files served by Moebius's
+  server, each page = the corpus' Moebius reading, then the scenario) and `TestCollabMoebiusHost`
+  (`moebius-client.js`: libtextmode.uncompress + doc.js's DRAW handling joins CharEdit's host);
+  `CHARCOAL_COLLAB_ICY` / `CHARCOAL_COLLAB_ICYCLIENT` (icy_engine_edit examples `icydraw-collabsrv.rs`,
+  `icydraw-collabcli.rs`, built in the bwrap sandbox) run `TestCollabIcyDrawServer` and `TestCollabIcyDrawHost`.
+  All pass (2026-10-16). Screenshots: /tmp/charcoal-collab/*.png.
+- Not done: the real Moebius Electron app was not run (its protocol code was); no TLS when hosting (Moebius has
+  none either; `wss://` works when joining); Moebius's web viewer page is not served; Moebius's live view of a
+  guest's floating block (PASTE_AS_SELECTION, ROTATE, FLIP) is passed on but not shown in CharEdit; idle/away
+  status is shown but CharEdit never sends its own; SET_BG (C64 pages) ignored; no reconnect.
+
 ## Keys and safety (2026-10-13, evening)
 
 - `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's

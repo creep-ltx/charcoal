@@ -267,7 +267,7 @@ func (a *App) drawWindow(u *UI) {
 	}
 
 	// The status line and the pane, from the bottom up.
-	status := Rect{0, H - lineH - 6, W, lineH + 6}
+	status := Rect{0, H - lineH - 6 - collabLineH(), W, lineH + 6 + collabLineH()} // with the drawing session's line (collab_ui.go)
 	if a.studio() && !a.bare {
 		a.drawStudio(u, Rect{0, top, W, status.y - top})
 		a.drawStatus(u, status)
@@ -950,6 +950,8 @@ func (a *App) drawPage(u *UI, id string) {
 		}
 		fb.frame(r, 0xFFCCCCCC)
 	}
+	// The other users' cursors in a drawing session (collab_ui.go).
+	a.drawCollabCursors(fb, cell)
 	if (a.blink && viewer == nil && a.playing == nil) || (a.playing != nil && a.playing.frames == nil) { // the cursor, Amiga style: an orange block
 		r := cell(a.cx, a.cy, 1, 1)
 		if a.insert {
@@ -1217,6 +1219,10 @@ func (a *App) pageGlyph(fb *FB, x, y, c int) {
 
 func (a *App) drawStatus(u *UI, r Rect) {
 	fb := u.fb
+	if h := collabLineH(); h > 0 && r.h > h {
+		a.drawCollabLine(u, Rect{r.x, r.y, r.w, h})
+		r.y, r.h = r.y+h, r.h-h
+	}
 	fb.fill(Rect{r.x, r.y, r.w, 1}, cEdgeDk)
 	fb.fill(Rect{r.x, r.y + 1, r.w, r.h - 1}, cDark)
 	y := r.y + 4

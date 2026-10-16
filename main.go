@@ -189,6 +189,9 @@ func main() {
 		} else if download.what != "" {
 			wait = min(wait, 100*time.Millisecond) // look for the end of the download
 		}
+		if collabActive() {
+			wait = min(wait, 30*time.Millisecond) // the drawing session's messages (collab.go)
+		}
 		ev := sdl.WaitEventTimeout(max(1, int(wait/time.Millisecond)))
 		for ; ev != nil; ev = sdl.PollEvent() {
 			if handleEvent(ev) {
@@ -226,6 +229,9 @@ func main() {
 			redraw = true
 		}
 		a.autosaveTick(time.Now())
+		if a.collabTick() {
+			redraw = true
+		}
 		if redraw {
 			pass()
 			present()

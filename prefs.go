@@ -48,6 +48,12 @@ type Prefs struct {
 	Party      string              `json:"party,omitempty"`             // Check for a party's last compo (compo.go)
 	Width      int                 `json:"width"`
 	Height     int                 `json:"height"`
+	// Drawing together (collab_ui.go): the last server joined, nick, group, and how the last session was hosted. Never the password.
+	CollabServer string `json:"collab_server,omitempty"`
+	CollabNick   string `json:"collab_nick,omitempty"`
+	CollabGroup  string `json:"collab_group,omitempty"`
+	CollabPort   int    `json:"collab_port,omitempty"`
+	CollabAll    bool   `json:"collab_all,omitempty"`
 }
 
 var prefs Prefs

@@ -190,6 +190,10 @@ func init() {
 		{"frames_strip", "Ctrl+Shift+F", "Show / hide the frame strip", func() { a.toggleStrip() }},
 		{"animate", "Alt+J", "Animate: TheDraw's scan patterns (and fades, typewriter, scroll) as the saved file's draw order or as frames", openAnimate},
 		{"party_check", "", "Check for a party: what the page breaks of a compo's rules (size, colours, font, animation)", openPartyCheck},
+		{"collab_join", "", "Join a drawing session: a Moebius or IcyDraw server's page in a new tab, drawn on together", openCollabJoin},
+		{"collab_host", "", "Host a drawing session: share the page, Moebius and IcyDraw users join it", openCollabHost},
+		{"collab_end", "", "End the drawing session: leave it, or stop hosting (the page stays)", collabEndKey},
+		{"collab_chat", "Ctrl+Return", "Chat in the drawing session: Return sends, Esc goes back to the page", collabChatKey},
 		{"work_stages", "", "Export work stages: pictures of the work from its start to now, for compos that want them", func() { openStagesReq(nil) }},
 		{"animate_folder", "Alt+Shift+J", "Animate a folder: every screen of a folder animated for your BBS at once, into a new folder (also: charedit --animate)", openAnimateFolder},
 

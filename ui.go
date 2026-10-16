@@ -312,6 +312,7 @@ type Field struct {
 	max    int
 	scroll int
 	enter  func()
+	secret bool // a password: shown as stars
 }
 
 func (fl *Field) set(s string) {
@@ -381,33 +382,37 @@ func (u *UI) field(r Rect, fl *Field, hint string) {
 	f.bevel(r.inset(2), false)
 	in := r.inset(4)
 	f.fill(in, cGrey)
+	text := fl.text
+	if fl.secret {
+		text = []rune(strings.Repeat("*", len(fl.text)))
+	}
 	// What shows is measured in pixels: the cursor stays in view, with room for its block.
 	avail := in.w - 4
 	curW := textW(" ")
-	if fl.cur < len(fl.text) {
-		curW = textW(string(fl.text[fl.cur]))
+	if fl.cur < len(text) {
+		curW = textW(string(text[fl.cur]))
 	}
 	if fl.cur < fl.scroll {
 		fl.scroll = fl.cur
 	}
-	fl.scroll = max(0, min(fl.scroll, len(fl.text)))
-	for fl.scroll < fl.cur && textW(string(fl.text[fl.scroll:fl.cur]))+curW > avail {
+	fl.scroll = max(0, min(fl.scroll, len(text)))
+	for fl.scroll < fl.cur && textW(string(text[fl.scroll:fl.cur]))+curW > avail {
 		fl.scroll++
 	}
-	end := fl.scroll + fitText(fl.text[fl.scroll:], avail)
+	end := fl.scroll + fitText(text[fl.scroll:], avail)
 	ty := in.y + (in.h-lineH)/2
-	f.text(in.x+2, ty, string(fl.text[fl.scroll:end]), cText)
+	f.text(in.x+2, ty, string(text[fl.scroll:end]), cText)
 	if u.focus == fl {
-		cx := in.x + 2 + textW(string(fl.text[fl.scroll:fl.cur]))
+		cx := in.x + 2 + textW(string(text[fl.scroll:fl.cur]))
 		f.fill(Rect{cx, ty, curW, lineH}, cOrange)
-		if fl.cur < len(fl.text) {
-			f.text(cx, ty, string(fl.text[fl.cur]), cText)
+		if fl.cur < len(text) {
+			f.text(cx, ty, string(text[fl.cur]), cText)
 		}
 	}
 	u.setHint(r, hint)
 	if c := u.take(r); c != nil {
 		u.focus = fl
-		fl.cur = fl.scroll + fitText(fl.text[fl.scroll:], c.x-in.x-2)
+		fl.cur = fl.scroll + fitText(text[fl.scroll:], c.x-in.x-2)
 	}
 }
 
