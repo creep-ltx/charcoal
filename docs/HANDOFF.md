@@ -454,6 +454,12 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## C64 beyond PETSCII (2026-10-16, branch r2-c64plus)
 
+- **The user's decisions (2026-10-16):** formats that cannot hold a custom set or mode (.seq .c .petmate ...) save
+  anyway with a note, the mode remembered for the file (as fonts); CharEdit's own .prg (set at $2000) only when
+  the page needs it, Petmate's form otherwise; ECM: codes 0-63 take the "Paint on" background, characters picked
+  from the table keep theirs; no KickAssembler export until its output can be checked (needs Java); CharPad
+  multicolour follows the VIC rule (colour 8-15), which the c64lib projects agree with in every version 5-8.2.
+
 - `c64x.go` (mode, drawing, gadgets, kept-for-the-file, font editor pairs), `c64x_prg.go` (CharEdit's .prg, ACME
   and BASIC with sets/modes, `encodeC64x`), `c64x_d64.go`, `c64x_ctm.go` (CharPad). `Tab.vic vicSetup{Mode,
   Regs}` (0 hi-res, 1 multicolour, 2 ECM; Regs = $D022-$D024; `defaultVIC` = KERNAL's 1,2,3, set in makeTab and
