@@ -48,6 +48,9 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | PC ANSI | + .bin (BIOS colour order!), XBin, PCBoard .pcb, Avatar .avt; iCEDraw .idf, ArtWorx .adf, Tundra .tnd, IcyDraw .icy, REXPaint .xp, Playscii .psci (see Other editors' files) |
 | Atari (ATASCII) | .ata (width 38/40 guessed); AltirraOS font built in |
 | Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL) |
+| PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form, or CharEdit's for sets/modes) .d64, CharPad .ctm read; multicolour and ECM (C64, C128 40); ROMs from VICE on first use |
+
+| Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL); IGS .ig (2026-10-16): the drawing as a picture under the cells, see "Atari ST IGS" below |
 | PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form); ROMs from VICE on first use |
 | ZX Spectrum | .scr (6912 bytes); 48K ROM font built in (Amstrad allows passing it on) |
 | Amstrad CPC | modes 0/1/2; .bin (AMSDOS program), .dsk, Playscii .psci (Logiker's exporter); firmware ROM font built in (Amstrad's permission) |
@@ -133,8 +136,8 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Built-in PC fonts: `fonts/IBM_EGA_8x14.f14`, `IBM_VGA_8x8.f08`, `IBM_VGA_8x16_850.f16`, `_866.f16`, made by
   `tools/pcfonts.py` from the pack's **.otb** bitmap fonts (the Px .ttf moves capitals' accents by a row);
   checked byte for byte against DOSBox's ROM tables. `fontBySauce` with aliases (IBM VGA 437, IBM EGA43 ...).
-- Not done: the 4:3 preview (step 4; 9-pixel cells done, 0.1b7), 8x8/8x14 sets of other code pages, a .prg that carries a
-  charset (Petmate's form has none), fonts on ST/teletext pages, more than the first screen's custom font in a
+- Not done: the 4:3 preview (step 4; 9-pixel cells done, 0.1b7), 8x8/8x14 sets of other code pages, fonts on ST/teletext pages (a .prg that carries a charset:
+  done 2026-10-16, c64x_prg.go), more than the first screen's custom font in a
   Petmate file.
 
 ## Animation templates (2026-10-14, merged; 0.1b5-0.1b7)
@@ -361,6 +364,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## BBS colour codes (2026-10-16, branch r1-bbscodes)
 
+- **The user's decisions (2026-10-16):** a file mixing codes and ANSI saves back in its codes; bit 7 as `|24`-`|31`
+  (the save counts cells Mystic 1.10 / Renegade will not show: `bbsLoss.bright`); a literal `|` as `|PI` (Mystic
+  first); detection stays strict (3+ codes; Open as for short files); "Save for board X" writing the board's own
+  colour codes: wanted, on the roadmap.
+
 - `bbscodes.go`: five kinds, ids = format ids = Open as values (`bbsCodeIDs`): `pipe` (|00-|31, |CL, |PI),
   `ctrla` (Synchronet Ctrl-A), `wwiv` (Ctrl-C hearts, |nn, |#n), `wildcat` (@BF@, @CLS@), `celerity` (|k..|W,
   |S). Reading: `codeTerm` wraps the PC `Term` and takes each kind's codes out of the byte stream before the
@@ -380,9 +388,8 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   hex digits or CLS, Celerity `|` before a code letter: the same colours written again right after it
   (`force`); Ctrl-A ☺ -> Ctrl-A A, 0x1A -> Ctrl-A z. Loss (`bbsLoss`): Celerity has no bit 7, WWIV cannot write ♥
   (a heart + printable byte is always a code there): spaces; the save's message says how many.
-- **Loading** (`loadBytes`): `bbsCodesKind` after the PCBoard/Avatar check, or Open as a kind. Codes only ->
-  `saveFmt` = the kind; with ANSI escapes too -> saveFmt stays ansi (the file stays viewable anywhere) and the
-  status line says Save as has the codes. Ctrl-A E sets the page's iCE. Save in another own format clears
+- **Loading** (`loadBytes`): `bbsCodesKind` after the PCBoard/Avatar check, or Open as a kind. `saveFmt` = the
+  kind, also with ANSI escapes in the file (the user's choice 2026-10-16: a Mystic file keeps its pipe codes). Ctrl-A E sets the page's iCE. Save in another own format clears
   `Tab.codes` (writeOut). Open as now also lists PCBoard and Avatar; the C64 entry is skipped (not cut off) when
   the ROMs are missing (`shown` in dialogs.go).
 - **Detection** rules (checked on the big check's 8479 files: only 13 WWIV ANSIs from 1990 with real hearts are
@@ -504,7 +511,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Glue (kept small): `init()` in both files adds to pageModes, modeOrder, modeNames, openAs, modeNoStream,
   mirrorPairs, formats (and " mt"/" vd" to png/png2/gif/apng/utf8, " vd" to tti/tturl), fonts and palettes;
   editor.go: `tt()` covers "vd", cell size/font/palette/printable/runes/maxRows/nColours/typing/pick/sixel/
-  setMode/makeTab/setRows/setCols/blockOp cases, `loadVideotex` after loadCPC, `reparseVideotex` with the
+  setMode/makeTab/setRows/setCols/blockOp cases, `loadVideotex` after loadCPC, loadC64x and loadIGS, `reparseVideotex` with the
   others, `encodeVideotex` before encodeFor's switch, Play (`videotexPlayer`, `videotexPlayBytes`); small cases
   in view.go, panel.go (eight colours on Minitel), rowscols, start (two tiles; tile text at 2x for 10-row
   cells), menus, main, frames, shapes, transitions, streams, fontfile/fontedit, uni_ui, prefs (defaults),
@@ -521,6 +528,110 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Not done: DRCS characters (skipped), the 80-column (Mixte/Téléinformatique) mode, Telstar markup, a .car of
   960-byte frames as frames (only streams), Viewdata pages from IcyDraw files, a run on a real Minitel. Play
   goes at the toolbar's speed (2400 is the slowest; a Minitel is 1200).
+
+## C64 beyond PETSCII (2026-10-16, branch r2-c64plus)
+
+- **The user's decisions (2026-10-16):** formats that cannot hold a custom set or mode (.seq .c .petmate ...) save
+  anyway with a note, the mode remembered for the file (as fonts); CharEdit's own .prg (set at $2000) only when
+  the page needs it, Petmate's form otherwise; ECM: codes 0-63 take the "Paint on" background, characters picked
+  from the table keep theirs; no KickAssembler export until its output can be checked (needs Java); CharPad
+  multicolour follows the VIC rule (colour 8-15), which the c64lib projects agree with in every version 5-8.2.
+
+- `c64x.go` (mode, drawing, gadgets, kept-for-the-file, font editor pairs), `c64x_prg.go` (CharEdit's .prg, ACME
+  and BASIC with sets/modes, `encodeC64x`), `c64x_d64.go`, `c64x_ctm.go` (CharPad). `Tab.vic vicSetup{Mode,
+  Regs}` (0 hi-res, 1 multicolour, 2 ECM; Regs = $D022-$D024; `defaultVIC` = KERNAL's 1,2,3, set in makeTab and
+  by `loadC64x` at the start of every load); `Snap.vic` (undo), `autosaveMeta.VIC`, `prefs.VICModes` (path ->
+  setup for formats that cannot hold it: `keepVICMode` after writeOut, `restoreVICMode` after openPath).
+  `vicII()` = C64 or C128 40 (by `mach().id`: `a.machine` may be "" = C64). `App.c64xOpts.ecmBg`.
+- Drawing: `drawCell` hands any non-hi-res VIC page to `drawVICCell` -> `vicCell` (MCM: colour 8-15 = pairs 00
+  $D021 / 01 $D022 / 10 $D023 / 11 colour&7, 0-7 hi-res in colour&7; ECM: glyph code&63, bg = [$D021,
+  $D022-$D024][code>>6], fg 0-15). From the VIC-II data sheet / PRG ch.3 (*read*); VICE not installed here,
+  so not compared with a VICE screenshot.
+- ECM brush: `ecmChar` gives codes 0-63 the "Paint on" background (`a.cell` and `brushCell`); codes >= 64
+  picked from the table keep theirs; the Colour tool's right button sets bits 6-7 (`paintAt`). Reverse is
+  ignored in ECM (bit 7 is a background bit there).
+- **.prg**: plain ROM screens keep Petmate's form (`writePrg`); a page with its own set or MCM/ECM gets
+  `c64xPrg`: 10 SYS2061, code at $080D (blank, copy 8 pages of set to $2000 when present, copy screen/colours
+  like Petmate, set $D020-$D024, $D018 ($18 own set, $14/$17 ROM), $D016 ($C8/$D8), $D011 ($1B/$5B), JMP *),
+  data at $088C/$0C74/$105C. Fixed template + slots (`c64xSlot`), so `parseC64xPrg` reads only that form
+  (4189 or 2141 bytes). $2000 because bank 0 shows the char ROM at $1000-$1FFF. `readC64Prg`, `isOurC64Prg`.
+- **.d64**: `writeD64` (35 tracks, one PRG $82, 1541 order: tracks 17 down then 19 up, interleave 10, BAM with
+  "2A", disk id "CE", names PETSCII upper, $A0 padded; name = saved file via `cpcTarget`), `d64Dir` (loops
+  guarded, 35/40 tracks with or without error bytes), `d64Art` = first PRG CharEdit can open. srcKind "d64" via
+  `editorOwn`; `c64xAfterLoad` gives prg/d64 pages their mode and set.
+- **ACME / BASIC**: `writeC64Asm` = Marq's source plus the registers after `sta $d021`, `#91` for ECM, and the
+  set at `*=$2000` (ACME fills the gap); data-only (not 40x25) adds a mode comment and `charset:`.
+  `writeC64Bas`: a set goes to VIC bank 3 (screen $C400, set $C800, `poke 56576,...and252`, `poke 53272,20`,
+  `poke 648,196`) since 20 KB of DATA fill BASIC past $2000/$3800. Plain pages give Marq's bytes unchanged.
+- **CharPad .ctm** (v5-v9; formats in c64x_ctm.go's head): `parseCTM` -> `ctmProject`; as a font
+  (`parseFontFile` .ctm, then `ctmFontLoaded` sets mode/regs/bg); as a page (`loadC64x` -> `loadCTM`: srcKind
+  "ctm", saveFmt "prg", path cleared so Ctrl+S asks; `reparseCTM`). v8 prerelease (4-byte colour entries) told
+  by the byte after the colours not being $DA (retro-image's rule). v9's bg4 position and ECM maps are *proposed*.
+  MC colours follow the VIC (8-15 = multicolour); CharPad itself was not run. Writing .ctm is refused.
+- Font editor: `fontEdChar` (ECM: brush&63), `fontEdPairs` (MCM and fg >= 8): `drawPairs`, `penGadgets`,
+  keys 1-3.
+- Tests (`c64x_test.go`): a 6502 interpreter (`c64xF6502`, checked on Petmate's own program) runs every
+  .prg combination (own/ROM x 3 modes x case) and ACME's output of `writeC64Asm` (`CHARCOAL_ACME=path` or acme
+  in PATH; built from github.com/meonwax/acme for this, skipped otherwise); BASIC DATA parsed back; .d64 BAM /
+  chain / directory; CharPad files of every version give version 5's page; editor (undo, ECM painting, .prg/.d64
+  save/open/Ctrl+S, .seq keeps the mode, autosave); `TestC64xMutations` (20000 mutated files; the fuzz engine
+  stalls in this package), `FuzzC64x`, FuzzParsers has prg/d64/ctm.
+- Not done: DirArt (directory art) on the .d64; a run in VICE or on a real C64; Petmate/Marq .c files with modes
+  (neither editor has them); CharPad writing; Petmate JSON with a custom charset.
+
+## Atari ST IGS (2026-10-16, branch r2-igs; design: docs/igs-design.md)
+
+- What: IGS files (`G#` commands drawing with GEM VDI inside a VT52 stream) open as an Atari ST page whose
+  drawing is a **picture under the cells** (`Tab.igs *igsLayer`, `a.igsPage()`). An empty cell (`isBlank`:
+  space/0 on pen 0) shows the picture (`drawCellXY`, called by drawPage and `paintCellsAt`, so PNG/GIF exports
+  and CharView have it); other cells are VT52 text drawn over it. `setPalette` takes the file's registers.
+  Typing goes over it; saving `.ig` (`writeIGS`) = the drawing's bytes + CR + the cells as VT52 (`ESC q ESC w`,
+  `ESC Y` per run, pens where they change; a run is cut before a '#' that follows a 'G') + the kept commands
+  (`G#...:` + CR each) + the closing. **Unchanged cells save the source bytes exactly.** Not editable: the drawing.
+- `igs.go`: `igsParse` cuts the file into items (commands, VT52 runs, ESC E alone). Values are read IG 2.18's
+  way (CR/LF inside a value ignored, `_` too); a command ends at `:` (then chained: the next letter needs `>` or
+  a space and a value - so `p>24,19:We all` prints "We all", the spec's example, and `k 1:` is a command), or after
+  its value count (`igsWant`). W's text runs to `@` (CR/LF dropped, IG 2.20). Loops (`&`): tokens, chain gangs
+  (`>CL@`, index then values, `)` or the letter separating), `W@` texts, `x y + - !`; every group of a chain gang
+  runs (IcyDraw runs only the first: its 00-IGNIT render differs there, 99.6%). X 7 patterns, X 11 bitmaps (the
+  32000/4000 raw bytes after the command, ST planar, `planar`), X 12 palettes. `igsVM` runs commands into
+  `pix` (registers); VT52 on the pixels (`vt52`, `putGlyph`, scrolling). Random values: fixed seed. A work budget
+  (`igsWorkMax`, 40M; real files <= 18M) stops hostile files; the note says so.
+- `igs_vdi.go`: the port of IcyDraw's vdi_paint (icy_tools' own code, MIT; nothing from EmuTOS but the fonts, downloaded): Bresenham lines with masks (always replace mode,
+  as IcyDraw), wide lines with the pen's quarter circle and arrow/round ends, polygon scan fill bottom-up,
+  `igsCurve` (1800-step sine table), rounded boxes, flood fill, polymarkers, text (6x6/8x8/8x16, scale 2 above
+  size 15; thickened/ghosted/skewed/underlined/outlined; 4 rotations), blits (logic ops masked to the planes).
+- `igs_page.go`: `readIGS` splits the file: **head** = up to the last drawing command or wipe (`s`, `I`, `R`,
+  ESC E) before the last visible thing; **text part** = VT52 + IG's text commands (`c p m l d i r v w`) into
+  cells via `STTerm` from the head's cursor/colours, other commands **kept**; **closing** = from the first wipe
+  after the last visible thing (BBS screens end "pause, sound, clear, reset"). Palette shown: of those the
+  kept commands go through (fade-out, reveal, cycling), the one with most distinct colours on the picture, then
+  the brightest, later wins ties (`igsBestPalette`). Resolution: R before any drawing, else a probe run
+  (`vm.probe`, loops expanded) of the coordinates (x > 319 medium, y > 199 high), else low; the Resolution
+  gadget re-reads in another (`reparseIGS` uses `a.stres` when `forceCols` is set). A head that ends in an X 11
+  cut short is padded with zeros so text added after it is not read as bitmap.
+- Fonts: EmuTOS `fnt_st_6x6.c` added to `stFontFiles` (SHA-1 `stFont6SHA1`; `loadIGSFont6`, 192-byte rows);
+  `hasSTFont` still means 8x8 + 8x16 (old downloads keep working); opening an IGS file asks for the download when
+  the 6x6 is missing. All three are byte-identical to IcyDraw's Atari fonts (checked).
+- Glue: `init()` in igs_page.go (formats "igs" `.ig`, editorOwn, Open as "Atari ST IGS"); editor.go: Tab.igs,
+  `loadIGS` after loadCPC (and `a.igs = nil`), `reparseIGS` with reparseEditor/CPC, `encodeIGS` after encodeCPC,
+  setPalette; view.go: drawCellXY in drawPage, paintCells -> paintCellsAt (the float passes its page position);
+  rowscols.go: fixedHeight; st.go: the 6x6 font; dialogs.go: "three small files".
+- Tests (`igs_test.go`): IcyDraw's 14 test scripts + renders in `testdata/igs/icydraw` pixel for pixel; parsing
+  (chains, W text over lines, values over lines, chain gang, W@); drawing (lines, loops, fill, palette words, X 11
+  planar, X 7 patterns, a hostile loop's time); resolution guesses; the split (head/cells/kept/closing, fade-out,
+  reveal, ESC E before text); app round trip (open, unchanged save = source, typed + erased cells, PNG shows the
+  picture, reopen identical, .vt, plain page as .ig); detection; `FuzzIGS` (typed cell must read back; 2 min
+  clean; its 5 regression inputs in testdata/fuzz/FuzzIGS) and FuzzParsers' "igs". External:
+  `CHARCOAL_IGS_ICY=<icy_tools>/crates` compares all 79 of IcyDraw's renders (65 at 100%; the rest are files
+  IcyDraw itself skips), `CHARCOAL_IGS_FILES=dir` round-trips real files (46 from IcyDraw's benches, the IG 2.20
+  disk, GoF: all pass), `CHARCOAL_ST_FONTS=dir` gives the tests the three EmuTOS font files.
+- Not done: editing the drawing (only text over it), sound/music (`b n N`), pauses and timed playback (`t q`,
+  loop delays: everything is drawn at once), XOR stepping in loops (as IcyDraw: ignored), mouse zones/input
+  (`X 3-6`, `<`, `?`), `X 9` MIDI buffer, `g` scaling, `I 5`, text below the screen's last row (cut, the ST would
+  scroll), autosave keeps the cells only (the picture comes back when the file is opened again), Split/frames
+  on IGS pages, the Animate draw orders in .ig. A space on pen 0 in the text part shows the picture (on the ST it
+  paints pen 0): the only place the page differs from the ST.
 
 ## Keys and safety (2026-10-13, evening)
 

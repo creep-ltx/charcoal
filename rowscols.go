@@ -21,7 +21,7 @@ func (a *App) emptyCell() uint32 {
 }
 
 // fixedHeight: a Spectrum screen and a teletext page have the rows they have.
-func (a *App) fixedHeight() bool { return a.zx() || a.tt() || a.cpc() || a.mt() }
+func (a *App) fixedHeight() bool { return a.zx() || a.tt() || a.cpc() || a.igsPage() || a.mt() }
 
 // freeWidth: only Amiga and PC pages can be any width.
 func (a *App) freeWidth() bool { return a.amiga() || a.pc() || a.uni() }

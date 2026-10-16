@@ -24,6 +24,8 @@ type FontEd struct {
 	undo, redo []fontStep
 	clip       []byte // a glyph's rows, copied
 	paint      bool   // a drag sets pixels (true) or clears them
+	pen        int    // multicolour: the pixel pair a click draws (1-3; 0 = none yet: 3)
+	pairPaint  int    // multicolour: the pair value a drag draws
 }
 
 func openFontEditor() {
@@ -170,7 +172,7 @@ func shownRow(f *Font, c, r, H int) byte {
 }
 
 func (d *FontEd) op(fn func(f *Font, c int)) {
-	c := a.brush
+	c := a.fontEdChar()
 	d.change(func(f *Font) { fn(f, c) })
 }
 
@@ -195,13 +197,16 @@ func (d *FontEd) pasteGlyph() {
 func (d *FontEd) draw(u *UI) {
 	fb := u.fb
 	f, H, W := a.font(), a.cellH(), a.cellW()
-	c := a.brush & 255
+	c := a.fontEdChar()
 	// The window stands at the right, so the page shows beside it; the grid
 	// is as big as the room left by the gadgets and the character map under it.
 	fixed := lineH + 24 + lineH + 8 + 10 + 3*(gadH+6) + 4 + 8*H + 16 + gadH + 12
 	maxCS := 24
 	if H <= 8 {
 		maxCS = 32
+	}
+	if a.fontEdPairs() { // the row of pens
+		fixed += gadH + 6
 	}
 	cs := max(6, min(maxCS, (fb.h-48-fixed)/H))
 	w, h := 540, min(fb.h-48, fixed+H*cs)
@@ -219,6 +224,41 @@ func (d *FontEd) draw(u *UI) {
 
 	g := Rect{in.x, y, 8 * cs, H * cs}
 	fb.fill(g, cPaper)
+	if a.fontEdPairs() { // multicolour: pixel pairs in their colours (c64x.go)
+		d.drawPairs(u, f, c, g, cs)
+	} else {
+		d.drawPixels(u, f, c, g, cs, H)
+	}
+
+	// Beside the grid: the character at the page's size and bigger, alone and
+	// as a 3x3 block (how it joins its neighbours).
+	cell := a.cell(c)&^255 | uint32(c)
+	if a.screen() {
+		cell = makeCell(c, a.previewFg(), 0, 0)
+	}
+	if a.vicMode() != vicHires { // in the brush's colour: multicolour shows only in 8-15
+		cell = a.cell(c)
+	}
+	px := g.x + g.w + 20
+	py := g.y
+	for _, z := range []int{1, 2, 4} {
+		a.drawCell(fb, px, py, z, cell)
+		px += W*z + 12
+	}
+	py += H*4 + 12
+	px = g.x + g.w + 20
+	for ty := 0; ty < 3; ty++ {
+		for tx := 0; tx < 3; tx++ {
+			a.drawCell(fb, px+tx*W*2, py+ty*H*2, 2, cell)
+		}
+	}
+	y = g.y + g.h + 10
+	d.gadgets(u, in, c, y, W, H)
+}
+
+// drawPixels is the grid of a character's pixels, drawn on with the mouse.
+func (d *FontEd) drawPixels(u *UI, f *Font, c int, g Rect, cs, H int) {
+	fb := u.fb
 	for py := 0; py < H; py++ {
 		v := shownRow(f, c, py, H)
 		for px := 0; px < 8; px++ {
@@ -246,29 +286,11 @@ func (d *FontEd) draw(u *UI) {
 			a.fontChanged()
 		}
 	}
+}
 
-	// Beside the grid: the character at the page's size and bigger, alone and
-	// as a 3x3 block (how it joins its neighbours).
-	cell := a.cell(c)&^255 | uint32(c)
-	if a.screen() {
-		cell = makeCell(c, a.previewFg(), 0, 0)
-	}
-	px := g.x + g.w + 20
-	py := g.y
-	for _, z := range []int{1, 2, 4} {
-		a.drawCell(fb, px, py, z, cell)
-		px += W*z + 12
-	}
-	py += H*4 + 12
-	px = g.x + g.w + 20
-	for ty := 0; ty < 3; ty++ {
-		for tx := 0; tx < 3; tx++ {
-			a.drawCell(fb, px+tx*W*2, py+ty*H*2, 2, cell)
-		}
-	}
-	y = g.y + g.h + 10
-
-	// The gadgets.
+// gadgets are the buttons under the grid, the whole font and the requester's buttons.
+func (d *FontEd) gadgets(u *UI, in Rect, c, y, W, H int) {
+	fb := u.fb
 	bx := in.x
 	btn := func(label, hint string) bool {
 		bw := buttonW(label)
@@ -309,6 +331,10 @@ func (d *FontEd) draw(u *UI) {
 		}
 	}
 	row()
+	if a.fontEdPairs() { // the pixel pair a click draws
+		d.penGadgets(u, &bx, y)
+		row()
+	}
 	if btn("Copy", "Copy the character's pixels (Ctrl+C)") {
 		d.copyGlyph()
 	}
@@ -406,6 +432,8 @@ func (d *FontEd) key(k string, ctrl, shift bool) bool {
 		d.op(glyphFlipV)
 	case k == "Delete" || k == "Backspace":
 		d.op(glyphClear)
+	case a.fontEdPairs() && len(k) == 1 && k[0] >= '1' && k[0] <= '3':
+		d.pen = int(k[0] - '0')
 	case k == "Escape" || k == "Return" || k == "Keypad Enter":
 		closeDialog()
 	default:

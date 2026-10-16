@@ -234,11 +234,11 @@ func TestBBSCodesOpenSave(t *testing.T) {
 	if a.codes != "" || a.saveFmt != "ansi" {
 		t.Fatalf("after Save as ANSI: %q %q", a.codes, a.saveFmt)
 	}
-	// Mixed with ANSI escapes: read with the codes, saved as ANSI.
+	// Mixed with ANSI escapes: read with the codes, saved in them again.
 	m := filepath.Join(dir, "mixed.ans")
 	os.WriteFile(m, []byte("\x1b[2J|15|17Main|07|16 |11x|15y |11z|15w"), 0o644)
 	a.openPath(m, "auto")
-	if a.codes != "pipe" || a.saveFmt != "ansi" || bbsFAttr(a.doc, 0, 0) != 0x1F {
+	if a.codes != "pipe" || a.saveFmt != "pipe" || bbsFAttr(a.doc, 0, 0) != 0x1F {
 		t.Fatalf("mixed: %q %q %02X", a.codes, a.saveFmt, bbsFAttr(a.doc, 0, 0))
 	}
 	// Open as: a .txt with Celerity codes.
@@ -423,5 +423,23 @@ func TestBBSCodesOnMystic(t *testing.T) {
 		out, _ := writeBBSCodes("pipe", d, n%2 == 0, false)
 		back, _, _ := parseArt(bbsFMystic(out), ParseOpts{forceCols: cols})
 		bbsFSame(t, "mystic", d, back)
+	}
+}
+
+// A pipe-code save says how many cells need |24-|31, which Mystic 1.10 and
+// Renegade do not show (bright backgrounds in iCE, blinking characters).
+func TestBBSFPipeBrightNote(t *testing.T) {
+	d := newDoc(4, 1)
+	d.set(0, 0, makeCell('A', 7, 9, 0))  // bright blue background (iCE) / blinking A
+	d.set(1, 0, makeCell(' ', 7, 9, 0))  // the same on a space
+	d.set(2, 0, makeCell('B', 15, 1, 0)) // no bit 7
+	if _, l := writeBBSCodes("pipe", d, false, true); l.bright != 2 || l.note("pipe") == "" {
+		t.Fatalf("iCE: %d cells", l.bright)
+	}
+	if _, l := writeBBSCodes("pipe", d, false, false); l.bright != 1 {
+		t.Fatalf("blink: %d cells (a blinking space shows nothing)", l.bright)
+	}
+	if _, l := writeBBSCodes("ctrla", d, false, true); l.bright != 0 {
+		t.Fatal("only pipe codes count them")
 	}
 }

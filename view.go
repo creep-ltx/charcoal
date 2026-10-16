@@ -31,6 +31,10 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 		a.drawMTCell(fb, px, py, z, mtCellAlone(v), true)
 		return
 	}
+	if a.vicMode() != vicHires { // multicolour and ECM (c64x.go)
+		a.drawVICCell(fb, px, py, z, v)
+		return
+	}
 	f, H := a.font(), a.cellH()
 	skip := 1
 	if H == 8 {
@@ -145,6 +149,12 @@ func (a *App) drawTTCell(fb *FB, px, py, z int, c ttCell, labels bool) {
 
 // paintCells draws w x h cells from get at pixel (x0, y0).
 func (a *App) paintCells(fb *FB, x0, y0, z int, get func(x, y int) uint32, w, h int) {
+	a.paintCellsAt(fb, x0, y0, z, get, w, h, 0, 0)
+}
+
+// paintCellsAt is paintCells for cells whose (0, 0) is the page's (px, py): an IGS page's picture
+// shows under the empty ones.
+func (a *App) paintCellsAt(fb *FB, x0, y0, z int, get func(x, y int) uint32, w, h, px, py int) {
 	if a.tt() { // teletext rows are decoded as a whole
 		d := newTTDoc()
 		d.cols, d.rows = w, h
@@ -180,7 +190,7 @@ func (a *App) paintCells(fb *FB, x0, y0, z int, get func(x, y int) uint32, w, h 
 	H := a.cellH()
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			a.drawCell(fb, x0+x*a.cellW()*z, y0+y*H*z, z, get(x, y))
+			a.drawCellXY(fb, x0+x*a.cellW()*z, y0+y*H*z, z, px+x, py+y, get(x, y))
 		}
 	}
 }
@@ -601,6 +611,7 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			a.start = false
 			a.setMachine(machines[i].id)
 		})
+		a.drawVICGadgets(u, row) // the C64's text modes (c64x.go)
 		var keep []int
 		for i, id := range fontIDs { // only this machine's two sets, and the page's own
 			if strings.HasPrefix(id, a.mach().family) || strings.HasPrefix(id, ownID) {
@@ -847,7 +858,7 @@ func (a *App) drawPage(u *UI, id string) {
 			continue
 		}
 		for x := x0; x < x1; x++ {
-			a.drawCell(fb, ox+x*colPx, oy+y*rowPx, z, a.doc.get(x, y))
+			a.drawCellXY(fb, ox+x*colPx, oy+y*rowPx, z, x, y, a.doc.get(x, y))
 		}
 	}
 	a.drawRef(fb, ox, oy, x0, x1, y0, y1)
@@ -873,7 +884,7 @@ func (a *App) drawPage(u *UI, id string) {
 	if a.float != nil && a.hover != nil {
 		f := a.float
 		hx, hy := a.floatAt(a.hover.x, a.hover.y)
-		a.paintCells(fb, ox+hx*colPx, oy+hy*rowPx, z, func(x, y int) uint32 { return f.cells[y*f.w+x] }, f.w, f.h)
+		a.paintCellsAt(fb, ox+hx*colPx, oy+hy*rowPx, z, func(x, y int) uint32 { return f.cells[y*f.w+x] }, f.w, f.h, hx, hy)
 		fb.dashed(cell(hx, hy, f.w, f.h), cOrange)
 	}
 	if a.sel != nil {

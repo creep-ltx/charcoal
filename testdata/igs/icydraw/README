@@ -1,0 +1,5 @@
+IGS test pictures from IcyDraw's engine tests (github.com/mkrueger/icy_tools, git 76bd84f of 2026-10-16,
+crates/icy_engine/tests/output/igs/lowres and midres/tie.ig; "MIT or Apache-2.0", Mike Krüger,
+../../../third_party/icy_tools-LICENSE-MIT.txt). Each .ig is a small IGS script; the .png beside it is
+IcyDraw's render of it (low resolution 320x200; tie.png medium, 640x400). igs_test.go runs each through
+CharEdit's IGS interpreter and compares every pixel.

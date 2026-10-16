@@ -294,7 +294,7 @@ func (a *App) snapshotLike(s Snap) Snap {
 	}
 	if a.frames != nil && s.cur != a.cur && s.cur < len(a.frames) {
 		d := a.frames[s.cur].doc.clone()
-		return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: s.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap()}
+		return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: s.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap()}
 	}
 	return a.snapshot()
 }
