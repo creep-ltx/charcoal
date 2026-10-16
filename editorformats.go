@@ -393,56 +393,29 @@ func icyString(s string) []byte {
 //
 // No SAUCE record goes in: IcyDraw refuses the whole file when it cannot read one.
 func writeIcy(d *Doc, pal [16]uint32, f *Font, ice bool, preview image.Image) []byte {
-	rows := max(1, d.rows)
 	if f == nil {
 		f = fontByID("vga")
 	}
-	head := binary.LittleEndian.AppendUint16(nil, 1)
-	head = append(head, 0, 0, 0) // no compression, reserved
-	head = binary.LittleEndian.AppendUint16(head, icyCP437)
-	head = append(head, map[bool]byte{true: icyIce, false: icyBlink}[ice], 2) // font mode: single
-	head = binary.LittleEndian.AppendUint32(head, uint32(d.cols))
-	head = binary.LittleEndian.AppendUint32(head, uint32(rows))
-	head = append(head, 8, byte(f.rows()))
-	recs := [][]byte{icyRecord("ICED", head)}
-	var p strings.Builder
-	p.WriteString("ICE Palette\n#Palette Name: \n#Author: \n#Description: \n#Colors: 16\n")
+	o := &icyOut{buffer: icyCP437, ice: map[bool]byte{true: icyIce, false: icyBlink}[ice], fontMod: 2, // font mode: single
+		w: d.cols, h: max(1, d.rows), fontH: f.rows()}
 	for _, c := range biosPalette(pal) {
-		fmt.Fprintf(&p, "%02x%02x%02x\n", c>>16&255, c>>8&255, c&255)
+		o.pal = append(o.pal, c&0xFFFFFF)
 	}
-	recs = append(recs, icyRecord("PALETTE", []byte(p.String())))
-	font := []byte{0}
-	font = append(font, icyString(f.name)...)
-	h := f.rows()
-	for _, v := range []uint32{0x864AB572, 0, 32, 0, 256, uint32(h), uint32(h), 8} {
-		font = binary.LittleEndian.AppendUint32(font, v)
-	}
-	for c := 0; c < 256; c++ {
-		for r := 0; r < h; r++ {
-			font = append(font, f.row(c, r))
+	o.fonts = []icyFontRec{icyFontOf(f.name, f, f.rows())}
+	o.cell = func(x, y int) (uint32, int, int, byte, uint16) {
+		v := d.get(x, y)
+		at := cellAttr(v)
+		fg, bg, flags := int(at&15), int(at>>4), uint16(0)
+		if !ice && bg > 7 {
+			bg, flags = bg&7, icyBlinkAttr
 		}
+		return uint32(cellCh(v)), fg, bg, 0, flags
 	}
-	recs = append(recs, icyRecord("FONT", font))
-	layer := icyString("Background")
-	layer = append(layer, 0, 0, 0, 0, 0)               // mode normal, no colour
-	layer = binary.LittleEndian.AppendUint32(layer, 1) // visible
-	layer = append(layer, 0, 0, 0, 0, 0, 0, 0, 0)      // offset
-	layer = binary.LittleEndian.AppendUint32(layer, uint32(d.cols))
-	layer = binary.LittleEndian.AppendUint32(layer, uint32(rows))
-	for y := 0; y < rows; y++ {
-		for x := 0; x < d.cols; x++ {
-			v := d.get(x, y)
-			at := cellAttr(v)
-			fg, bg, flags := at&15, at>>4, uint16(0)
-			if !ice && bg > 7 {
-				bg, flags = bg&7, icyBlinkAttr
-			}
-			layer = binary.LittleEndian.AppendUint32(layer, uint32(cellCh(v)))
-			layer = append(layer, 1+fg, 1+bg, 0, byte(flags), byte(flags>>8))
-		}
-	}
-	recs = append(recs, icyRecord("LAYER", layer), icyRecord("END", nil))
+	return o.encode(preview)
+}
 
+// icyPNG is an IcyDraw file: the picture with the records right after its IHDR.
+func icyPNG(recs [][]byte, preview image.Image) []byte {
 	if preview == nil {
 		preview = image.NewNRGBA(image.Rect(0, 0, 1, 1))
 	}
@@ -482,6 +455,7 @@ type icyCell struct {
 	ch      rune
 	fg, bg  icyColour
 	attr    uint16
+	page    byte // font page
 	visible bool
 }
 
@@ -505,6 +479,8 @@ type icyDoc struct {
 	layers  []*icyLayer
 	sauce   []byte
 	skipped []string
+	screen  icyScreen     // the SCREEN record: machine, mode, screen and border colour (icymach.go)
+	fonts   [2]icyFontRec // fonts 0 and 1 as they are (a PETSCII page's sets; icymach.go)
 }
 
 // icyMaxCells: CharEdit opens IcyDraw pages (and layers) of up to 4M cells (80 x 52428):
@@ -694,9 +670,12 @@ func parseIcyDraw(b []byte) (*icyDoc, error) {
 	if !icyLimit(doc.w, doc.h) {
 		return nil, fmt.Errorf("an IcyDraw page of %dx%d", doc.w, doc.h)
 	}
-	if doc.buffer != icyCP437 && doc.buffer != 0 {
-		what := map[int]string{2: "PETSCII", 3: "ATASCII", 4: "Viewdata", 5: "Atari ST"}[doc.buffer]
-		return nil, fmt.Errorf("an IcyDraw %s page: CharEdit reads IcyDraw's PC (CP437) pages only", what)
+	if doc.buffer != icyCP437 && doc.buffer != 0 && !icyMachineBuffer(doc.buffer) {
+		what := map[int]string{4: "Viewdata"}[doc.buffer]
+		if what == "" {
+			what = fmt.Sprintf("type %d", doc.buffer)
+		}
+		return nil, fmt.Errorf("an IcyDraw %s page: CharEdit reads IcyDraw's PC, PETSCII, ATASCII and Atari ST pages", what)
 	}
 	var zdec *zstd.Decoder
 	if compression == 2 {
@@ -739,6 +718,11 @@ func parseIcyDraw(b []byte) (*icyDoc, error) {
 				if name, rest, err := icyStr(data[1:]); err == nil {
 					doc.font = icyFont(name, rest)
 				}
+			}
+			icyKeepFont(doc, data)
+		case r.key == "SCREEN" && !v0:
+			if doc.screen, err = parseIcyScreen(data); err != nil {
+				return nil, err
 			}
 		case strings.HasPrefix(r.key, "FONT_") && v0:
 			if r.key == "FONT_0" {
@@ -823,7 +807,7 @@ func icyLayerV1(b []byte, room int) (*icyLayer, error) {
 		if err != nil || len(b) < 3 {
 			return nil, fmt.Errorf("an IcyDraw layer is cut short")
 		}
-		c.attr = binary.LittleEndian.Uint16(b[1:])
+		c.page, c.attr = b[0], binary.LittleEndian.Uint16(b[1:])
 		c.visible = c.attr&icyInvisible == 0
 		b = b[3:]
 		l.cells[i] = c
@@ -935,57 +919,7 @@ func icyPage(doc *icyDoc) (*Doc, XBinInfo, string) {
 		return nearestOf(rgbv, cellPal)
 	}
 	d := newDoc(doc.w, doc.h)
-	type merged struct {
-		ch     rune
-		fg, bg icyColour
-		seen   bool
-	}
-	cells := make([]merged, doc.w*doc.h)
-	for _, l := range doc.layers {
-		if l == nil || !l.visible || l.group || l.w == 0 {
-			continue
-		}
-		for ly := 0; ly < l.h; ly++ {
-			y := ly + l.y
-			if y < 0 || y >= doc.h {
-				continue
-			}
-			for lx := 0; lx < l.w; lx++ {
-				x := lx + l.x
-				if x < 0 || x >= doc.w {
-					continue
-				}
-				c, m := l.cells[ly*l.w+lx], &cells[y*doc.w+x]
-				switch l.mode {
-				case 1: // characters only
-					if c.visible && c.ch != ' ' && c.ch != 0 {
-						m.ch = c.ch
-					}
-				case 2: // colours only
-					if c.visible {
-						m.fg, m.bg = c.fg, c.bg
-					}
-				default:
-					under := *m
-					if c.visible {
-						m.ch, m.fg, m.bg, m.seen = c.ch, c.fg, c.bg, true
-						if c.attr&icyBold != 0 && c.fg.kind == 'p' && c.fg.v < 8 {
-							m.fg.v += 8
-						}
-						if c.attr&icyBlinkAttr != 0 && c.bg.kind == 'p' && c.bg.v < 8 && !info.ice {
-							m.bg.v += 8
-						}
-					}
-					if m.fg.kind == 't' {
-						m.fg = under.fg
-					}
-					if m.bg.kind == 't' {
-						m.bg = under.bg
-					}
-				}
-			}
-		}
-	}
+	cells := icyMerge(doc, true)
 	for i, m := range cells {
 		if !m.seen {
 			continue
@@ -1018,6 +952,69 @@ func icyPage(doc *icyDoc) (*Doc, XBinInfo, string) {
 		note += "left out: " + strings.Join(uniq(doc.skipped), ", ")
 	}
 	return d, info, note
+}
+
+// icyMerged is a cell of an IcyDraw page with its visible layers put together.
+type icyMerged struct {
+	ch     rune
+	fg, bg icyColour
+	attr   uint16
+	page   byte // the font (a C128 80-column cell's character set)
+	seen   bool
+}
+
+// icyMerge puts an IcyDraw file's visible layers together, later layers on top,
+// as IcyDraw shows them. On a PC page (pc) bold makes the colour bright and, with
+// blinking on, blink the background.
+func icyMerge(doc *icyDoc, pc bool) []icyMerged {
+	ice := doc.ice != icyBlink
+	cells := make([]icyMerged, doc.w*doc.h)
+	for _, l := range doc.layers {
+		if l == nil || !l.visible || l.group || l.w == 0 {
+			continue
+		}
+		for ly := 0; ly < l.h; ly++ {
+			y := ly + l.y
+			if y < 0 || y >= doc.h {
+				continue
+			}
+			for lx := 0; lx < l.w; lx++ {
+				x := lx + l.x
+				if x < 0 || x >= doc.w {
+					continue
+				}
+				c, m := l.cells[ly*l.w+lx], &cells[y*doc.w+x]
+				switch l.mode {
+				case 1: // characters only
+					if c.visible && c.ch != ' ' && c.ch != 0 {
+						m.ch = c.ch
+					}
+				case 2: // colours only
+					if c.visible {
+						m.fg, m.bg = c.fg, c.bg
+					}
+				default:
+					under := *m
+					if c.visible {
+						m.ch, m.fg, m.bg, m.attr, m.page, m.seen = c.ch, c.fg, c.bg, c.attr, c.page, true
+						if pc && c.attr&icyBold != 0 && c.fg.kind == 'p' && c.fg.v < 8 {
+							m.fg.v += 8
+						}
+						if pc && c.attr&icyBlinkAttr != 0 && c.bg.kind == 'p' && c.bg.v < 8 && !ice {
+							m.bg.v += 8
+						}
+					}
+					if m.fg.kind == 't' {
+						m.fg = under.fg
+					}
+					if m.bg.kind == 't' {
+						m.bg = under.bg
+					}
+				}
+			}
+		}
+	}
+	return cells
 }
 
 func uniq(s []string) []string {
@@ -1790,6 +1787,20 @@ func (a *App) loadEditor(b []byte, name, path, as string) bool {
 	note := ""
 	switch kind {
 	case "idf", "adf", "tnd", "icy", "xp":
+		if kind == "icy" { // IcyDraw's pages of other machines (icymach.go)
+			state, n := a.icyMachineLoad(b, name, path, as)
+			switch state {
+			case icyStop:
+				return true
+			case icyNotThis:
+				return false
+			case icyGoOn:
+				note = n
+			}
+			if state == icyGoOn {
+				break
+			}
+		}
 		if as != "auto" && as != "pc" {
 			return false
 		}
@@ -1857,6 +1868,9 @@ func (a *App) loadEditor(b []byte, name, path, as string) bool {
 	}
 	a.srcKind = kind
 	a.finishLoad(b, name, path, nil, kind)
+	if kind == "icy" {
+		a.icyAfterLoad() // a PETSCII page's own character set (icymach.go)
+	}
 	// The SAUCE record: after an iCEDraw, ArtWorx or TundraDraw file, in an IcyDraw
 	// file's SAUCE record. Saving again keeps it (without comment lines in the first three).
 	sauceOf := b
@@ -1894,6 +1908,9 @@ func (a *App) editorScreens(kind string, b []byte) ([]PetScreen, error) {
 func (a *App) reparseEditor() bool {
 	switch a.srcKind {
 	case "icy", "xp":
+		if a.srcKind == "icy" && a.reparseIcyMachine() { // another machine's page (icymach.go)
+			break
+		}
 		if d, _, _, err := parseEditorPC(a.srcKind, a.source); err == nil {
 			a.doc = d
 		}
@@ -1978,6 +1995,10 @@ func (a *App) encodeEditor(fmtID string, d *Doc) (out []byte, ok bool, err error
 		img := image.NewNRGBA(image.Rect(0, 0, fb.w, fb.h))
 		for i, p := range fb.px {
 			img.Pix[i*4], img.Pix[i*4+1], img.Pix[i*4+2], img.Pix[i*4+3] = byte(p>>16), byte(p>>8), byte(p), 255
+		}
+		if mach, ok := a.writeIcyMachine(d, img); ok { // PETSCII, Atari, ST pages (icymach.go)
+			out = mach
+			break
 		}
 		out = writeIcy(d, a.pal, a.font(), a.ice, img)
 	case "xp":

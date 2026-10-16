@@ -40,6 +40,12 @@ func FuzzParsers(f *testing.F) {
 		f.Add(out)
 		f.Add(writeMarqPet(d, false))
 		f.Add(writePetmateJSON([]PetScreen{{doc: d}}))
+		for _, buf := range []int{icyPETSCII, icyATASCII, icyAtariST} { // other machines' pages (icymach.go)
+			o := &icyOut{buffer: buf, fontMod: 1, w: 3, h: 2, fontH: 8, pal: []uint32{0, 0xFFFFFF},
+				screen: icyScreenRecord(map[int]int{icyPETSCII: 5, icyATASCII: 9, icyAtariST: 8}[buf], 1, 3, 113),
+				cell:   func(x, y int) (uint32, int, int, byte, uint16) { return uint32(x + 130), 100, 0, 1, 8 }}
+			f.Add(o.encode(nil))
+		}
 	}
 	{ // the Unicode page's files (uniformats.go)
 		d := newDoc(3, 2)
@@ -171,6 +177,14 @@ func FuzzParsers(f *testing.F) {
 		}
 		check("xbin", func() []*Doc { return own(parseXBin(b)) })
 		check("icy", func() []*Doc { return own(parseIcy(b)) })
+		check("icy machine", func() []*Doc { // IcyDraw's pages of other machines (icymach.go)
+			if doc, err := parseIcyDraw(b); err == nil {
+				if m := icyMachinePage(doc, &gtiaPAL); m != nil {
+					return one(m.doc)
+				}
+			}
+			return nil
+		})
 		check("xp", func() []*Doc { return own(parseXP(b)) })
 		check("psci", func() []*Doc {
 			art, err := parsePsci(b)
