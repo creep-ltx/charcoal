@@ -415,6 +415,10 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## C64 BBS graphics and the boards' own colour codes (2026-10-16, branch r3-c64bbs)
 
+- **The user's decisions (2026-10-16):** Image BBS is in "Save for board" with `£Sx` tenths only; no `£W` (its
+  first second is short, and 2.0 does not wait); Color 64 stays out (no timed pause); Image colours as plain
+  PETSCII bytes, not `£C`.
+
 - **What**: "Save for board X" (bbspause.go's boards: Settings' My BBS, Animate's choice and copies, Animate a
   folder) now covers two C64 boards for animated `.seq` files, and the PC boards write their own colour codes.
   `.seq` files with Image BBS's £ codes open with them and save back with them (format "imageseq").
@@ -689,6 +693,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   paints pen 0): the only place the page differs from the ST.
 
 ## Files that run on the machine, Atari colours (2026-10-16, branch r3-machines)
+
+- **The user's decisions (2026-10-16, "I trust you"):** PAL default; the GTIA model re-implemented from atari800's
+  numbers (no code) is fine; the OS ROM font is the default when a ROM is found (prefs.go); a .xex shows 24 rows
+  with a note, no scrolling; a measured palette becomes the default once one with a shippable licence is found
+  (the emulator check, branch r3-emu, gathers the evidence).
 
 - **Atari colours** (`gtia.go`): an Atari page's `Doc.bg/ink/border` are now the machine's registers as values
   0-255: COLOR2 (710, the screen), COLOR1 (709: only its luminance shows, the text takes the screen's hue:
