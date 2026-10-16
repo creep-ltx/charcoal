@@ -758,10 +758,17 @@ func (a *App) uniCompact() int {
 			}
 		}
 	}
+	addLayers := func(mode string, ls []Layer) { // every layer's cells (layers.go)
+		for _, l := range ls {
+			addDocs(mode, l.doc, nil)
+		}
+	}
 	for _, t := range a.tabs {
 		addDocs(t.mode, t.doc, t.frames)
+		addLayers(t.mode, t.layers)
 		for _, s := range append(append([]Snap(nil), t.undo...), t.redo...) {
 			addDocs(s.mode, s.doc, s.frames)
+			addLayers(s.mode, s.layers)
 		}
 		if t.float != nil && t.float.uni {
 			add(t.float.cells)

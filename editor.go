@@ -215,6 +215,7 @@ type Tab struct {
 	lay                 int         // the layer being worked on: doc is it
 	others              int         // how the other layers are shown: 0 as they are, 1 dim, 2 hidden (view only)
 	seeing              bool        // doc is the layers put together for a while (asSeen); the live layer is in layers[lay]
+	layering            bool        // an edit runs on every layer (everyLayerDo): its own undo steps are not kept
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -669,7 +670,12 @@ func (a *App) snapshot() Snap {
 // keeps fewer steps instead of eating the memory.
 const undoBudget = 16 << 20
 
-func (a *App) pushUndo() { a.pushSnap(a.snapshot()) }
+func (a *App) pushUndo() {
+	if a.layering { // one step for every layer is kept already (layers.go)
+		return
+	}
+	a.pushSnap(a.snapshot())
+}
 
 // pushSnap puts an undo step on the stack, letting go of the oldest ones past
 // 300 steps or undoBudget cells.
@@ -710,6 +716,14 @@ func (a *App) restore(s Snap) {
 	case s.whole:
 		a.frames, a.cur = slices.Clone(s.frames), s.cur
 		a.sel, a.float = nil, nil
+	case s.lwhole: // the layer list as it was (layers.go)
+		a.layers, a.lay = slices.Clone(s.layers), s.lay
+		a.float = nil
+	case a.layers != nil && s.lay != a.lay && s.lay < len(a.layers):
+		// An edit of another layer: undoing it goes there, to show what was undone.
+		a.leaveLayer()
+		a.lay = s.lay
+		a.float = nil
 	case a.frames != nil && s.cur != a.cur && s.cur < len(a.frames):
 		// An edit of another frame: undoing it goes there, to show what was undone.
 		a.keepCase()
@@ -774,6 +788,8 @@ func (a *App) maxRows() int {
 		return 24
 	case a.tt(), a.cpc(), a.mt(), a.mz():
 		return 25
+	case a.layers != nil: // all layers together under the largest page (layers.go)
+		return min(maxRowsFor(a.doc.cols), a.layersMaxRows())
 	}
 	return maxRowsFor(a.doc.cols)
 }
@@ -1448,6 +1464,7 @@ func (a *App) textBlock(text string) *Block {
 
 func (a *App) reparse() {
 	a.frames, a.cur, a.restructured = nil, 0, false
+	a.layers, a.lay = nil, 0
 	if a.reparseUni() {
 		return
 	}
@@ -1999,6 +2016,10 @@ func (a *App) setMode(m string) {
 		return
 	}
 	a.endPlay()
+	if a.layers != nil && !layerMode(m) {
+		a.msg("Merge the layers first (Page > Merge all layers): a " + modeNames[m] + " page has one layer")
+		return
+	}
 	if (m == "uni" || a.mode == "uni") && a.setModeUni(m) { // cells are converted (uni.go)
 		return
 	}
@@ -2193,7 +2214,15 @@ func (a *App) setRows(n int) {
 	if n == a.doc.rows || a.zx() || a.tt() || a.cpc() || a.mt() || a.msx() || a.mz() { // a Spectrum screen is 24 rows, a teletext page and a CPC screen 25
 		return
 	}
-	a.pushUndo()
+	if a.layers != nil { // every layer is cut; the shorter ones stay as they are (layers.go)
+		a.withEveryLayer(func(d *Doc) *Doc {
+			c := d.clone()
+			c.rows = min(c.rows, n)
+			return c
+		})
+	} else {
+		a.pushUndo()
+	}
 	if n > a.doc.rows {
 		a.doc.ensureRows(n)
 	} else {

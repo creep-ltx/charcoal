@@ -253,3 +253,187 @@ func TestLayStagesSeeLayers(t *testing.T) {
 		t.Fatal("an undo step's stage is not its page as seen")
 	}
 }
+
+func TestLayEditAndUndo(t *testing.T) {
+	a := testApp(t, "pc")
+	a.doc.set(0, 0, makeCell('a', 1, 2, 0))
+	a.pushUndo()
+	a.newLayer(false)
+	if a.nLayers() != 2 || a.lay != 1 || a.doc.rows != 25 {
+		t.Fatalf("new layer: %d layers, at %d, %d rows", a.nLayers(), a.lay, a.doc.rows)
+	}
+	a.pushUndo()
+	a.doc.set(1, 0, makeCell('b', 3, 4, 0))
+	if p := a.seen(); p.get(0, 0) != makeCell('a', 1, 2, 0) || p.get(1, 0) != makeCell('b', 3, 4, 0) {
+		t.Fatal("both layers seen")
+	}
+	a.goLayer(0)
+	a.pushUndo()
+	a.doc.set(2, 0, makeCell('c', 5, 0, 0))
+	a.goLayer(1)
+	// undo the edit of layer 0: goes there
+	a.doUndo()
+	if a.lay != 0 || a.doc.get(2, 0) == makeCell('c', 5, 0, 0) {
+		t.Fatalf("undo of layer 0's edit: at %d, %08x", a.lay, a.doc.get(2, 0))
+	}
+	if a.layers[1].doc.get(1, 0) != makeCell('b', 3, 4, 0) {
+		t.Fatal("layer 1 lost its cell")
+	}
+	a.doRedo()
+	if a.lay != 0 || a.doc.get(2, 0) != makeCell('c', 5, 0, 0) {
+		t.Fatal("redo")
+	}
+	// undo everything back to one layer
+	for len(a.undo) > 0 {
+		a.doUndo()
+	}
+	if a.layers != nil || a.doc.get(0, 0) != makeCell('a', 1, 2, 0) {
+		t.Fatalf("undone to the start: layers %v", a.layers != nil)
+	}
+	for len(a.redo) > 0 {
+		a.doRedo()
+	}
+	if a.nLayers() != 2 || a.seen().get(1, 0) != makeCell('b', 3, 4, 0) || a.seen().get(2, 0) != makeCell('c', 5, 0, 0) {
+		t.Fatal("redone")
+	}
+}
+
+func TestLayStructure(t *testing.T) {
+	a := testApp(t, "pc")
+	a.doc.set(0, 0, makeCell('a', 1, 0, 0))
+	a.newLayer(false)
+	a.doc.set(1, 1, makeCell('b', 2, 0, 0))
+	a.newLayer(true) // a copy of layer 2
+	if a.nLayers() != 3 || a.layerName(2) != "Layer 2 copy" || a.doc.get(1, 1) != makeCell('b', 2, 0, 0) {
+		t.Fatalf("copy: %d %q", a.nLayers(), a.layerName(2))
+	}
+	a.doc.set(1, 1, makeCell('c', 3, 0, 0))
+	a.moveLayer(-1)
+	if a.lay != 1 || a.seen().get(1, 1) != makeCell('b', 2, 0, 0) {
+		t.Fatalf("move down: at %d, %08x", a.lay, a.seen().get(1, 1))
+	}
+	a.toggleLayer(2)
+	if a.seen().get(1, 1) != makeCell('c', 3, 0, 0) {
+		t.Fatal("hide the top")
+	}
+	a.toggleLayer(2)
+	a.goLayer(2)
+	a.mergeDown()
+	if a.nLayers() != 2 || a.lay != 1 || a.doc.get(1, 1) != makeCell('b', 2, 0, 0) {
+		t.Fatalf("merge down: %d at %d %08x", a.nLayers(), a.lay, a.doc.get(1, 1))
+	}
+	// width, height, rows and columns go to every layer
+	a.setCols(60)
+	if a.doc.cols != 60 || a.layers[0].doc.cols != 60 {
+		t.Fatal("width of every layer")
+	}
+	a.cx, a.cy = 0, 0
+	a.insertRow()
+	if a.seen().get(0, 1) != makeCell('a', 1, 0, 0) || a.seen().get(1, 2) != makeCell('b', 2, 0, 0) {
+		t.Fatal("insert row in every layer")
+	}
+	a.doUndo()
+	if a.seen().get(0, 0) != makeCell('a', 1, 0, 0) || a.seen().get(1, 1) != makeCell('b', 2, 0, 0) {
+		t.Fatal("insert row: one undo step")
+	}
+	a.insertColumn()
+	if a.seen().get(1, 0) != makeCell('a', 1, 0, 0) || a.seen().get(2, 1) != makeCell('b', 2, 0, 0) {
+		t.Fatal("insert column in every layer")
+	}
+	a.setRows(1)
+	if a.doc.rows != 1 || a.layers[0].doc.rows != 1 {
+		t.Fatal("height of every layer")
+	}
+	a.doUndo()
+	if a.doc.rows != 25 || a.seen().get(2, 1) != makeCell('b', 2, 0, 0) {
+		t.Fatal("height undone")
+	}
+	a.deleteLayer()
+	if a.layers != nil || a.doc.get(1, 0) != makeCell('a', 1, 0, 0) {
+		t.Fatal("deleting down to one layer: a page of one layer")
+	}
+	a.doUndo()
+	a.mergeAll()
+	if a.layers != nil || a.doc.get(2, 1) != makeCell('b', 2, 0, 0) {
+		t.Fatal("merge all")
+	}
+}
+
+func TestLayLimits(t *testing.T) {
+	a := testApp(t, "pc")
+	a.setRows(maxRowsFor(80)) // 80 x 100000: 8M cells
+	a.newLayer(false)
+	if a.nLayers() != 2 {
+		t.Fatalf("a second full layer fits: %q", a.message)
+	}
+	a.newLayer(false)
+	if a.nLayers() != 2 || !strings.Contains(a.message, "larger than the largest page") {
+		t.Fatalf("a third: %d %q", a.nLayers(), a.message)
+	}
+	b := testApp(t, "pc")
+	for range maxLayers + 3 {
+		b.newLayer(false)
+	}
+	if b.nLayers() != maxLayers {
+		t.Fatalf("%d layers", b.nLayers())
+	}
+	c := testApp(t, "pc")
+	c.setCols(200)
+	c.setRows(5)
+	c.newLayer(false)
+	c.goLayer(0)
+	if c.maxRows() != (maxPageCells-200*1)/200 { // the empty layer above waits as one row
+		t.Fatalf("maxRows %d", c.maxRows())
+	}
+	c.setMode("tt")
+	if c.mode != "pc" || !strings.Contains(c.message, "Merge the layers") {
+		t.Fatal("a teletext page has one layer")
+	}
+	d := testApp(t, "tt")
+	d.newLayer(false)
+	if d.layers != nil {
+		t.Fatal("teletext layers")
+	}
+}
+
+func TestLayShortLayersCostLittle(t *testing.T) {
+	a := testApp(t, "pc")
+	a.setRows(1000)
+	a.newLayer(false)
+	a.doc.set(0, 0, makeCell('x', 1, 0, 0))
+	a.goLayer(0)
+	if r := a.layers[1].doc.rows; r != 1 {
+		t.Fatalf("a short layer keeps %d rows", r)
+	}
+	a.goLayer(1)
+	if a.doc.rows != 1000 || a.seen().rows != 1000 {
+		t.Fatal("the current layer is as tall as the page")
+	}
+}
+
+func TestLayUniStylesKept(t *testing.T) {
+	a := testApp(t, "uni")
+	p := styleOf(201, 77, italic)
+	a.doc.set(0, 0, uniCell('q', p))
+	a.newLayer(false)
+	a.goLayer(0)
+	a.goLayer(1)
+	a.toggleLayer(0)
+	// fill the style table so that uniCompact runs
+	for i := 0; layFStyleCount() < (uniPairMax-256)*3/4; i++ {
+		styleOf(16+i%240, 16+i/240%240, uint32(i/(240*240))*italic)
+	}
+	if a.uniCompact() == 0 {
+		t.Fatal("nothing compacted")
+	}
+	fg, bg, fl := styleParts(uniPair(a.layers[0].doc.get(0, 0)))
+	if fg != 201 || bg != 77 || fl != italic {
+		t.Fatalf("a hidden layer's style: %d %d %x", fg, bg, fl)
+	}
+}
+
+func layFStyleCount() int {
+	uniStyles.RLock()
+	defer uniStyles.RUnlock()
+	return len(uniStyles.list)
+}

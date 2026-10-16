@@ -41,6 +41,10 @@ func (a *App) fillRow(y int, v uint32) {
 // deleteRow takes the cursor's row out; the rows below move up. The page gets
 // a row shorter, but a fixed-height page gets an empty row at the bottom.
 func (a *App) deleteRow() {
+	if a.layers != nil && !a.layering { // every layer (layers.go)
+		a.everyLayerDo(a.deleteRow)
+		return
+	}
 	d := a.doc
 	if a.cy >= d.rows {
 		return
@@ -63,6 +67,10 @@ func (a *App) deleteRow() {
 // insertRow puts an empty row in at the cursor; the rows below move down. The
 // page grows a row, except a fixed-height (or full) page, which loses its last.
 func (a *App) insertRow() {
+	if a.layers != nil && !a.layering { // every layer (layers.go)
+		a.everyLayerDo(a.insertRow)
+		return
+	}
 	d := a.doc
 	if a.cy >= d.rows {
 		return
@@ -82,6 +90,10 @@ func (a *App) insertRow() {
 // deleteColumn takes the cursor's column out of every row; the cells to its
 // right move left and the last column becomes empty (the width stays).
 func (a *App) deleteColumn() {
+	if a.layers != nil && !a.layering { // every layer (layers.go)
+		a.everyLayerDo(a.deleteColumn)
+		return
+	}
 	d := a.doc
 	a.endPlay()
 	a.pushUndo()
@@ -99,6 +111,10 @@ func (a *App) deleteColumn() {
 // move right. A machine's page keeps its width, so its last column falls off;
 // an Amiga or PC page grows a column when its last one holds something.
 func (a *App) insertColumn() {
+	if a.layers != nil && !a.layering { // every layer (layers.go)
+		a.everyLayerDo(a.insertColumn)
+		return
+	}
 	d := a.doc
 	a.endPlay()
 	a.pushUndo()

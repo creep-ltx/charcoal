@@ -258,6 +258,10 @@ func (a *App) stepHold(d int) {
 // withEveryFrame replaces every frame's picture with fn of it, as one undo step
 // (a page's width is the same for all its frames).
 func (a *App) withEveryFrame(fn func(*Doc) *Doc) {
+	if a.layers != nil { // a page of layers has one frame: every layer instead (layers.go)
+		a.withEveryLayer(fn)
+		return
+	}
 	old := 0
 	for _, d := range a.allDocs() {
 		old += d.cols * d.rows
@@ -291,6 +295,16 @@ func (a *App) pushFramesUndo(extra int) {
 // snapshotLike is a snapshot of the page as it is now, of the kind s is: the
 // whole frame list, or the picture of s's frame.
 func (a *App) snapshotLike(s Snap) Snap {
+	if s.lwhole {
+		n := a.snapshot()
+		n.lwhole = true
+		n.layers = a.cloneLayers(n.doc)
+		return n
+	}
+	if a.layers != nil && !s.whole && s.lay != a.lay && s.lay < len(a.layers) {
+		d := a.layers[s.lay].doc.clone()
+		return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine, step: a.steps, msx: a.msxSnap(), lay: s.lay}
+	}
 	if s.whole {
 		n := a.snapshot()
 		n.whole = true
