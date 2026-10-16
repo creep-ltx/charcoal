@@ -1061,6 +1061,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## Character sets: MZ-700, Plus/4, DirArt (2026-10-16, branch r5-charsets)
 
+- **The user's decisions (2026-10-16):** the MZ-700 second-set look-alike (drawn by eye from a picture of the
+  table, nothing extracted) ships as CC0, as Russell Marks's first set; the DirArt header line is not part of the
+  art (yet: roadmap); saving DirArt over a disk keeps its real files listed; the Plus/4 BASIC export with an own
+  set needs a 64 KB Plus/4.
+
 - **MZ-700 second set** (`mz.go`, `fonts/mz700-set2.font`, `tools/mz700-set2.txt` + `tools/mz700-set2.py`):
   `mzFreeSet2` replaces the hex boxes (`mzHexFont` is gone) when Sharp's ROM is not found; the ROM still wins
   (`mzSet2Font`). Drawn by hand for CharEdit from each character's meaning (the Unicode names `mzRunes` gives:
@@ -1126,6 +1131,10 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## TheDraw fonts: the Logo tool (2026-10-16, branch r5-tdf)
 
+- **The user's decisions (2026-10-16):** keep "Download..." for Roy/SAC's collection (fetched from his site on
+  the user's click, never shipped); block/outline glyphs fill their box (as IcyDraw); colour-font spaces on black
+  see-through; spacing columns skipped; Return to the run's start column; "Logo", Alt+G, Alt+Shift+G, Ctrl+Shift+G.
+
 - **What**: `tdf.go` (reader, glyphs, layout, TheDraw's 19 outline styles), `tdf_ui.go` (library, download, the
   Logo tool, its options, the font picker `TDFReq`, the line requester `TDFLineReq`). Tool id "logo" (appended to
   `tools` in `init`; hidden like Half on pages that are not PC/Amiga/Unicode, `tdfPage`), actions `tool_logo`
@@ -1180,6 +1189,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   (no DOS emulator here): the box fill and spacing columns follow IcyDraw and the manual.
 
 ## Drawing together: Moebius's collaboration protocol (2026-10-16, branch r5-collab)
+
+- **Decided (2026-10-16):** a password is required to host for the network, not for this computer only; web
+  viewers are refused when there is a password; frames or a non-PC page end the session with a message; a remote
+  resize clears undo (as Moebius). Not yet done: a real Moebius Electron app joining CharEdit (the user was asked
+  to try one).
 
 - What: File > **Join a drawing session** (CharEdit as a client of a Moebius or IcyDraw server), **Host a drawing
   session** (CharEdit as the server; Moebius and IcyDraw clients join), **End the drawing session**; the session
