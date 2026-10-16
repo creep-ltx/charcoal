@@ -113,7 +113,7 @@ func TestLayPageTypes(t *testing.T) {
 		ok    bool
 		black bool
 	}{{"pc", true, true}, {"amiga", true, true}, {"uni", true, true}, {"c64", true, false}, {"atari", true, false}, {"st", true, true},
-		{"tt", false, false}, {"vd", false, false}, {"mt", false, false}, {"zx", false, false}, {"cpc", false, false}, {"msx", false, false}, {"mz", false, false}} {
+		{"tt", false, false}, {"vd", false, false}, {"mt", false, false}, {"zx", true, false}, {"cpc", true, true}, {"msx", true, false}, {"mz", true, true}} { // (machines: lay2_test.go)
 		a := testApp(t, c.mode)
 		if a.layered() != c.ok || a.blackClears() != c.black {
 			t.Errorf("%s: layered %v black %v", c.mode, a.layered(), a.blackClears())

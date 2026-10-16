@@ -2094,6 +2094,10 @@ func (a *App) setMode(m string) {
 		a.msg("Merge the layers first (Page > Merge all layers): a " + modeNames[m] + " page has one layer")
 		return
 	}
+	if a.layers != nil && (layerFixedMode(m) || layerFixedMode(a.mode)) { // its own screen shape (layers.go)
+		a.msg("Merge the layers first (Page > Merge all layers): a page of layers keeps a machine's screen")
+		return
+	}
 	if (m == "uni" || a.mode == "uni") && a.setModeUni(m) { // cells are converted (uni.go)
 		return
 	}
@@ -2139,7 +2143,7 @@ func (a *App) setMode(m string) {
 	was := a.mode
 	a.mode = m
 	switch {
-	case a.source != nil && !a.dirty:
+	case a.source != nil && !a.dirty && a.layers == nil: // (a page of layers is not its file read again)
 		a.reparse()
 	case a.source == nil && !a.dirty && a.doc.empty():
 		// An empty page takes the new machine's width and colours.

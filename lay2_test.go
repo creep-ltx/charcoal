@@ -457,3 +457,122 @@ func TestLay2FramesKept(t *testing.T) {
 		t.Fatalf("ansi: dirty %v %q", c.dirty, c.message)
 	}
 }
+
+// ---------------------------------------------------------------- Spectrum, CPC, MSX, MZ-700
+
+// lay2FMachineCell is a cell of character ch in colours fg on bg for the page.
+func lay2FMachineCell(a *App, ch, fg, bg int) uint32 {
+	switch {
+	case a.zx():
+		return zxCell(ch, fg, bg, false, false)
+	case a.mz():
+		return mzCell(ch, fg, bg)
+	}
+	return makeCell(ch, fg, bg, 0)
+}
+
+func TestLay2Machines(t *testing.T) {
+	for _, c := range []struct{ mode, fmtID, ext string }{{"zx", "scr", ".scr"}, {"cpc", "cpcbin", ".bin"}, {"msx", "msxrom", ".rom"}, {"mz", "mzf", ".mzf"}} {
+		a := testApp(t, c.mode)
+		if !a.layered() {
+			t.Fatalf("%s: no layers", c.mode)
+		}
+		a.doc.set(1, 1, lay2FMachineCell(a, 'A', 2, 3))
+		a.doc.set(2, 1, lay2FMachineCell(a, 'B', 3, 2))
+		one := a.doc.clone()
+		flat, _ := a.encodeFor(c.fmtID, "", nil)
+		a.newLayer(false)
+		if !sameLook(a.seen(), one) {
+			t.Fatalf("%s: a new layer changes the page", c.mode)
+		}
+		got, _ := a.encodeFor(c.fmtID, "", nil)
+		if !bytesEq(got, flat) {
+			t.Fatalf("%s: an empty layer changes the file", c.mode)
+		}
+		// drawn on the layer: seen over the one below; erased (right button): what is below shows again
+		a.setTool("draw")
+		a.brush = 'X'
+		lay2FPress(a, 1, 1)
+		if v := a.seen().get(1, 1); cellCh(v) != 'X' {
+			t.Fatalf("%s: drawn on the layer: %08x", c.mode, v)
+		}
+		a.pushUndo()
+		a.paintAt(1, 1, 3)
+		if a.seen().get(1, 1) != one.get(1, 1) {
+			t.Fatalf("%s: erased on the layer: %08x, want %08x", c.mode, a.seen().get(1, 1), one.get(1, 1))
+		}
+		// a row put in on every layer: the upper layer's new row is empty, the bottom's the machine's own
+		a.cy = 0
+		a.insertRow()
+		if a.seen().get(1, 2) != one.get(1, 1) || a.seen().get(1, 0) != a.layers[0].doc.get(1, 0) {
+			t.Fatalf("%s: a row put in", c.mode)
+		}
+		a.doUndo()
+		// the machine's own file is the page as it is seen
+		a.doc.set(5, 5, lay2FMachineCell(a, 'Q', 1, 0))
+		b := testApp(t, c.mode)
+		b.doc = a.seen().clone()
+		want, _ := b.encodeFor(c.fmtID, "", nil)
+		got, _ = a.encodeFor(c.fmtID, "", nil)
+		if !bytesEq(got, want) {
+			t.Fatalf("%s: the file is not the page as seen", c.mode)
+		}
+		// kept beside the file
+		p := filepath.Join(t.TempDir(), "art"+c.ext)
+		if !a.writeOut(p, c.fmtID) {
+			t.Fatalf("%s: %q", c.mode, a.message)
+		}
+		r := restart(t, c.mode)
+		r.openPath(p, "auto")
+		if r.mode != c.mode || r.nLayers() != 2 || !sameLook(r.seen(), a.seen()) {
+			t.Fatalf("%s: opened again: %s, %d layers (%q)", c.mode, r.mode, r.nLayers(), r.message)
+		}
+		// a page of layers keeps its machine
+		a.setMode("pc")
+		if a.mode != c.mode || !strings.Contains(a.message, "Merge the layers") {
+			t.Fatalf("%s: changed to PC with layers: %s", c.mode, a.mode)
+		}
+	}
+}
+
+func TestLay2MachineClearCells(t *testing.T) {
+	a := testApp(t, "zx")
+	a.doc.set(0, 0, zxCell('A', 1, 2, false, false))
+	a.newLayer(false)
+	a.doc.set(0, 0, zxCell(32, 1, 7, false, false)) // white paper: covers, as on the screen
+	if a.seen().get(0, 0) != zxCell(32, 1, 7, false, false) {
+		t.Fatal("zx: white paper does not cover")
+	}
+	a.doc.set(0, 0, zxCell(32, 6, 0, false, true)) // a flashing space shows its ink
+	if a.seen().get(0, 0)&flashFlag == 0 {
+		t.Fatal("zx: a flashing space is clear")
+	}
+	a.doc.set(0, 0, zxCell(32, 6, 0, true, false)) // bright black: covers
+	if a.seen().get(0, 0) == zxCell('A', 1, 2, false, false) {
+		t.Fatal("zx: bright black is clear")
+	}
+	a.toggleBlackClear()
+	if a.layers[1].clear != layerNormal {
+		t.Fatal("zx: black shows below (ink and paper share their brightness)")
+	}
+	m := testApp(t, "mz")
+	m.doc.set(0, 0, mzCell('A', 1, 2))
+	m.newLayer(false)
+	m.doc.set(0, 0, mzCell(256+32, 7, 0)) // the second set's 32 is a glyph
+	if m.seen().get(0, 0) != mzCell(256+32, 7, 0) {
+		t.Fatal("mz: the second set's 32 is clear")
+	}
+	m.doc.set(0, 0, mzCell('Z', 5, 0))
+	m.toggleBlackClear()
+	if m.seen().get(0, 0) != mzCell('Z', 5, 2) {
+		t.Fatalf("mz: black shows below: %08x", m.seen().get(0, 0))
+	}
+	c := testApp(t, "cpc")
+	c.doc.set(0, 0, makeCell('A', 1, 3, 0))
+	c.newLayer(false)
+	c.doc.set(0, 0, makeCell('Z', 2, 0, 0))
+	c.toggleBlackClear()
+	if c.seen().get(0, 0) != makeCell('Z', 2, 3, 0) {
+		t.Fatal("cpc: black shows below")
+	}
+}

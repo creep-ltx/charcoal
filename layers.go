@@ -43,21 +43,19 @@ const (
 )
 
 // layered: the page type can have layers. Not teletext, Viewdata and Minitel (an
-// attribute acts on the rest of its row), not yet the machines whose empty cell is
-// not blank (Spectrum, CPC, MSX, MZ-700), not pages with a picture under the cells.
+// attribute acts on the rest of its row), not pages with a picture under the cells.
+// On the Spectrum, CPC, MSX and MZ-700 a layer's empty cell is a space on paper 0
+// (black; the CPC's ink 0), as every eraser writes it; the machine's own cleared
+// cell (white paper, white on blue) covers, as it does on the screen.
 func (a *App) layered() bool {
-	switch a.mode {
-	case "pc", "amiga", "uni", "c64", "atari", "st":
-		return !a.igsPage() && !a.skyPage()
-	}
-	return false
+	return layerMode(a.mode) && !a.igsPage() && !a.skyPage()
 }
 
 // blackClears: the page's cells have backgrounds of their own, so "black shows
 // below" means something.
 func (a *App) blackClears() bool {
 	switch a.mode {
-	case "pc", "amiga", "uni", "st":
+	case "pc", "amiga", "uni", "st", "cpc", "mz": // (a Spectrum's ink and paper share their brightness: no)
 		return true
 	}
 	return false
@@ -97,7 +95,7 @@ func layerFields(dst, src *Doc) {
 // mergeCell puts v (a cell of a layer above, clear its mode) over under; ok is
 // false when v lets under show unchanged. page is the page (for blankAt).
 func mergeCell(page *Doc, under, v uint32, clear int) (uint32, bool) {
-	if page.blankAt(v) {
+	if layerClearAt(page, v) {
 		return under, false
 	}
 	if clear != layerBlack {
@@ -115,6 +113,13 @@ func mergeCell(page *Doc, under, v uint32, clear int) (uint32, bool) {
 		return v, true
 	}
 	return v&^0xF000 | under&0xF000, true
+}
+
+// layerClearAt: cell v of a layer above the bottom one lets what is below show:
+// the page type's empty cell, but not a flashing Spectrum space (its ink shows)
+// nor the MZ-700's second set's character 32 (a glyph).
+func layerClearAt(page *Doc, v uint32) bool {
+	return page.blankAt(v) && v&(flashFlag|mzSet2) == 0
 }
 
 // flatten is the page as it is seen and saved: the visible layers put together,
@@ -239,7 +244,17 @@ const layersNoFrames = "Merge the layers first (Page > Merge all layers): these 
 // layerMode: pages of this type can have layers (see layered).
 func layerMode(m string) bool {
 	switch m {
-	case "pc", "amiga", "uni", "c64", "atari", "st":
+	case "pc", "amiga", "uni", "c64", "atari", "st", "zx", "cpc", "msx", "mz":
+		return true
+	}
+	return false
+}
+
+// layerFixedMode: a page type whose screen is its own shape (cells, colours):
+// a page of layers does not change to or from it.
+func layerFixedMode(m string) bool {
+	switch m {
+	case "zx", "cpc", "msx", "mz":
 		return true
 	}
 	return false
@@ -249,7 +264,7 @@ func layerMode(m string) bool {
 func (a *App) layerRefused() string {
 	switch {
 	case !a.layered():
-		return "Layers are for PC, Amiga, Unicode, PETSCII, Atari and Atari ST pages"
+		return "Layers are for PC, Amiga, Unicode, PETSCII, Atari, Atari ST, Spectrum, CPC, MSX and MZ-700 pages"
 	case collab != nil && collab.tab == a.Tab:
 		return "Layers cannot be shared (Moebius pages are one picture): end the drawing session first"
 	case a.nLayers() >= maxLayers:
@@ -646,6 +661,15 @@ func (a *App) layerPaper(v uint32) uint32 {
 		return a.screenRGB(a.doc.bg)
 	case a.st():
 		return a.pal[cellBg(v)&15]
+	case a.zx(): // the cleared screen's paper: white, the CPC's ink 0, the MZ-700's blue
+		return a.pal[7]
+	case a.cpc():
+		return a.pal[0]
+	case a.mz():
+		return a.pal[1]
+	case a.msx():
+		_, bg := a.msxSet.colours(cellCh(v))
+		return a.msxRGB(bg)
 	}
 	return uint32(cPaper)
 }

@@ -7,6 +7,9 @@ import "fmt"
 // emptyCell is what a new row or column is filled with: a space as the page
 // starts (black ink on white paper on a Spectrum, a plain space on teletext).
 func (a *App) emptyCell() uint32 {
+	if a.layers != nil && a.lay > 0 && (a.zx() || a.mz()) { // a layer's empty cell lets the ones below show (layers.go)
+		return blank
+	}
 	switch {
 	case a.zx():
 		return zxCell(32, 0, 7, false, false)
