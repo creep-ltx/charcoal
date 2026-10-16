@@ -157,8 +157,9 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   inks, pen and paper per cell); as a `.dsk` disk image holding that `.bin`; and Playscii `.psci` with Logiker's
   Amstrad ASCII Exporter's charsets (`CPC_Mode0/1/2`) and `cpc` palette. Opens the exporter's own `.bin` files,
   `.dsk` images (the first art program on the disk) and its `.psci`; Open as Amstrad CPC reads any file as the
-  CPC's text codes. All 2024 AMSCII Compo entries open and look pixel for pixel like their Caprice Forever
-  screenshots. Typing `^` gives the caret (0xA0; the CPC's 0x5E is an up arrow).
+  CPC's text codes. All 2024 AMSCII Compo entries open. Pictures (`.png`, GIF, APNG) are 768x544 in every mode,
+  the size and place of Caprice Forever's screenshots that the compos use, so a saved PNG matches the other
+  entries' pixel for pixel. Typing `^` gives the caret (0xA0; the CPC's 0x5E is an up arrow).
 - **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save; iCEDraw (.idf), ArtWorx (.adf) and
   TundraDraw (.tnd) open with their own fonts and colours and save (see Files for other editors). The same art
   in five formats (ansilove's test files, `testdata/alove`) gives the same page in all of them. PC attribute

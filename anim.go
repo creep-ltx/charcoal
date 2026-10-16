@@ -14,6 +14,7 @@ import (
 // renderDoc draws a page as the PNG export shows it: with the machine's
 // border on screen pages, at most 32000 pixels tall.
 func (a *App) renderDoc(d *Doc, z int) *FB {
+	z = a.cpcZoom(z)
 	keep := a.doc
 	a.doc = d // drawCell takes a screen page's colours from the page
 	defer func() { a.doc = keep }()
@@ -22,17 +23,39 @@ func (a *App) renderDoc(d *Doc, z int) *FB {
 	if a.screen() {
 		rows = max(rows, map[bool]int{true: 25, false: 24}[a.c64()])
 	}
-	border := 0
+	w, h := d.cols*a.cellW()*z, rows*H*z
+	bx, top, bottom := a.borderSize(w, h, z)
 	fb := &FB{}
-	if a.screen() || a.zx() || a.cpc() { // with the machine's border around it
-		border = 32 * z
-		fb.resize(d.cols*a.cellW()*z+2*border, rows*H*z+2*border)
+	fb.resize(w+2*bx, h+top+bottom)
+	if bx > 0 { // with the machine's border around it
 		fb.fill(Rect{0, 0, fb.w, fb.h}, a.borderPx(d))
-	} else {
-		fb.resize(d.cols*a.cellW()*z, rows*H*z)
 	}
-	a.paintCells(fb, border, border, z, func(x, y int) uint32 { return d.get(x, y) }, d.cols, rows)
+	a.paintCells(fb, bx, top, z, func(x, y int) uint32 { return d.get(x, y) }, d.cols, rows)
 	return fb
+}
+
+// cpcZoom doubles a CPC mode 0 or 1 page in pictures, so every mode comes out
+// at the size of mode 2's 640 x 400 (the monitor's lines, each shown twice).
+func (a *App) cpcZoom(z int) int {
+	if a.cpc() && a.cpcSet.mode != 2 {
+		return 2 * z
+	}
+	return z
+}
+
+// borderSize is the border left and right, at the top and at the bottom of a
+// w x h picture: none on Amiga and PC pages, 32 pixels (times the zoom) on
+// other machines' pages. A CPC's is as its monitor shows it, placed as in
+// Caprice Forever's screenshots (the AMSCII compos' own): 768 x 544, the
+// 640 x 400 screen at 64,82.
+func (a *App) borderSize(w, h, z int) (int, int, int) {
+	switch {
+	case a.cpc():
+		return w / 10, h * 82 / 400, h * 62 / 400
+	case a.screen() || a.zx():
+		return 32 * z, 32 * z, 32 * z
+	}
+	return 0, 0, 0
 }
 
 // animFrame is one picture of an animation: the part that changed from the
@@ -132,16 +155,15 @@ func (a *App) animFrames(z int) (frames []animFrame, w, h int, pal color.Palette
 
 // renderSize is the size renderDoc gives a page, without drawing it.
 func (a *App) renderSize(d *Doc, z int) (int, int) {
+	z = a.cpcZoom(z)
 	H := a.cellH()
 	rows := max(1, min(d.rows, 32000/(H*z)))
 	if a.screen() {
 		rows = max(rows, map[bool]int{true: 25, false: 24}[a.c64()])
 	}
 	w, h := d.cols*a.cellW()*z, rows*H*z
-	if a.screen() || a.zx() || a.cpc() {
-		w, h = w+64*z, h+64*z
-	}
-	return w, h
+	bx, top, bottom := a.borderSize(w, h, z)
+	return w + 2*bx, h + top + bottom
 }
 
 func rgb(c uint32) color.RGBA { return color.RGBA{uint8(c >> 16), uint8(c >> 8), uint8(c), 255} }

@@ -519,9 +519,31 @@ func TestCPCEditor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w, h := img.Bounds().Dx(), img.Bounds().Dy(); w != 320+64 || h != 200+64 {
+	if w, h := img.Bounds().Dx(), img.Bounds().Dy(); w != 768 || h != 544 {
 		t.Fatalf("picture %dx%d", w, h)
 	}
+	// Every mode's picture is the 768 x 544 of the compos' emulator screenshots
+	// (twice that for "twice the size"), the page 640 x 400 inside it.
+	keep := a.cpcSet.mode
+	for mode, cols := range []int{20, 40, 80} {
+		a.cpcSet.mode = mode
+		d := newDoc(cols, 25)
+		for z := 1; z <= 2; z++ {
+			if w, h := a.renderSize(d, z); w != 768*z || h != 544*z {
+				t.Fatalf("mode %d zoom %d: picture %dx%d", mode, z, w, h)
+			}
+			if fb := a.renderDoc(d, z); fb.w != 768*z || fb.h != 544*z {
+				t.Fatalf("mode %d zoom %d: drawn %dx%d", mode, z, fb.w, fb.h)
+			} else if fb.px[(82*z-1)*fb.w+64*z] == fb.px[82*z*fb.w+64*z-1] {
+				// the screen starts at 64,82 as in Caprice's screenshots: the
+				// pixel above its corner is border, the corner is paper
+				if fb.px[82*z*fb.w+64*z] == fb.px[(82*z-1)*fb.w+64*z] {
+					t.Fatalf("mode %d zoom %d: screen not at 64,82", mode, z)
+				}
+			}
+		}
+	}
+	a.cpcSet.mode = keep
 	if r, g, bb, _ := img.At(1, 1).RGBA(); uint32(r>>8)<<16|uint32(g>>8)<<8|uint32(bb>>8) != cpcColour(4)&0xFFFFFF {
 		t.Fatal("border colour")
 	}
@@ -584,7 +606,7 @@ func TestCPCRealFiles(t *testing.T) {
 			return nil
 		}
 		n++
-		png, err := a.encode("png2")
+		png, err := a.encode("png")
 		if err != nil {
 			t.Fatal(err)
 		}

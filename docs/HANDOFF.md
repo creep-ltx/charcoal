@@ -380,8 +380,13 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   autosave, PNG border); `TestCPCRealFiles` with `CHARCOAL_CPC_FILES=dir` (2024 compo entries from
   files.scene.org/browse/parties/2024/amstrad_ascii_compo24/: 26 files open; renders were pixel-identical to the
   entries' Caprice Forever PNGs, offset 64,82 in their 768x544); `FuzzCPC` and FuzzParsers' cpc checks.
+- **Pictures** (PNG, GIF, APNG) are Caprice Forever's screenshot (2026-10-16, the user's choice): 768 x 544 in every
+  mode (`cpcZoom` doubles modes 0 and 1), the screen at 64,82 (`borderSize`: left/right w/10, top h*82/400, bottom
+  h*62/400); "twice the size" is 1536 x 1088. *Verified*: the whole PNG, border included, is byte-identical to 9
+  compo entries' own Caprice screenshots (the others' screenshots came from other tools: 1280x800, 768x576,
+  320x200). A .psci has no border colour, so its picture differs there.
 - Not done: CharEdit's .bin has not run on a real CPC or an emulator (no CPC emulator here; the stub is checked by
-  the Z80 test only); play (m) of the stream; the PNG is the generic 32-pixel border, not Caprice's 768x544;
+  the Z80 test only); play (m) of the stream;
   BASIC listing; flashing inks shown as their first colour; custom characters (SYMBOL) ignored.
 
 ## Keys and safety (2026-10-13, evening)
