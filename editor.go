@@ -97,7 +97,7 @@ func defaultFkeys() map[string][][]int {
 	}
 }
 
-var bauds = []int{2400, 9600, 14400, 33600, 57600, 115200, telnet} // telnet: no speed limit, only a board's pauses
+var bauds = []int{1200, 2400, 9600, 14400, 33600, 57600, 115200, telnet} // telnet: no speed limit, only a board's pauses
 
 type Info struct {
 	title, author, group string
