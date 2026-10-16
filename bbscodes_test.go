@@ -443,3 +443,47 @@ func TestBBSFPipeBrightNote(t *testing.T) {
 		t.Fatal("only pipe codes count them")
 	}
 }
+
+// A pipe-code file with two screens splits into two frames read with its codes
+// (not shown as text), and saves back as frames, each after the board's clear.
+func TestBBSFSplitFrames(t *testing.T) {
+	src := []byte("|15Hello|07 one\r\n|CL|12Bye|07 two\r\n")
+	docs, _, _ := splitStream(src, "pc", 80, false, STRes{}, false, 0, "pipe")
+	if len(docs) != 2 || row(docs[0], 0) != "Hello one" || row(docs[1], 0) != "Bye two" || bbsFAttr(docs[1], 0, 0) != 0x0C {
+		t.Fatalf("%d frames: %q", len(docs), func() []string {
+			var r []string
+			for _, d := range docs {
+				r = append(r, row(d, 0))
+			}
+			return r
+		}())
+	}
+	var out []byte
+	for i, d := range docs {
+		o, _ := writeBBSCodes("pipe", d, i > 0, false)
+		out = append(out, o...)
+	}
+	back, _, _ := splitStream(out, "pc", 80, false, STRes{}, false, 0, "pipe")
+	if len(back) != 2 || row(back[1], 0) != "Bye two" {
+		t.Fatalf("saved frames read back as %d", len(back))
+	}
+}
+
+// A file with ANSI escapes and WWIV hearts that also draws ♥ stays ANSI: WWIV's
+// codes cannot hold a ♥. One whose codes hold everything saves back in them.
+func TestBBSFMixedKeepsWhatHoldsIt(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct{ name, src, want string }{
+		{"hearts.ans", "\x1b[0m\x1b[1;31m\x03\x1b[0m love \x033Hi \x035there \x037you \x033a \x035b \x037c\r\n", "ansi"},
+		{"mystic.ans", "\x1b[2J|15|17Main|07|16 |11x|15y |11z|15w", "pipe"},
+	}
+	for _, c := range cases {
+		a := testApp(t, "pc")
+		p := filepath.Join(dir, c.name)
+		os.WriteFile(p, []byte(c.src), 0o644)
+		a.openPath(p, "auto")
+		if a.codes == "" || a.saveFmt != c.want {
+			t.Errorf("%s: codes %q, saves as %q, want %q", c.name, a.codes, a.saveFmt, c.want)
+		}
+	}
+}

@@ -30,7 +30,8 @@ func hasInk(d *Doc, mode string) bool {
 // frame at every clear (atHome: at every cursor home too), and the last
 // screen; each frame holds as long as its bytes take at baud bits per second.
 // homes counts the cursor homes after something was drawn.
-func splitStream(b []byte, mode string, cols int, amiga bool, res STRes, atHome bool, baud int) (docs []*Doc, holds []int, homes int) {
+// codes: a BBS colour-code kind (bbscodes.go) the file is read with, as on opening it.
+func splitStream(b []byte, mode string, cols int, amiga bool, res STRes, atHome bool, baud int, codes ...string) (docs []*Doc, holds []int, homes int) {
 	if baud <= 0 {
 		baud = 14400
 	}
@@ -67,6 +68,9 @@ func splitStream(b []byte, mode string, cols int, amiga bool, res STRes, atHome 
 		d = newDoc(cols, 25)
 		t := newTerm(d, amiga)
 		em, setHooks = t, func(c, h func()) { t.beforeClear, t.beforeHome = c, h }
+		if len(codes) > 0 && codes[0] != "" {
+			em = newCodeTerm(t, codes[0]) // (the hooks stay on the Term it feeds)
+		}
 	}
 	pos, last, cells := 0, 0, 0
 	full := false
@@ -119,7 +123,7 @@ func (a *App) streamSplit() splitInfo {
 	if a.source == nil || a.srcKind != "" || a.sourceBin || a.zx() || a.tt() || a.cpc() || a.mt() {
 		return splitInfo{}
 	}
-	docs, _, homes := splitStream(a.source, a.mode, a.doc.cols, a.amiga(), a.res(), false, lineBps(a.baud))
+	docs, _, homes := splitStream(a.source, a.mode, a.doc.cols, a.amiga(), a.res(), false, lineBps(a.baud), a.codes)
 	return splitInfo{len(docs), homes}
 }
 
@@ -127,7 +131,7 @@ func (a *App) streamSplit() splitInfo {
 // home), as one undo step.
 func (a *App) splitFrames(atHome bool) {
 	a.endPlay()
-	docs, holds, _ := splitStream(a.source, a.mode, a.doc.cols, a.amiga(), a.res(), atHome, lineBps(a.baud))
+	docs, holds, _ := splitStream(a.source, a.mode, a.doc.cols, a.amiga(), a.res(), atHome, lineBps(a.baud), a.codes)
 	if len(docs) < 2 {
 		a.msg("The file shows only one picture")
 		return

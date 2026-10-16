@@ -17,6 +17,7 @@ package main
 // from track 17 down and 19 up, every 10th sector on a track.
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -252,6 +253,10 @@ func d64Chain(img []byte, tracks, t, s int) []byte {
 	return out
 }
 
+// errD64NoScreen: a good disk, but no program on it is a screen CharEdit can open
+// (someone else's programs, as a .prg of another form).
+var errD64NoScreen = errors.New("no screen in Petmate's or CharEdit's form on the disk")
+
 // d64Art is the first program on the disk that CharEdit can open (Petmate's
 // form or its own) and how many art programs there are.
 func d64Art(img []byte) (d64File, int, error) {
@@ -270,7 +275,7 @@ func d64Art(img []byte) (d64File, int, error) {
 		}
 	}
 	if n == 0 {
-		return d64File{}, 0, fmt.Errorf("no screen in Petmate's or CharEdit's form on the disk (%d files)", len(files))
+		return d64File{}, 0, fmt.Errorf("%w (%d files)", errD64NoScreen, len(files))
 	}
 	return first, n, nil
 }

@@ -309,7 +309,11 @@ func (a *App) splitCheckOf(b []byte, path, mode string, res *checkResult) int {
 		res.problem = strings.TrimSpace(res.problem + " split save: " + err.Error())
 		return n
 	}
-	docs, _, _ := splitStream(out, a.mode, a.doc.cols, a.amiga(), a.res(), false, a.baud)
+	codes := ""
+	if isBBSCodes(fmtID) {
+		codes = fmtID // saved in a board's colour codes: read back with them
+	}
+	docs, _, _ := splitStream(out, a.mode, a.doc.cols, a.amiga(), a.res(), false, a.baud, codes)
 	if len(docs) != n {
 		// Empty pictures in the file are no frames; written, they are the same count.
 		res.problem = strings.TrimSpace(res.problem + fmt.Sprintf(" split: %d frames saved, %d read back", n, len(docs)))

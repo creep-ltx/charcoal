@@ -389,7 +389,12 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   (`force`); Ctrl-A ☺ -> Ctrl-A A, 0x1A -> Ctrl-A z. Loss (`bbsLoss`): Celerity has no bit 7, WWIV cannot write ♥
   (a heart + printable byte is always a code there): spaces; the save's message says how many.
 - **Loading** (`loadBytes`): `bbsCodesKind` after the PCBoard/Avatar check, or Open as a kind. `saveFmt` = the
-  kind, also with ANSI escapes in the file (the user's choice 2026-10-16: a Mystic file keeps its pipe codes). Ctrl-A E sets the page's iCE. Save in another own format clears
+  kind, also with ANSI escapes in the file (the user's choice 2026-10-16: a Mystic file keeps its pipe codes) -
+  but only when the codes hold the whole page (`writeBBSCodes` loses nothing: no ♥ for WWIV, no bit 7 for
+  Celerity); else ANSI (the big check's 1990 WWIV ANSIs with heart footers that also draw ♥). Frames are written
+  one after another, each after the board's clear; `splitStream(..., codes)` reads a codes file's frames with its
+  codes (the app's Split did not before: fixed 2026-10-16). A .d64 with no screen of ours is a refusal
+  (`errD64NoScreen`, the same words as a foreign .prg), not a load failure. Ctrl-A E sets the page's iCE. Save in another own format clears
   `Tab.codes` (writeOut). Open as now also lists PCBoard and Avatar; the C64 entry is skipped (not cut off) when
   the ROMs are missing (`shown` in dialogs.go).
 - **Detection** rules (checked on the big check's 8479 files: only 13 WWIV ANSIs from 1990 with real hearts are

@@ -638,6 +638,10 @@ func bbsOpenNote(kind, saveFmt string) string {
 }
 
 // lossNote tells what a save in kind could not keep ("" all of it).
+func (l bbsLoss) add(m bbsLoss) bbsLoss {
+	return bbsLoss{blink: l.blink + m.blink, hearts: l.hearts + m.hearts, bright: l.bright + m.bright}
+}
+
 func (l bbsLoss) note(kind string) string {
 	var parts []string
 	if l.blink > 0 {

@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -1481,7 +1482,10 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	case strings.HasSuffix(strings.ToLower(name), ".prg") && isOurC64Prg(b):
 		kind = "prg"
 	case isD64(name, b): // a disk with a screen's program on it (c64x_d64.go)
-		if _, _, err := d64Art(b); err != nil {
+		if _, _, err := d64Art(b); errors.Is(err, errD64NoScreen) {
+			a.msg("Only C64 programs in Petmate's form (Petmate, PETSCII editor) or CharEdit's can be opened: " + name + " has " + err.Error())
+			return
+		} else if err != nil {
 			a.msg("Could not open " + name + ": " + err.Error())
 			return
 		}
@@ -1653,6 +1657,15 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		a.srcKind = "tti"
 	}
 	a.reparse()
+	if a.codes != "" && a.saveFmt == a.codes && bytes.Contains(b, []byte("\x1b[")) {
+		// A file with ANSI escapes too saves back in its codes only if they can hold
+		// the whole page: an ANSI with a WWIV heart footer that also draws ♥ (a code
+		// to WWIV) stays ANSI.
+		if _, l := writeBBSCodes(a.codes, a.doc, false, a.ice); l.blink > 0 || l.hearts > 0 {
+			a.saveFmt = "ansi"
+			a.msg(bbsOpenNote(a.codes, a.saveFmt))
+		}
+	}
 	a.applyMode()
 	a.gen = nextGen()
 	a.markSaved()
@@ -2663,7 +2676,17 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	case "avt":
 		return writeAvatar(d, info.clear), nil
 	case "pipe", "ctrla", "wwiv", "wildcat", "celerity":
-		out, loss := writeBBSCodes(fmtID, d, info.clear, a.ice)
+		// Frames one after another, each after the board's clear (as a stream file's frames).
+		docs := []*Doc{d}
+		if a.nFrames() > 1 {
+			docs = a.allDocs()
+		}
+		var out []byte
+		var loss bbsLoss
+		for i, fd := range docs {
+			o, l := writeBBSCodes(fmtID, fd, info.clear || i > 0, a.ice)
+			out, loss = append(out, o...), loss.add(l)
+		}
 		if n := loss.note(fmtID); n != "" {
 			a.msg("Saved, but " + n)
 		}

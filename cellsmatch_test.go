@@ -23,7 +23,7 @@ func cellsMatch(fmtID string, x, y *Doc) (bool, string) {
 				if uniFLook(a) == uniFLook(b) {
 					continue
 				}
-			case "ansi", "pcb", "avt", "vt52":
+			case "ansi", "pcb", "avt", "vt52", "pipe", "ctrla", "wwiv", "wildcat", "celerity":
 				if isBlank(a) && isBlank(b) {
 					continue
 				}
