@@ -440,8 +440,9 @@ func (a *App) writeHTML() []byte {
 // ---------------------------------------------------------------- Petmate workspaces
 
 type petmatePixel struct {
-	Code  int `json:"code"`
-	Color int `json:"color"`
+	Code  int  `json:"code"`
+	Color int  `json:"color"`
+	Attr  *int `json:"attr,omitempty"` // Petmate9's VDC attribute byte (petmate9.go)
 }
 
 type petmateScreen struct {
@@ -496,7 +497,7 @@ func petmateOrder(screens []int, n int) []int {
 
 // petmateLower: the character set name Petmate (and Petmate9) gives says lower case.
 func petmateLower(charset string) int {
-	if strings.Contains(strings.ToLower(charset), "lower") {
+	if strings.Contains(strings.ToLower(charset), "lower") || strings.EqualFold(charset, "petBiz") { // the PET's business set (petmate9.go)
 		return 1
 	}
 	return 0
@@ -519,6 +520,7 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 		d := newDoc(w, h)
 		d.bg, d.border = s.BackgroundColor&15, s.BorderColor&15
 		ted := strings.HasPrefix(s.Charset, "c16") // Petmate9's C16/Plus/4 screens: whole TED colours (ted.go)
+		machine := petmate9Machine(s.Charset, w) // Petmate9's other machines (petmate9.go)
 		if ted {
 			d.bg, d.border = s.BackgroundColor&127, s.BorderColor&127
 		}
@@ -529,10 +531,16 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 					if ted {
 						d.cells[y*w+x] = tedCell(p.Code&255, p.Color&255)
 					}
+					if machine == "c128vdc" {
+						d.cells[y*w+x] = petmate9VDCCell(p.Code, p.Color, p.Attr)
+					}
 				}
 			}
 		}
-		out = append(out, PetScreen{doc: d, lower: petmateLower(s.Charset), name: s.Name, fb: i, machine: map[bool]string{true: "plus4"}[ted]})
+		if machine == "c128vdc" {
+			d.bg, d.border = c64OfVDC(s.BackgroundColor), -1
+		}
+		out = append(out, PetScreen{doc: d, lower: petmateLower(s.Charset), name: s.Name, fb: i, machine: machine})
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("the Petmate file has no screens")
@@ -589,21 +597,25 @@ func writePetmateFrames(src []byte, scr []PetScreen) []byte {
 			row := make([]petmatePixel, d.cols)
 			for x := range row {
 				v := d.get(x, y)
-				row[x] = petmatePixel{cellCh(v), cellFg(v)}
+				row[x] = petmatePixel{Code: cellCh(v), Color: cellFg(v)}
 				if s.machine == "plus4" { // Petmate9 keeps the TED's attribute byte
 					row[x].Color = tedAttr(v)
+				}
+				if s.machine == "c128vdc" { // the VDC's colour numbers and attribute byte (petmate9.go)
+					c := vdcOfC64[cellFg(v)]
+					row[x].Color, row[x].Attr = c, &c
 				}
 			}
 			cells[y] = row
 		}
 		fb["width"], fb["height"], fb["framebuf"] = raw(d.cols), raw(rows), raw(cells)
 		fb["backgroundColor"], fb["borderColor"] = raw(d.bg), raw(d.borderColour())
+		if s.machine == "c128vdc" {
+			fb["backgroundColor"] = raw(vdcOfC64[d.bg&15])
+		}
 		var cs string
-		if json.Unmarshal(fb["charset"], &cs) != nil || petmateLower(cs) != max(s.lower, 0) || strings.HasPrefix(cs, "c16") != (s.machine == "plus4") {
-			fb["charset"] = raw(map[bool]string{true: "lower", false: "upper"}[s.lower == 1])
-			if s.machine == "plus4" {
-				fb["charset"] = raw(map[bool]string{true: "c16Lower", false: "c16Upper"}[s.lower == 1])
-			}
+		if json.Unmarshal(fb["charset"], &cs) != nil || petmateLower(cs) != max(s.lower, 0) || petmate9Machine(cs, d.cols) != petmate9Machine(petmate9Charset(s.machine, false), d.cols) {
+			fb["charset"] = raw(petmate9Charset(s.machine, s.lower == 1))
 		}
 		if s.name != "" {
 			fb["name"] = raw(s.name)

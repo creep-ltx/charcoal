@@ -975,3 +975,40 @@ func TestOthTheDrawFiles(t *testing.T) {
 		t.Fatalf("opened as %s, %d frames, path %q, saves %s", a.mode, a.nFrames(), a.path, a.saveFmt)
 	}
 }
+
+// ---------------------------------------------------------------- Petmate9's machines
+
+// Petmate9's charsets name the machine: a screen opens on its page and saves back with
+// Petmate9's charset name; VDC screens keep the VDC's colour numbers and "attr".
+func TestOthPetmate9Machines(t *testing.T) {
+	for _, c := range []struct {
+		charset string
+		width   int
+		machine string
+		lower   int
+	}{{"vic20Upper", 22, "vic20", 0}, {"vic20Lower", 22, "vic20", 1}, {"petGfx", 40, "pet", 0}, {"petBiz", 80, "pet80", 1},
+		{"c128Upper", 40, "c128", 0}, {"c128Lower", 80, "c128vdc", 1}, {"c16Upper", 40, "plus4", 0}, {"upper", 40, "", 0}, {"lower", 40, "", 1}} {
+		js := fmt.Sprintf(`{"version":4,"screens":[0],"framebufs":[{"width":%d,"height":1,"backgroundColor":2,"borderColor":3,"charset":%q,"zoom":{"zoomLevel":2},"framebuf":[[%s]]}],"customFonts":{}}`,
+			c.width, c.charset, strings.TrimSuffix(strings.Repeat(`{"code":65,"color":5,"attr":69},`, c.width), ","))
+		scr, err := parsePetmate([]byte(js))
+		if err != nil || len(scr) != 1 || scr[0].machine != c.machine || scr[0].lower != c.lower {
+			t.Fatalf("%s: %v %+v", c.charset, err, scr)
+		}
+		v := scr[0].doc.cells[0]
+		if c.machine == "c128vdc" {
+			// attr 69 = reverse + colour 5 (VDC light green = the C64's 13)
+			if cellCh(v) != 65|128 || cellFg(v) != 13 || scr[0].doc.bg != c64OfVDC(2) {
+				t.Fatalf("vdc cell %08x bg %d", v, scr[0].doc.bg)
+			}
+		}
+		scr[0].machine = map[string]string{"": "c64"}[c.machine] + c.machine
+		out := writePetmateFrames([]byte(js), scr)
+		back, err := parsePetmate(out)
+		if err != nil || back[0].machine != c.machine || back[0].lower != c.lower || back[0].doc.cells[0] != v {
+			t.Fatalf("%s: written back %v %+v", c.charset, err, back)
+		}
+		if !strings.Contains(string(out), `"zoomLevel"`) {
+			t.Fatalf("%s: Petmate9's zoom was lost", c.charset)
+		}
+	}
+}
