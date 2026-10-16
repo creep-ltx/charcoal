@@ -3213,7 +3213,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
-	note := a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID) + a.tedSaved(path, fmtID) + a.dirartSaved(fmtID) + a.layersSaveNote(fmtID, own)
+	note := takeSaveNote() + a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID) + a.tedSaved(path, fmtID) + a.dirartSaved(fmtID) + a.layersSaveNote(fmtID, own)
 	if a.animatedSave(fmtID) {
 		note += pacedNote(a.pageBoard(), ps) + a.writeCopies(path, fmtID)
 	}

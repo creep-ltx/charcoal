@@ -21,14 +21,15 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
 func init() {
 	formats = append(formats, Format{"pd", "For other editors: PabloDraw (.pd)", ".pd", "amiga pc"},
-		Format{"bsv", "For other editors: BASIC BSAVE screen (.bsv)", ".bsv", "pc"})
-	editorOwn["pd"], editorOwn["bsv"] = true, true
+		Format{"bsv", "For other editors: BASIC BSAVE screen (.bsv)", ".bsv", "pc"},
+		Format{"td", "For other editors: TheDraw (.td)", ".td", "pc"})
+	editorOwn["pd"], editorOwn["bsv"], editorOwn["td"] = true, true, true
+	framesFormats["td"] = true // the frames are TheDraw's page layers
 }
 
 // ---------------------------------------------------------------- BSAVE
@@ -154,6 +155,125 @@ func uncrunchTD(src []byte, w, h int) (*Doc, bool) {
 		}
 	}
 	return d, true
+}
+
+// tdMaxPages is how many page layers TheDraw keeps (its manual: "8 page layers").
+const tdMaxPages = 8
+
+// tdHeader is the 367-byte setup TheDraw 4.60 writes before the pages (its
+// settings as it keeps them in memory: the fields CharEdit fills are known from
+// TheDraw's own files; the rest as TheDraw 4.63's DEMO_IMG.TD and SHADING.TD have
+// them, the junk it leaves in unused bytes as zeros). Bytes 55-62 are the eight
+// page layers: 2 holds a page, 1 an unused one.
+func tdHeader(w, h, pages, cur int) []byte {
+	b := make([]byte, 367)
+	copy(b, "\x15TheDraw Save File.\r\n\x1a\x044.60")
+	put := func(o, v int) { binary.LittleEndian.PutUint16(b[o:], uint16(v)) }
+	put(27, 1)     // the cursor's column (from 1)
+	put(29, 1)     // its row
+	put(31, cur+1) // the page layer shown (from 1)
+	put(33, 8)
+	put(35, 1)
+	put(37, 1)
+	put(39, w)
+	put(41, h)
+	put(49, 0x0E60)
+	for i := 0; i < tdMaxPages; i++ {
+		b[55+i] = 1
+		if i < pages {
+			b[55+i] = 2
+		}
+	}
+	ruler := func(o int) { // the tab ruler: a mark every 10 columns
+		b[o] = 80
+		for i := 1; i <= 80; i++ {
+			b[o+i] = 0xC4
+			if i%10 == 0 {
+				b[o+i] = 0xFE
+			}
+		}
+	}
+	ruler(63)
+	b[144], b[145], b[153], b[162] = 0x07, 0x0F, 0xD4, 1
+	ruler(164)
+	put(340, w)
+	put(342, h)
+	put(344, 1)
+	put(346, 1)
+	return b
+}
+
+// crunchTD is a page in TheDraw's crunched form (UNCRUNCH.PAS, the reverse of
+// uncrunchTD): colour codes where the attribute changes, runs of spaces and of
+// one character, a line code (24) per row. Every cell is written, blank ones too:
+// TheDraw clears its worksheet to its own colours (white on black as set up), not
+// to grey, so a cell left out would come back another colour (*verified* in
+// TheDraw 4.63).
+func crunchTD(d *Doc, w, h int) []byte {
+	var out []byte
+	attr := byte(0)
+	for y := 0; y < h; y++ {
+		if y > 0 {
+			out = append(out, 24)
+		}
+		end := w
+		for x := 0; x < end; {
+			v := d.get(x, y)
+			c, at := byte(cellCh(v)), cellAttr(v)
+			n := 1
+			for x+n < end && n < 256 && d.get(x+n, y)&0xFFFF == v&0xFFFF {
+				n++
+			}
+			if at&0x0F != attr&0x0F {
+				out = append(out, at&0x0F)
+			}
+			if at&0x70 != attr&0x70 {
+				out = append(out, 16+(at>>4)&7)
+			}
+			if at&0x80 != attr&0x80 {
+				out = append(out, 27)
+			}
+			attr = at
+			switch {
+			case c == ' ' && n >= 3:
+				out = append(out, 25, byte(n-1))
+			case c < 32 || n >= 4:
+				out = append(out, 26, byte(n-1), c)
+			default:
+				for k := 0; k < n; k++ {
+					out = append(out, c)
+				}
+			}
+			x += n
+		}
+	}
+	return out
+}
+
+// tdSize is the page size a .td is written at: TheDraw's worksheets are 80 or 160
+// columns wide (its manual, "Worksheet width"); the height is the tallest page's.
+func tdSize(docs []*Doc) (w, h int) {
+	for _, d := range docs {
+		w, h = max(w, d.cols), max(h, d.rows)
+	}
+	return map[bool]int{true: 80, false: 160}[w <= 80], max(1, h)
+}
+
+// writeTD writes pages (at most 8) as a TheDraw 4.60 save file; cur is the page
+// shown. A page that crunches to more than 64 KB cannot be stored (its length is 16 bits).
+func writeTD(docs []*Doc, cur int) ([]byte, error) {
+	docs = docs[:min(len(docs), tdMaxPages)]
+	w, h := tdSize(docs)
+	out := tdHeader(w, h, len(docs), max(0, min(cur, len(docs)-1)))
+	for i, d := range docs {
+		c := crunchTD(d, w, h)
+		if len(c) > 0xFFFF {
+			return nil, fmt.Errorf("page %d is too busy for a TheDraw file (%d bytes crunched, 65535 at most)", i+1, len(c))
+		}
+		out = binary.LittleEndian.AppendUint16(out, uint16(len(c)))
+		out = append(out, c...)
+	}
+	return out, nil
 }
 
 // ---------------------------------------------------------------- PabloDraw .pd
@@ -457,13 +577,22 @@ func (a *App) othLoad(kind string, b []byte, name, as string) (state int, note s
 	return icyPC, ""
 }
 
-// othAfterLoad: CharEdit does not write .TD; the page is a new ANSI file, so Ctrl+S asks where.
+// saveNote is what the last encoding has to say after "Saved file": writeOut
+// adds it to its message (takeSaveNote) and clears it.
+var saveNote string
+
+func takeSaveNote() string {
+	s := saveNote
+	saveNote = ""
+	return s
+}
+
+// othAfterLoad: a .TD's page layers are frames; Ctrl+S writes the .TD again.
 func (a *App) othAfterLoad(kind string) {
 	if kind != "td" {
 		return
 	}
-	a.path, a.name = "", strings.TrimSuffix(a.name, filepath.Ext(a.name))+".ans"
-	a.saveFmt = "ansi"
+	a.saveFmt = "td"
 	if n := a.nFrames(); n > 1 {
 		a.msg(fmt.Sprintf("%s: TheDraw's %d page layers as frames (%s and %s go through them)", a.name, n, keyName("frame_previous"), keyName("frame_next")))
 	}
@@ -511,6 +640,27 @@ func (a *App) othEncode(fmtID string, d *Doc) (out []byte, ok bool) {
 		if a.info.writeSauce || d.cols != 80 {
 			out = append(out, makeSauce(SauceInfo{title: a.info.title, author: a.info.author, group: a.info.group, cols: d.cols,
 				rows: max(1, d.rows), font: a.font().sauce, fileType: 8, flags: map[bool]int{true: 1}[a.ice]}, len(out))...)
+		}
+		return out, true
+	case "td":
+		docs := a.allDocs()
+		w, h := tdSize(docs)
+		var why []string
+		if len(docs) > tdMaxPages {
+			why = append(why, fmt.Sprintf("only the first %d frames (TheDraw has %d page layers)", tdMaxPages, tdMaxPages))
+			docs = docs[:tdMaxPages]
+		}
+		if w > 160 {
+			why = append(why, "only the first 160 columns")
+		}
+		out, err := writeTD(docs, a.cur)
+		if err != nil {
+			a.msg("Could not save: " + err.Error())
+			return nil, true
+		}
+		saveNote = fmt.Sprintf(" as a %dx%d TheDraw page", w, h)
+		if len(why) > 0 {
+			saveNote += ", " + strings.Join(why, " and ")
 		}
 		return out, true
 	case "bsv":
