@@ -27,6 +27,7 @@ func FuzzParsers(f *testing.F) {
 		"unsigned char a[]={0,0,1,2};\n// META: 1 1 C64 upper\n",
 		"\x11\x11\x11\x9d\x9c\x1d\x9b",
 		"\x1bY\x7f\x7fx\x1bL\x1bM",
+		"中文\x1b[1D語\x1b[3Cかな\x1b[2Ka😀\x03" + "4,2漢\n", // wide characters cut by cursor moves (wide.go)
 	} {
 		f.Add([]byte(s))
 	}
@@ -159,6 +160,9 @@ func FuzzParsers(f *testing.F) {
 				}
 				if len(d.cells) < d.rows*d.cols {
 					t.Fatalf("%s: %d cells for %dx%d", name, len(d.cells), d.cols, d.rows)
+				}
+				if x, y := wideOK(d); x >= 0 { // never half a wide character (wide.go)
+					t.Fatalf("%s: half a wide character at %d,%d", name, x, y)
 				}
 			}
 		}

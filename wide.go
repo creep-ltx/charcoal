@@ -103,6 +103,16 @@ func wideOK(d *Doc) (x, y int) {
 	return -1, -1
 }
 
+// wideAny: does a text hold a wide character?
+func wideAny(s string) bool {
+	for _, r := range s {
+		if uniWideRune(r) {
+			return true
+		}
+	}
+	return false
+}
+
 // wideIn: does a page hold any wide character (or a half of one)?
 func wideIn(d *Doc) bool {
 	if !d.uni {

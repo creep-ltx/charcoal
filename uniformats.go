@@ -106,9 +106,13 @@ func uniText(b []byte) string {
 	return sb.String()
 }
 
-// uniLongestLine counts the characters of the longest line (escape codes left out).
+// uniLongestLine counts the characters of the longest line (escape codes left
+// out). A line with wide characters counts its columns (a wide character two),
+// blanks at its end left out, when that is more: tools that count a wide
+// character as one column pad such lines to the others' length (docs/wide-design.md).
 func uniLongestLine(s string) int {
 	most, n, esc := 0, 0, 0
+	cols, ink, wide := 0, 0, false
 	for _, r := range s {
 		switch {
 		case esc == 1:
@@ -123,11 +127,23 @@ func uniLongestLine(s string) int {
 		case r == 0x1B:
 			esc = 1
 		case r == '\n':
-			n = 0
+			n, cols, ink, wide = 0, 0, 0, false
 		case r < 0x20 || (r >= 0x7F && r < 0xA0):
 		default:
 			n++
+			if r < 0xA0 || !uniInvisible(r) {
+				cols++
+			}
+			if uniWideRune(r) {
+				cols, wide = cols+1, true
+			}
+			if r != ' ' {
+				ink = cols
+			}
 			most = max(most, n)
+			if wide {
+				most = max(most, ink)
+			}
 		}
 	}
 	return most
@@ -154,8 +170,20 @@ func parseUniArt(b []byte, forceCols int) (*Doc, *Sauce) {
 	t.uni, t.lateWrap = true, true
 	var f fullest
 	t.beforeClear = func() { f.look(t.doc) }
+	hasWide := wideAny(text)
+	pend := 0 // blanks past the last column: dropped if only the line's end follows (wide.go)
 	for _, r := range text {
+		if pend > 0 && t.state == 0 && r != 0x1B && r != ' ' {
+			if r != '\n' && r != '\r' {
+				for ; pend > 0; pend-- {
+					t.putCode(' ')
+				}
+			}
+			pend = 0
+		}
 		switch {
+		case r == ' ' && t.state == 0 && t.x >= d.cols && hasWide && uniBlank(uniCell(' ', 0)|t.attr()):
+			pend++
 		case r < 0x80:
 			t.byte(byte(r))
 		case t.state != 0 || r < 0xA0 || uniInvisible(r): // inside an escape code, a C1 control, a BOM: nothing to draw
@@ -167,24 +195,32 @@ func parseUniArt(b []byte, forceCols int) (*Doc, *Sauce) {
 		}
 	}
 	if d = f.pick(t.doc); d == t.doc {
+		wideNormal(d) // cursor moves may have written over half a wide character
 		d.fit(cursorRows(t.x, t.y))
 		if sauceArt(sauce) && sauce.tinfo2 > d.rows && sauce.tinfo2 <= maxRowsFor(d.cols) && t.screens <= 1 {
 			d.ensureRows(sauce.tinfo2)
 		}
 	} else {
+		wideNormal(d)
 		d.fit(0)
 	}
 	d.uni = true
 	return d, sauce
 }
 
-// putCode puts a character code beyond a byte (put does the rest).
+// putCode puts a character code beyond a byte (put does the rest). A wide
+// character takes two cells; one that does not fit in the row goes to the
+// next, as a terminal wraps it.
 func (t *Term) putCode(code int) {
 	d := t.doc
-	if t.x >= d.cols {
+	if t.x >= d.cols || (t.x == d.cols-1 && d.cols > 1 && uniWideCode(code)) {
 		t.x, t.y = 0, t.y+1
 	}
 	d.set(t.x, t.y, uniCell(code, 0)|t.attr())
+	if uniWideCode(code) && d.cols > 1 {
+		t.x++
+		d.set(t.x, t.y, uniCell(uniCont, 0)|t.attr())
+	}
 	t.x++
 	if t.x >= d.cols && !t.lateWrap {
 		t.x, t.y = 0, t.y+1
@@ -236,6 +272,9 @@ func writeUniAnsi(d *Doc) []byte {
 		end := ends[y]
 		for x := 0; x < end; x++ {
 			v := d.get(x, y)
+			if uniIsCont(v) && uniIsLead(d.get(x-1, y)) { // a wide character's right half: the terminal moved on by two
+				continue
+			}
 			fg, bg, fl := styleParts(uniPair(v))
 			want := pen{fg, bg, fl&italic != 0, fl&underline != 0}
 			if uniCode(v) == 32 && !want.ul { // a space shows only its background
@@ -779,6 +818,9 @@ func parseMirc(b []byte) *Doc {
 			}
 			code, _ := uniCodeOf(r)
 			row = append(row, cell{code, f, g, it, ul})
+			if uniWideCode(code) { // two columns: its right half (wide.go)
+				row = append(row, cell{uniCont, f, g, it, ul})
+			}
 		}
 		cols = min(max(cols, len(row)), 4096)
 		rows = append(rows, row)
@@ -803,6 +845,7 @@ func parseMirc(b []byte) *Doc {
 			d.cells[y*cols+x] = uniCell(c.code, styleOf(c.fg, c.bg, fl))
 		}
 	}
+	wideNormal(d) // a wide character cut by the width limit
 	return d
 }
 
@@ -826,6 +869,9 @@ func writeMirc(d *Doc, pal *[16]uint32) ([]byte, int, int) {
 		it, ul := false, false
 		for x := 0; x < end; x++ {
 			v := d.get(x, y)
+			if uniIsCont(v) && uniIsLead(d.get(x-1, y)) { // a wide character's right half
+				continue
+			}
 			fg, bg := uniColoursOf(v)
 			f, okf := mircNumber(fg, pal)
 			g, okg := mircNumber(bg, pal)
@@ -887,7 +933,11 @@ func writeUniHTML(d *Doc, pal *[16]uint32, title string) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>%s</title>\n", html.EscapeString(title))
 	b.WriteString("<style>body{background:#000;margin:0}pre{margin:1em;font:16px/1 'DejaVu Sans Mono',Menlo,Consolas,monospace;letter-spacing:0}" +
-		"pre span{white-space:pre}</style></head><body><pre>")
+		"pre span{white-space:pre}")
+	if wideIn(d) { // a wide character takes two columns, whatever the font draws
+		b.WriteString(".w{display:inline-block;width:2ch;text-align:center;overflow:hidden;vertical-align:top}")
+	}
+	b.WriteString("</style></head><body><pre>")
 	for y := 0; y < d.rows; y++ {
 		end := d.cols
 		for end > 0 && uniBlank(d.get(end-1, y)) {
@@ -917,7 +967,13 @@ func writeUniHTML(d *Doc, pal *[16]uint32, title string) []byte {
 			if r < 0x20 {
 				r = ' '
 			}
-			b.WriteString(html.EscapeString(string(r)))
+			switch {
+			case uniIsCont(v) && uniIsLead(d.get(x-1, y)): // a wide character's right half
+			case uniIsLead(v) && uniIsCont(d.get(x+1, y)): // two columns, whatever width the browser's font gives it
+				b.WriteString(`<span class="w">` + html.EscapeString(string(r)) + `</span>`)
+			default:
+				b.WriteString(html.EscapeString(string(r)))
+			}
 		}
 		if open {
 			b.WriteString("</span>")

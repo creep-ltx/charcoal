@@ -1419,6 +1419,9 @@ func docText(d *Doc, runeOf func(int) rune, x0, y0, w, h int) []string {
 		for x := x0; x < x0+w; x++ {
 			v := d.get(x, y)
 			if d.uni {
+				if uniIsCont(v) && uniIsLead(d.get(x-1, y)) {
+					continue // a wide character's right half
+				}
 				sb.WriteRune(uniRune(uniCode(v))) // the page's whole character, not its low byte
 				continue
 			}

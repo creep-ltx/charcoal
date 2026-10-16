@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -159,5 +161,93 @@ func TestWideDrawn(t *testing.T) {
 	// The character table can show kanji (squeezed), so they can be typed.
 	if !a.uniHas(0x4E2D) {
 		t.Error("中 cannot be shown")
+	}
+}
+
+func wideFSame(t *testing.T, what string, got, want *Doc) {
+	t.Helper()
+	if got.cols != want.cols {
+		t.Fatalf("%s: %d columns, want %d", what, got.cols, want.cols)
+	}
+	for y := 0; y < want.rows; y++ {
+		if g, w := wideFRow(got, y), wideFRow(want, y); g != w {
+			t.Fatalf("%s: row %d %q, want %q", what, y, g, w)
+		}
+		for x := 0; x < want.cols; x++ {
+			if g, w := got.get(x, y), want.get(x, y); g != w {
+				t.Fatalf("%s: cell %d,%d %08X, want %08X", what, x, y, g, w)
+			}
+		}
+	}
+	wideFCheck(t, got, what)
+}
+
+func TestWideAnsi(t *testing.T) {
+	d := wideFDoc(t, 10, "ab中cかな", "漢字 x 가", "ｱ═Ａ")
+	d.set(2, 0, uniCell('中', pairOf(196, 4)))
+	d.set(3, 0, uniContOf(d.get(2, 0)))
+	b := writeUniAnsi(d)
+	if bytes.Contains(b, []byte("中 ")) || !bytes.Contains(b, []byte("漢字 x 가")) {
+		t.Errorf("written %q", b)
+	}
+	got, _ := parseUniArt(b, d.cols)
+	wideFSame(t, "UTF-8 ANSI", got, d)
+
+	// A wide character does not fit in the last column: it goes to the next row.
+	got, _ = parseUniArt([]byte("abc中\n"), 4)
+	if r0, r1 := wideFRow(got, 0), wideFRow(got, 1); r0 != "abc " || r1 != "中|  " {
+		t.Errorf("wrapped %q %q", r0, r1)
+	}
+	// Writing over half of one leaves a space in the other half (as a terminal).
+	got, _ = parseUniArt([]byte("中中中\r\x1b[1Cx\x1b[1Cy"), 8)
+	if r := wideFRow(got, 0); r != " x y中|  " {
+		t.Errorf("overwritten %q", r)
+	}
+	// The width of a line with wide characters is its columns.
+	if got, _ = parseUniArt([]byte(strings.Repeat("中", 50)+"\n"), 0); got.cols != 100 {
+		t.Errorf("%d columns", got.cols)
+	}
+}
+
+// A file whose tool counted a kanji as one column pads its line with blanks to
+// the others' length (MC_FRESHER-RX-78.ANS, Mistigris 2025-08): the blanks past
+// the page are dropped, the kanji stand where a terminal shows them.
+func TestWidePaddedLine(t *testing.T) {
+	art := strings.Repeat("#", 90) + "\n" +
+		"  \x1b[3;38;5;12m機\x1b[0m  \x1b[3;38;5;12m動\x1b[0m" + strings.Repeat(" ", 84) + "\n" +
+		strings.Repeat("#", 90) + "\n"
+	d, _ := parseUniArt([]byte(art), 0)
+	if d.cols != 90 || d.rows != 3 {
+		t.Fatalf("%dx%d", d.cols, d.rows)
+	}
+	if r := wideFRow(d, 1); r != "  機|  動|"+strings.Repeat(" ", 82) {
+		t.Errorf("row %q (%d), want %q", r, len([]rune(r)), "  機|  動|"+strings.Repeat(" ", 82))
+	}
+	if r := wideFRow(d, 2); r != strings.Repeat("#", 90) {
+		t.Errorf("next row %q", r)
+	}
+	// Blanks past the page that something follows wrap, as before.
+	d, _ = parseUniArt([]byte("中"+strings.Repeat("a", 3)+"   b\n"), 6)
+	if r := wideFRow(d, 1); r != "  b   " {
+		t.Errorf("wrapped %q", r)
+	}
+}
+
+func TestWideMircTextHTML(t *testing.T) {
+	a := testApp(t, "uni")
+	d := wideFDoc(t, 6, "a中b", "かな!")
+	b, _, _ := writeMirc(d, &a.pal)
+	got := parseMirc(b)
+	got = got.withCols(6)
+	wideFSame(t, "mIRC", got, d)
+	if lines := docText(d, a.runeOf, 0, 0, 0, 0); lines[0] != "a中b" || lines[1] != "かな!" {
+		t.Errorf("text %q", lines)
+	}
+	h := string(writeUniHTML(d, &a.pal, "x"))
+	if !strings.Contains(h, `<span class="w">中</span>b`) || !strings.Contains(h, ".w{display:inline-block;width:2ch") {
+		t.Errorf("HTML %s", h)
+	}
+	if h := string(writeUniHTML(wideFDoc(t, 3, "abc"), &a.pal, "x")); strings.Contains(h, ".w{") {
+		t.Error("a page without wide characters has the wide style")
 	}
 }

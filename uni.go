@@ -58,6 +58,8 @@ func uniRune(code int) rune {
 		return rune(0x1FB00 + code - 0xD800)
 	case code >= 0xD900 && code <= 0xDCFF:
 		return rune(0x1CC00 + code - 0xD900)
+	case code == uniCont: // a wide character's right half (wide.go)
+		return ' '
 	case code >= 0xDD00 && code <= 0xDFFF:
 		return '?'
 	case code == 0:
