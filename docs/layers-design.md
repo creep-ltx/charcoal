@@ -234,15 +234,11 @@ flat). (Question 2: the alternative is the frames rule, "page stays dirty".)
 Not in this round at all: lock (IcyDraw's lock flags are kept in `keep` and written back), groups, layer
 offsets, text layers, layer opacity, layers with frames.
 
-## 8. Questions for the user
+## 8. The user's answers (2026-10-16)
 
-1. **Clear cells by rule** (a blank cell shows what is below; covering with black needs a black full block) -
-   or an exact "nothing here" mark per cell (also a black space can cover, but every eraser and effect must be
-   taught, and more .icy/.xp files keep their layers)? Proposed: the rule.
-2. **Saving a layered page as .ans:** keep the layers beside the file (proposed; Ctrl+S marks it saved) or
-   treat it like frames (the .ans is an export, the page stays unsaved until .icy/.xp/.psci)?
-3. **Layers and frames together** left for later (a page has one or the other)?
-4. **The limit:** 16M cells for all layers together (a 100000-row page has room for one more full layer)?
-5. **The pick tool** picks what is seen; Copy copies the current layer and Edit > Copy what is seen the
-   picture. Right way round?
-6. **Hidden layers** are left out of flat saves and REXPaint files (with a message). Fine?
+1. Clear cells by the `blankAt` rule, as proposed (a black full block covers); `clear = 1` per layer as designed.
+2. After a flat save the layers are kept beside the file, keyed by the SHA-1 of the bytes written.
+3. Layers together with frames: later.
+4. 16M cells for all layers together.
+5. Pick = what is seen; Copy = the current layer; Edit > Copy what is seen = the picture.
+6. Hidden layers are left out of flat saves and REXPaint files, with a message.
