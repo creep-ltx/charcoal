@@ -58,3 +58,33 @@ func TestUniExternalDurdraw(t *testing.T) {
 		uniFSame(t, k+" colours, as durdraw exports it", got, d)
 	}
 }
+
+// TestWideExternalDurdraw: durdraw reads a .dur with wide characters CharEdit
+// wrote, and its ANSI export (what a terminal shows) is the page.
+func TestWideExternalDurdraw(t *testing.T) {
+	src := os.Getenv("CHARCOAL_DURDRAW_SRC")
+	if src == "" {
+		t.Skip("CHARCOAL_DURDRAW_SRC not set")
+	}
+	dir := t.TempDir()
+	runner := filepath.Join(dir, "run.py")
+	os.WriteFile(runner, []byte(fmt.Sprintf("import sys\nsys.path.insert(0, %q)\nfrom durdraw.main import main\nsys.argv = ['durdraw'] + sys.argv[1:]\nmain()\n", src)), 0o644)
+	d := wideFDoc(t, 12, "a中b字cかな!", "############")
+	d.set(1, 0, uniCell(uniCode(d.get(1, 0)), pairOf(2, 0)))
+	d.set(2, 0, uniContOf(d.get(1, 0)))
+	out, _ := writeDur([]*Doc{d}, []int{100}, "", "")
+	path := filepath.Join(dir, "wide.dur")
+	os.WriteFile(path, out, 0o644)
+	cmd := exec.Command("script", "-qec", fmt.Sprintf("python3 -I %s --16color --export-ansi %s", runner, path), "/dev/null")
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("durdraw: %v", err)
+	}
+	ref, err := os.ReadFile(strings.TrimSuffix(path, ".dur") + ".ansi")
+	if err != nil {
+		t.Fatalf("durdraw wrote nothing: %v", err)
+	}
+	got, _ := parseUniArt(ref, 12)
+	wideFSame(t, "as durdraw exports it", got, d)
+}

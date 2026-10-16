@@ -510,14 +510,22 @@ func parseDur(b []byte) (*durArt, error) {
 	for _, fr := range m.Frames {
 		d := newDoc(w, h)
 		d.uni = true
+		// durdraw keeps a character per cell and knows no widths; its export
+		// writes the characters in a row, so a terminal shows a wide character
+		// two columns wide and moves the rest on. Read the same: character i of
+		// a line is at cell at[y][i] (colours of colorMap's i), and blanks pushed
+		// past the page are dropped (docs/wide-design.md).
+		at, ends := make([][]int, h), make([]int, h)
 		for y, line := range fr.Contents {
 			if y >= h {
 				break
 			}
 			x := 0
 			for _, r := range line {
+				at[y] = append(at[y], x)
 				if x >= w {
-					break
+					x++
+					continue
 				}
 				code, _ := uniCodeOf(r)
 				if unicode.IsControl(r) || r == 0xAD || uniInvisible(r) {
@@ -528,17 +536,33 @@ func parseDur(b []byte) (*durArt, error) {
 				}
 				d.cells[y*w+x] = uniCell(code, 7)
 				x++
+				if uniWideCode(code) {
+					if x < w {
+						d.cells[y*w+x] = uniCell(uniCont, 7)
+					}
+					x++
+				}
 			}
+			ends[y] = x
 		}
 		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
+			for i := 0; i < w; i++ {
+				x := i // the cell of character i
+				if n := len(at[y]); i < n {
+					x = at[y][i]
+				} else {
+					x = ends[y] + i - n
+				}
+				if x >= w {
+					continue
+				}
 				var pair []int
 				if m.FormatVersion >= 8 {
-					if y < len(fr.ColorMap) && x < len(fr.ColorMap[y]) {
-						pair = fr.ColorMap[y][x]
+					if y < len(fr.ColorMap) && i < len(fr.ColorMap[y]) {
+						pair = fr.ColorMap[y][i]
 					}
-				} else if x < len(fr.ColorMap) && y < len(fr.ColorMap[x]) { // version 7: [column][line]
-					pair = fr.ColorMap[x][y]
+				} else if i < len(fr.ColorMap) && y < len(fr.ColorMap[i]) { // version 7: [column][line]
+					pair = fr.ColorMap[i][y]
 				}
 				if len(pair) < 2 {
 					continue
@@ -550,10 +574,14 @@ func parseDur(b []byte) (*durArt, error) {
 				if n, ok := legacyBg[g]; ok {
 					g = n
 				}
-				i := y*w + x
-				d.cells[i] = uniWithPair(d.cells[i], pairOf(durFg(f, c256), durBg(g, c256)))
+				k := y*w + x
+				d.cells[k] = uniWithPair(d.cells[k], pairOf(durFg(f, c256), durBg(g, c256)))
+				if x+1 < w && uniIsCont(d.cells[k+1]) {
+					d.cells[k+1] = uniWithPair(d.cells[k+1], pairOf(durFg(f, c256), durBg(g, c256)))
+				}
 			}
 		}
+		wideNormal(d) // a wide character at the last column: no room
 		ms := hold
 		if fr.Delay > 0 && fr.Delay < 3600 {
 			ms = int(math.Round(fr.Delay * 1000))
@@ -611,6 +639,9 @@ func writeDur(docs []*Doc, holds []int, name, artist string) ([]byte, int) {
 				if x >= d.cols || y >= d.rows {
 					v = blank
 				}
+				if uniIsCont(v) && uniIsLead(d.get(x-1, y)) {
+					continue // a wide character's right half: durdraw has a character per cell, its export moves on by two
+				}
 				r := uniRune(uniCode(v))
 				if r < 0x20 {
 					r = ' '
@@ -624,6 +655,11 @@ func writeDur(docs []*Doc, holds []int, name, artist string) ([]byte, int) {
 					bg = nearest256(colourRGB(bg, &vga16))
 				}
 				p := durColours(fg, bg, c256)
+				cm = append(cm, p[:])
+			}
+			for len(line) < w { // durdraw wants a character per cell: the line padded at its end
+				line = append(line, ' ')
+				p := durColours(7, 0, c256)
 				cm = append(cm, p[:])
 			}
 			fr.Contents = append(fr.Contents, string(line))

@@ -463,3 +463,32 @@ func TestWideLayersAndConversions(t *testing.T) {
 		}
 	}
 }
+
+func TestWideDur(t *testing.T) {
+	d := wideFDoc(t, 10, "a中b字c", "かなかなかな")
+	d.set(1, 0, uniCell(uniCode(d.get(1, 0)), pairOf(3, 1)))
+	d.set(2, 0, uniContOf(d.get(1, 0)))
+	out, _ := writeDur([]*Doc{d}, []int{100}, "", "")
+	art, err := parseDur(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wideFSame(t, ".dur", art.docs[0], d)
+	// A line as durdraw keeps it, a character per cell: a wide character moves the
+	// rest on (as durdraw's export shows it); what goes past the page is dropped.
+	js := `{"DurMovie":{"formatVersion":8,"colorFormat":"16","columns":4,"lines":1,"frames":[{"contents":["中ab "],"colorMap":[[[3,0],[4,0],[5,0],[2,0]]]}]}}`
+	art, err = parseDur([]byte(js))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := art.docs[0]
+	if r := wideFRow(g, 0); r != "中|ab" {
+		t.Errorf("read %q", r)
+	}
+	if fa, _ := uniColoursOf(g.get(2, 0)); fa != durFg(4, false) {
+		t.Errorf("a has colour %d: colours go with the characters", fa)
+	}
+	if f0, _ := uniColoursOf(g.get(1, 0)); f0 != durFg(3, false) {
+		t.Errorf("the right half has colour %d", f0)
+	}
+}
