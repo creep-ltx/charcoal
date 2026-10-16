@@ -510,7 +510,12 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 	}
 	var out []PetScreen
 	total := 0 // cells in all screens, kept under one largest page
-	for _, i := range petmateOrder(f.Screens, len(f.Framebufs)) {
+	order := petmateOrder(f.Screens, len(f.Framebufs))
+	first := "" // the page's machine: the first screen's (petmate9.go)
+	if len(order) > 0 {
+		first = petmate9Machine(f.Framebufs[order[0]].Charset, f.Framebufs[order[0]].Width)
+	}
+	for _, i := range order {
 		s := f.Framebufs[i]
 		w := max(1, min(s.Width, 1000))
 		h := max(1, min(s.Height, 10000)) // like parseMarq
@@ -531,13 +536,13 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 					if ted {
 						d.cells[y*w+x] = tedCell(p.Code&255, p.Color&255)
 					}
-					if machine == "c128vdc" {
+					if machine == "c128vdc" && first == machine {
 						d.cells[y*w+x] = petmate9VDCCell(p.Code, p.Color, p.Attr)
 					}
 				}
 			}
 		}
-		if machine == "c128vdc" {
+		if machine == "c128vdc" && first == machine {
 			d.bg, d.border = c64OfVDC(s.BackgroundColor), -1
 		}
 		out = append(out, PetScreen{doc: d, lower: petmateLower(s.Charset), name: s.Name, fb: i, machine: machine})
@@ -614,7 +619,7 @@ func writePetmateFrames(src []byte, scr []PetScreen) []byte {
 			fb["backgroundColor"] = raw(vdcOfC64[d.bg&15])
 		}
 		var cs string
-		if json.Unmarshal(fb["charset"], &cs) != nil || petmateLower(cs) != max(s.lower, 0) || petmate9Machine(cs, d.cols) != petmate9Machine(petmate9Charset(s.machine, false), d.cols) {
+		if json.Unmarshal(fb["charset"], &cs) != nil || petmateLower(cs) != max(s.lower, 0) || petmate9Known(cs) && petmate9Machine(cs, d.cols) != strings.TrimPrefix(s.machine, "c64") {
 			fb["charset"] = raw(petmate9Charset(s.machine, s.lower == 1))
 		}
 		if s.name != "" {

@@ -58,3 +58,12 @@ func petmate9VDCCell(code, color int, attr *int) uint32 {
 	}
 	return makeCell(code&255, c64OfVDC(color), 0, 0)
 }
+
+// petmate9Known: a charset name of the machines' own sets (not a custom font's).
+func petmate9Known(cs string) bool {
+	switch strings.ToLower(cs) {
+	case "upper", "lower", "c128upper", "c128lower", "c128vdc", "vic20upper", "vic20lower", "petgfx", "petbiz", "c16upper", "c16lower":
+		return true
+	}
+	return false
+}

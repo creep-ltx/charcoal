@@ -600,10 +600,13 @@ func (v *skyVM) run(b []byte) {
 	}, v.ctrl, v.ansi, v.sky)
 }
 
-// isSkyPix: does b hold SkyPix commands (two at least, of the numbers SkyPix has)?
+// isSkyPix: does b hold SkyPix commands (three at least, of the numbers SkyPix has), and no NUL?
 func isSkyPix(b []byte) bool {
+	if notArt(b) != "" || bytes.IndexByte(b[:min(len(b), 4096)], 0) >= 0 { // a picture or a program by chance
+		return false
+	}
 	n := 0
-	for i := 0; i+3 < len(b) && n < 2; i++ {
+	for i := 0; i+3 < len(b) && n < 3; i++ {
 		if b[i] != 0x1B || b[i+1] != '[' {
 			continue
 		}
@@ -622,7 +625,7 @@ func isSkyPix(b []byte) bool {
 			}
 		}
 	}
-	return n >= 2
+	return n >= 3
 }
 
 // readSkyPix reads a SkyPix file: the picture of its drawing part, and the cells CharEdit saved after it.
