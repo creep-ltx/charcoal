@@ -126,6 +126,7 @@ type Snap struct {
 	cpc    *cpcSetup // a CPC page's inks and mode as they were (nil on other pages)
 	mach   string    // a PETSCII page's machine: undoing a move to or from the Plus/4 brings its colours back
 	vic    *vicSetup // a C64 page's text mode and $D022-$D024 as they were (nil on other pages)
+	step   int       // the page's depth in this state (work stages: stages.go)
 }
 type Play struct {
 	bytes []byte
@@ -200,6 +201,8 @@ type Tab struct {
 	cpcSet              cpcSetup    // an Amstrad CPC page's mode, inks and border (cpc.go)
 	vic                 vicSetup    // a C64 page's text mode (multicolour, ECM) and $D022-$D024 (c64x.go)
 	igs                 *igsLayer   // an IGS file's picture under the cells and what saving keeps (igs_page.go)
+	steps               int         // the page's depth: the steps that led to it (work stages: stages.go)
+	stages              *stageLog   // the work's history, thinned, for the work stages (stages.go)
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -607,7 +610,7 @@ func nextGen() int { genSeq++; return genSeq }
 
 func (a *App) snapshot() Snap {
 	d := a.doc.clone()
-	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine}
+	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine, step: a.steps}
 }
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
@@ -619,6 +622,8 @@ func (a *App) pushUndo() { a.pushSnap(a.snapshot()) }
 // pushSnap puts an undo step on the stack, letting go of the oldest ones past
 // 300 steps or undoBudget cells.
 func (a *App) pushSnap(s Snap) {
+	a.Tab.recordStage(s) // the work stages' history (stages.go)
+	a.steps = s.step + 1
 	a.undo = append(a.undo, s)
 	total := 0
 	for _, s := range a.undo {
@@ -661,6 +666,7 @@ func (a *App) restore(s Snap) {
 		a.sel, a.float = nil, nil
 	}
 	a.doc, a.cx, a.cy, a.gen, a.order = s.doc, s.cx, s.cy, s.gen, s.order
+	a.steps = s.step
 	a.restoreUniMode(s.mode)
 	if s.cpc != nil && a.cpc() {
 		a.cpcSet = *s.cpc
@@ -2346,6 +2352,7 @@ func (a *App) openPath(path, as string) {
 	a.start = false
 	a.refMove = false
 	kept := a.ref // a reference put on the empty page stays, unless the file has its own
+	a.stages, a.steps = nil, 0
 	a.loadBytes(b, filepath.Base(path), path, as)
 	a.restoreRef(nil)
 	if kept != nil && a.ref == kept {
@@ -2359,6 +2366,8 @@ func (a *App) openPath(path, as string) {
 	}
 	a.restoreArtFont(path)
 	a.restoreVICMode(path) // a C64 page's multicolour or ECM (c64x.go)
+	// The work's history, for its work stages (stages.go).
+	a.restoreStages(path, b)
 }
 
 func (a *App) anyDirty() int {
@@ -2958,6 +2967,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		}
 		a.codes = map[bool]string{true: fmtID}[isBBSCodes(fmtID) || fmtID == "imageseq"] // the source is now in these codes (or none)
 		a.markSaved()
+		writeStages(a.Tab, path, data) // the work's history goes with the file (stages.go); losing it loses no art
 		dropAutosave(a.Tab)
 		a.rememberRef() // the reference goes with the file's new name
 		addRecent(path)

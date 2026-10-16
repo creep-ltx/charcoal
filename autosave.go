@@ -158,6 +158,9 @@ func writeAutosave(t *Tab) error {
 	if err := writeAtomic(base+".cells", cells); err != nil {
 		return err
 	}
+	if err := writeAutosaveStages(t, base+".stages"); err != nil { // the work's history (stages.go)
+		return err
+	}
 	if err := writeAtomic(base+".json", append(js, '\n')); err != nil {
 		return err
 	}
@@ -179,6 +182,7 @@ func removeAutosave(id string) {
 	os.Remove(base + ".json")
 	os.Remove(base + ".cells")
 	os.Remove(base + ".font")
+	os.Remove(base + ".stages")
 }
 
 // autosaveTick saves aside, every autosaveEvery, each page changed since its last autosave.
@@ -357,6 +361,7 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	a.gen = nextGen() // changed, not saved
 	a.dirty = true
 	a.cx, a.cy = 0, 0
+	a.stages, a.steps = readAutosaveStages(filepath.Join(autosaveDir(), f.id+".stages"), mode)
 	a.applyMode()
 	// Kept aside again under this CharEdit's name before the old one goes.
 	if err := writeAutosave(a.Tab); err != nil {

@@ -71,8 +71,12 @@ against each platform's best editor. Each step says what it wins.
 
 ## Step 3: compo-ready (wins: party entrants, the most active artists)
 
-- **Work stages**: export 6-10 stages from the undo history (Revision wants exactly 10, Deadline 6).
-- **Party rule check**: size limits (Revision 80x500), no iCE/blink for PC, ROM font for PETSCII.
+- [x] **Work stages** (2026-10-16, stages.go, docs/workstages-design.md): File > Export work stages writes N
+  pictures (PNG 1x/2x, the page's format too) spread evenly over the work, from a thinned history kept with the
+  file across sessions and in the autosave. (Revision oldskool wants exactly 10, Zoo 2026 at least 15.)
+- [x] **Party rule check** (2026-10-16, compo.go): File > Check for a party against 10 compos' 2026 rules (size,
+  iCE/blink, own font/palette, animation, C64 modes, page type, teletext rows); quiet report, no fixing; "Save
+  for the party" writes the files a compo wants (+ work stages) into a folder.
 - **Runs on the machine**: C64 .prg (done) and .d64 (done 2026-10-16), Atari .xex, Spectrum .tap, a matching screenshot PNG
   with the border.
   - [x] Atari .xex and a boot .atr (2026-10-16, atari8.go): the page in its colour registers and font on any
