@@ -1,18 +1,33 @@
 # Charcoal: where things stand (start here)
 
 Charcoal = **CharEdit** (editor, `charedit`) + **CharView** (viewer, `charview`), one Go + SDL2 binary
-(`go build -o charedit .`; `~/.local/bin/charedit` and `charview` link to it; the viewer is chosen by the
-program's name or `--view`). History: first a browser app called amiansi (kept in `web/`), then CharCool,
+(`make`, then `sudo make install` puts charedit + the charview link + a menu entry and icon in /usr/local;
+`go build -o charedit .` also works; the viewer is chosen by the program's name or `--view`). History: first a browser app called amiansi (kept in `web/`), then CharCool,
 renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remote origin, branch main).
 
-## Now (2026-10-14): 0.1b7 released
+## Now (2026-10-17): 0.1b14 released
 
-- **Released:** v0.1b7 (prerelease) on GitHub with Linux, Windows and macOS zips. Roadmap steps 0, 1 and 2 are done
-  (data-loss fixes, Windows/Mac + start screen, frames, reference picture, own fonts, shapes), plus things users
-  asked for: animation templates (TheDraw's 14 scan patterns + 14 of our own), BBS pauses per board, Animate a
-  folder (random effects, budgets, random screens per board), Moebius compatibility + key presets, files for
-  other editors. **Next on the roadmap: step 3, compo-ready** (work stages from undo history, party rule check,
-  runs-on-the-machine exports), then step 4/5 (docs/roadmap.md).
+- **Released:** v0.1b14 (prerelease) with Linux, Windows and macOS zips; every release page is made from
+  CHANGELOG.md (read it for what each version brought). In two days (2026-10-16/17) seven rounds of helpers took
+  Charcoal from 7 page types to 18: Amstrad CPC, Unicode/terminal (+ wide characters), Minitel, Viewdata,
+  Plus/4/C16, MSX, Sharp MZ-700, C64 multicolour/ECM/charsets/DirArt, Atari ST IGS, SkyPix; BBS colour codes of
+  nine boards and Commodore boards' pauses; machine programs (.prg/.d64, .xex/.atr, .tap, CPC .bin/.dsk, MSX .rom,
+  MZ .mzf) checked in VICE/atari800/Fuse/MAME (tools/emucheck); party check + work stages; TheDraw fonts (Logo
+  tool, font editor, .td writing, checked in TheDraw 4.63 under QEMU); drawing together in Moebius's protocol;
+  layers (lock, frames, machine pages). Each area has its section below (dated, with its branch name); the
+  roadmap is docs/roadmap.md. **The user's per-area decisions are in "Decided"/"The user's decisions" bullets at
+  the top of each section** - keep them.
+- **Open, small:** a still layer shared across frames; C-Net 64 / DMBBS codes (no docs found); TheDraw 3 .td;
+  DirArt block counts; three checks this machine cannot do: wide characters in a real terminal (install xterm),
+  an input method, a real Moebius app joining CharEdit. Suggested to the user on 2026-10-17: pause rounds, let
+  sysops/artists try 0.1b14, act on their reports.
+- **Workflow that worked:** `next` (worktree ../Charcoal-next) is the integration branch; helpers in worktrees
+  ../Charcoal-<area> from `next`, briefs in the session scratchpad (preamble + one file per area); merge each into
+  `next`, or have the helper merge `next` into its branch when conflicts are many; full checks on `next`
+  (tests, CI mode, big check vs /tmp/bigcheck/report-before-r1.txt = 29 issues, CHARCOAL_EMU=1); then fast-forward
+  main, tag. Lessons: the knowledge base, claude-code/parallel-helpers-in-worktrees.md.
+- **No private paths in the repo:** a global pre-push hook refuses this PC's paths and names (see the knowledge
+  base, desktop/no-private-paths-on-github.md).
 - **Release how-to:** add the version's section to CHANGELOG.md (plain words for artists and sysops; the
   release page is made from it by tools/release/notes.sh, and the release job fails without it), bump
   `const version` in main.go (X.YbN = beta), commit, push main, `git tag -a vX.YbN -m ...`,
@@ -46,6 +61,10 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 - No picture import (PNG/HTML -> characters) for now.
 
 ## Page types and formats (all done, all tested)
+
+The table holds the first seven page types (to 0.1b7). The eleven added on 2026-10-16/17 (CPC, Unicode, Minitel,
+Viewdata, Plus/4, MSX, MZ-700, and the C64 modes, IGS, SkyPix, DirArt) each have their own section below; the
+README's "What it does" lists every page and format.
 
 | Page | Files |
 |---|---|

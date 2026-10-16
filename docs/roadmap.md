@@ -199,4 +199,4 @@ against each platform's best editor. Each step says what it wins.
 - Palette editing beyond 16 colours.
 - Not planned: Shift-JIS AA (proportional, scene gone), RIPscrip (vector, not text).
 
-Last updated 2026-10-14 (steps 0-2 done, plus animation templates, BBS pauses, Animate a folder, Moebius and other editors' files; 0.1b7 released; next: step 3).
+Last updated 2026-10-17 (0.1b14 released: rounds 1-7 of 2026-10-16/17 done - see HANDOFF "Now"; open: the small items listed there).
