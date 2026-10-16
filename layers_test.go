@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -148,5 +151,105 @@ func TestLayFlattenUni(t *testing.T) {
 	fg, bg, fl := styleParts(uniPair(g))
 	if uniCode(g) != 'é' || fg != 150 || bg != 100 || fl != italic {
 		t.Fatalf("black shows below: %c %d %d %x", uniCode(g), fg, bg, fl)
+	}
+}
+
+// layFArt draws something on the app's page: a few characters in a few colours.
+func layFArt(a *App, seed int) {
+	d := a.doc
+	for y := range min(d.rows, 6) {
+		for x := range min(d.cols, 20) {
+			if (x*7+y*3+seed)%4 == 0 {
+				continue
+			}
+			ch, fg, bg := 'A'+(x+y+seed)%26, 1+(x+seed)%7, (y+seed)%3
+			if a.uni() {
+				d.set(x, y, uniCell(int(ch), styleOf(fg, bg, 0)))
+			} else {
+				d.set(x, y, makeCell(int(ch), fg, bg, 0))
+			}
+		}
+	}
+}
+
+// layFSplit makes the app's page two layers that look the same as it does: the
+// left half at the bottom, the right half on top (its left half blank).
+func layFSplit(a *App) {
+	whole := a.doc
+	base, top := whole.clone(), a.blankLike(whole)
+	top.ensureRows(whole.rows)
+	top.rows = whole.rows
+	for y := range whole.rows {
+		for x := whole.cols / 2; x < whole.cols; x++ {
+			if v := whole.get(x, y); !whole.blankAt(v) {
+				top.set(x, y, v)
+				base.set(x, y, makeCell('?', 3, 2, 0))
+			}
+		}
+	}
+	layerFields(top, whole)
+	layF2(a, base, top)
+}
+
+// Saving a page of two layers gives the bytes its flattened page of one layer gives, in every format.
+func TestLaySavesAsSeen(t *testing.T) {
+	for _, mode := range []string{"pc", "amiga", "uni", "c64", "atari", "st"} {
+		a := testApp(t, mode)
+		layFArt(a, len(mode))
+		flat := a.doc.clone()
+		layFSplit(a)
+		if !slices.Equal(a.seen().cells, flat.cells) {
+			t.Fatalf("%s: the two layers do not look like the page", mode)
+		}
+		for _, f := range a.modeFormats() {
+			got, err1 := a.encode(f.id)
+			live := a.doc
+			ls, lay := a.layers, a.lay
+			a.layers, a.lay, a.doc = nil, 0, flat.clone()
+			want, err2 := a.encode(f.id)
+			a.layers, a.lay, a.doc = ls, lay, live
+			if (err1 == nil) != (err2 == nil) || !bytes.Equal(got, want) {
+				t.Errorf("%s %s: layered %d bytes (%v), flat %d bytes (%v)", mode, f.id, len(got), err1, len(want), err2)
+			}
+			if a.doc != live || a.seeing || a.layers[a.lay].doc == live {
+				t.Fatalf("%s %s: asSeen did not put the layer back", mode, f.id)
+			}
+		}
+	}
+}
+
+func TestLayRefusals(t *testing.T) {
+	a := testApp(t, "pc")
+	layFArt(a, 1)
+	layFSplit(a)
+	a.newFrame()
+	if a.frames != nil || !strings.Contains(a.message, "Merge the layers") {
+		t.Fatalf("a new frame on a layered page: %v %q", a.frames != nil, a.message)
+	}
+	if err := a.collabHost(0, false, "x", ""); err == nil || !strings.Contains(err.Error(), "layers") {
+		t.Fatalf("hosting a layered page: %v", err)
+	}
+}
+
+func TestLayStagesSeeLayers(t *testing.T) {
+	a := testApp(t, "pc")
+	layFArt(a, 2)
+	layFSplit(a)
+	before := a.seen()
+	a.pushUndo() // step 0 -> 1: the log keeps the page before the edit
+	a.doc.set(0, 0, makeCell('Z', 1, 0, 0))
+	a.pushUndo()
+	if a.stages == nil || len(a.stages.Pics) == 0 {
+		t.Fatal("no stage recorded")
+	}
+	if got := (stageCand{pic: &a.stages.Pics[0]}).page(); got == nil || !slices.Equal(got.cells, before.cells) {
+		t.Fatal("the recorded stage is not the page as seen")
+	}
+	cands := a.stageCands()
+	if last := cands[len(cands)-1].page(); !slices.Equal(last.cells, a.seen().cells) {
+		t.Fatal("the stage now is not the page as seen")
+	}
+	if first := cands[0].page(); !slices.Equal(first.cells, before.cells) {
+		t.Fatal("an undo step's stage is not its page as seen")
 	}
 }

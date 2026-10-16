@@ -138,7 +138,14 @@ func (t *Tab) recordStage(s Snap) {
 	if s.cur != t.cur && t.frames != nil {
 		return // a step of another frame (undo's jump): not the picture being drawn
 	}
-	l.Pics = append(l.Pics, packDoc(s.doc, s.step))
+	d := s.doc
+	switch { // the layers put together (layers.go): stages are what was seen
+	case s.layers != nil:
+		d = flatten(s.layers, s.lay, s.doc)
+	case t.layers != nil && !s.lwhole && s.lay == t.lay:
+		d = flatten(t.layers, t.lay, s.doc)
+	}
+	l.Pics = append(l.Pics, packDoc(d, s.step))
 	for len(l.Pics) > stageMax || (l.bytes() > stageBytes && len(l.Pics) > 2) {
 		l.Every *= 2
 		l.Pics = slices.DeleteFunc(l.Pics, func(p stagePic) bool { return p.Step%l.Every != 0 })
@@ -218,9 +225,14 @@ type stageCand struct {
 	step int
 	pic  *stagePic // packed (from the log), or
 	doc  *Doc      // a page in memory (the undo stack, the page now)
+	lays []Layer   // the page's layers, doc being layer li (nil: doc is the page)
+	li   int
 }
 
 func (c stageCand) page() *Doc {
+	if c.doc != nil && c.lays != nil {
+		return flatten(c.lays, c.li, c.doc)
+	}
 	if c.doc != nil {
 		return c.doc
 	}
@@ -239,11 +251,11 @@ func (a *App) stageCands() []stageCand {
 		}
 	}
 	for _, s := range a.undo {
-		if s.doc != nil && s.mode == a.mode && !s.whole && (a.frames == nil || s.cur == a.cur) && s.step <= a.steps {
-			by[s.step] = stageCand{step: s.step, doc: s.doc}
+		if s.doc != nil && s.mode == a.mode && !s.whole && !s.lwhole && (a.frames == nil || s.cur == a.cur) && (a.layers == nil || s.lay == a.lay) && s.step <= a.steps {
+			by[s.step] = stageCand{step: s.step, doc: s.doc, lays: a.layers, li: a.lay} // the other layers as they are now
 		}
 	}
-	now := a.doc
+	now := a.seen()
 	if a.playing != nil {
 		now = a.playing.saved.doc
 	}
@@ -311,6 +323,7 @@ func (a *App) encodeStage(d *Doc, fmtID string) ([]byte, error) {
 	keep, msg, at := a.Tab, a.message, a.messageAt
 	t := *a.Tab
 	t.doc, t.frames, t.cur, t.order, t.playing = d, nil, 0, nil, nil
+	t.layers, t.lay, t.seeing = nil, 0, false // d is the picture: the layers put together already
 	t.source, t.srcKind, t.igs, t.undo, t.redo = nil, "", nil, nil, nil
 	t.gen, t.savedGen = -1, -2 // never "unchanged"
 	a.Tab = &t

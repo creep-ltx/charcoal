@@ -68,7 +68,7 @@ func (t *Tab) nLayers() int {
 
 // layerDoc is layer i's picture (the live one for the current layer).
 func (t *Tab) layerDoc(i int) *Doc {
-	if t.layers == nil || i == t.lay {
+	if t.layers == nil || i == t.lay && !t.seeing {
 		return t.doc
 	}
 	return t.layers[i].doc
@@ -198,3 +198,32 @@ func (t *Tab) cloneLayers(d *Doc) []Layer {
 	ls[t.lay].doc = d
 	return ls
 }
+
+// asSeen puts the page as it is seen in the tab's doc until the function it
+// gives is called: code that writes, exports or checks the whole page reads
+// a.doc, and so gets the layers put together (`defer a.asSeen()()`). The live
+// current layer waits in its place in the list meanwhile, so the layered writers
+// still find every layer. A page of one layer is left as it is.
+func (t *Tab) asSeen() func() {
+	if t.layers == nil || t.seeing {
+		return func() {}
+	}
+	live, kept := t.doc, t.layers[t.lay].doc
+	t.layers[t.lay].doc = live
+	t.doc, t.seeing = flatten(t.layers, t.lay, live), true
+	return func() {
+		t.doc, t.seeing = live, false
+		if t.lay < len(t.layers) {
+			t.layers[t.lay].doc = kept
+		}
+	}
+}
+
+// shownCell is the cell seen at x, y.
+func (t *Tab) shownCell(x, y int) uint32 {
+	v, _ := t.shownAt(x, y, -1)
+	return v
+}
+
+// layersNoFrames is why a layered page gets no frames (layers and frames together: later).
+const layersNoFrames = "Merge the layers first (Page > Merge all layers): frames are for pages of one layer"

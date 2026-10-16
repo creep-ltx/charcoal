@@ -167,6 +167,10 @@ func (a *App) blankLike(d *Doc) *Doc {
 // addFrame puts a picture in after the current frame and goes to it.
 func (a *App) addFrame(d *Doc, copied bool, what string) {
 	a.endPlay()
+	if a.layers != nil {
+		a.msg(layersNoFrames)
+		return
+	}
 	if a.frameCells()+d.cols*d.rows > maxPageCells {
 		a.msg("No more frames: all of them together would be larger than the largest page")
 		return

@@ -130,6 +130,9 @@ type Snap struct {
 	vic    *vicSetup // a C64 page's text mode and $D022-$D024 as they were (nil on other pages)
 	step   int       // the page's depth in this state (work stages: stages.go)
 	msx    *msxSetup // an MSX page's screen mode and colours as they were (nil on other pages)
+	lay    int       // the layer it belongs to (layers.go)
+	lwhole bool      // a step of the layer list (new, delete, merge, show ...): layers is the list
+	layers []Layer   // with lwhole: the list as it was (nil: a page of one layer)
 }
 type Play struct {
 	bytes []byte
@@ -211,6 +214,7 @@ type Tab struct {
 	layers              []Layer     // the page's layers, bottom first, when it has several (nil: one, the doc); see layers.go
 	lay                 int         // the layer being worked on: doc is it
 	others              int         // how the other layers are shown: 0 as they are, 1 dim, 2 hidden (view only)
+	seeing              bool        // doc is the layers put together for a while (asSeen); the live layer is in layers[lay]
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -658,7 +662,7 @@ func nextGen() int { genSeq++; return genSeq }
 
 func (a *App) snapshot() Snap {
 	d := a.doc.clone()
-	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine, step: a.steps, msx: a.msxSnap()}
+	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine, step: a.steps, msx: a.msxSnap(), lay: a.lay}
 }
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
@@ -2770,6 +2774,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 // encodeFor writes the page as fmtID; an animated stream gets board's pause
 // codes (bbspause.go; "" none), and *ps (when not nil) is where it pauses.
 func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
+	defer a.asSeen()() // the layers put together (layers.go)
 	d, am, info := a.doc, a.amiga(), a.info
 	paced := func(out []byte, p []pause) []byte {
 		if b := boardByID(board); b != nil && b.shows(fmtID) {
@@ -3120,7 +3125,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		return true
 	}
 	if fmtID == "vt52" {
-		if n := stUnprintable(a.doc); n > 0 {
+		if n := stUnprintable(a.seen()); n > 0 {
 			a.msg(fmt.Sprintf("Saved %s; %d characters below 32 became spaces (an ST cannot print them)", path, n) + note)
 			return true
 		}
@@ -3164,6 +3169,7 @@ type emulator interface {
 // playBytes is what Play sends: the file as read, or the page written out
 // (a changed page, or a file whose format is not a stream of codes).
 func (a *App) playBytes() []byte {
+	defer a.asSeen()() // the layers put together (layers.go)
 	if b := a.orderedPlayBytes(); b != nil {
 		return b
 	}

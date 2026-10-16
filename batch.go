@@ -502,6 +502,7 @@ var modeNoStream = map[string]string{
 func (r *batchRun) animate(it *batchItem, root, rel, full string, b []byte) {
 	a.dialog = nil
 	a.loadBytes(b, filepath.Base(full), full, "auto")
+	defer a.asSeen()() // a layered file: its layers put together (layers.go)
 	if _, asked := a.dialog.(*FontReq); asked && !a.hasC64 && (seqExt.MatchString(rel) || isPetmate(b) || isMarq(b) || strings.HasSuffix(strings.ToLower(rel), ".prg")) {
 		it.skipped = "PETSCII: the Commodore character ROMs are not here yet (open a .seq in CharEdit once to fetch them)"
 		return

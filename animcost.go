@@ -233,6 +233,7 @@ func (a *App) costOf(fmtID string, o *drawOrder, board string) animCost {
 // board, or b is not the page's animation): Play waits them at any speed, as
 // the board would.
 func (a *App) playPauses(b []byte) []pause {
+	defer a.asSeen()() // the layers put together (layers.go)
 	f := a.pageStreamFormat()
 	board := boardByID(a.pageBoard())
 	if board == nil || !board.shows(f) {
