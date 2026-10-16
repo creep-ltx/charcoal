@@ -520,7 +520,7 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 		d := newDoc(w, h)
 		d.bg, d.border = s.BackgroundColor&15, s.BorderColor&15
 		ted := strings.HasPrefix(s.Charset, "c16") // Petmate9's C16/Plus/4 screens: whole TED colours (ted.go)
-		machine := petmate9Machine(s.Charset, w) // Petmate9's other machines (petmate9.go)
+		machine := petmate9Machine(s.Charset, w)   // Petmate9's other machines (petmate9.go)
 		if ted {
 			d.bg, d.border = s.BackgroundColor&127, s.BorderColor&127
 		}
