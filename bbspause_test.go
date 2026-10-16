@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -98,6 +99,7 @@ func modelMystic(file []byte) (out []byte, ms int, err error) {
 	if !bytes.HasPrefix(file, []byte("|PO")) {
 		return nil, 0, fmt.Errorf("no |PO first")
 	}
+	attr := 0x07
 	for p := 0; p < len(file); p++ {
 		switch c := file[p]; c {
 		case 26:
@@ -113,7 +115,17 @@ func modelMystic(file []byte) (out []byte, ms int, err error) {
 				out = append(out, '|')
 			case "PO":
 			default:
-				return nil, 0, fmt.Errorf("unexpected code |%s", code)
+				// |00-|15 the foreground, |16-|23 the background (BIOS order; the rest kept).
+				n, err := strconv.Atoi(code)
+				switch {
+				case err != nil || n < 0 || n > 23:
+					return nil, 0, fmt.Errorf("unexpected code |%s", code)
+				case n < 16:
+					attr = attr&0xF0 | n
+				default:
+					attr = attr&0x8F | (n-16)<<4
+				}
+				out = append(out, cbbsSGR(attr)...)
 			}
 			p += 2
 		default:
@@ -163,6 +175,11 @@ func modelPCB(file []byte) (out []byte, ms int, err error) {
 				p += 5
 				continue
 			}
+			if len(rest) >= 4 && rest[0] == '@' && rest[1] == 'X' && isUpperHex(rest[2]) && isUpperHex(rest[3]) {
+				out = append(out, cbbsSGR(upperHexVal(rest[2])<<4|upperHexVal(rest[3]))...)
+				p += 3
+				continue
+			}
 			if bytes.HasPrefix(rest, []byte("@DELAY:")) {
 				q := 7
 				for q < len(rest) && rest[q] >= '0' && rest[q] <= '9' {
@@ -191,6 +208,7 @@ func modelPCB(file []byte) (out []byte, ms int, err error) {
 // modelSync: Synchronet's putmsg (Ctrl-A codes; every @ and | and LF of the
 // art followed by Ctrl-A Q, so no @-code or pipe colour can come of the art).
 func modelSync(file []byte) (out []byte, ms int, err error) {
+	attr := 0x07
 	for p := 0; p < len(file); p++ {
 		c := file[p]
 		if c == 1 {
@@ -211,7 +229,24 @@ func modelSync(file []byte) (out []byte, ms int, err error) {
 				out = append(out, 26)
 			case 'Q':
 			default:
-				return nil, 0, fmt.Errorf("unexpected Ctrl-A %q", file[p])
+				// Colours (con_out.cpp ctrl_a): N normal, H bright, I blink, letters the
+				// foreground (BIOS order), digits the background (ANSI order).
+				x := file[p]
+				switch i := strings.IndexByte("KBGCRMYW", x); {
+				case x == 'N':
+					attr = 0x07
+				case x == 'H':
+					attr |= 0x08
+				case x == 'I':
+					attr |= 0x80
+				case i >= 0:
+					attr = attr&^7 | i
+				case x >= '0' && x <= '7':
+					attr = attr&0x8F | biosANSI[x-'0']<<4
+				default:
+					return nil, 0, fmt.Errorf("unexpected Ctrl-A %q", x)
+				}
+				out = append(out, cbbsSGR(attr)...)
 			}
 			continue
 		}
@@ -253,6 +288,51 @@ func modelTempest(file []byte) (out []byte, ms int, err error) {
 	return out, ms, nil
 }
 
+// cbbsSGR is what a board sends for attribute a (BIOS order): an SGR that sets all of it.
+func cbbsSGR(a int) []byte {
+	v := biosANSI[a&15]
+	s := "\x1b[0;"
+	if v > 7 {
+		s += "1;"
+	}
+	if a&0x80 != 0 {
+		s += "5;"
+	}
+	return fmt.Appendf(nil, "%s%d;%dm", s, 30+v&7, 40+biosANSI[a>>4&7])
+}
+
+// cbbsCanon is what reaches a terminal with its colours made comparable: the
+// SGRs the boards have codes for, and the models' colour marks (0, attribute),
+// become one mark (0, attribute) before the next byte whenever the colours
+// changed; other bytes (and SGRs no board has a code for) stay as they are.
+func cbbsCanon(b []byte) []byte {
+	var out []byte
+	c := &sgrColours{fg: 7}
+	attr, shown := 0x07, -1
+	for i := 0; i < len(b); i++ {
+		if b[i] == 0 && i+1 < len(b) {
+			attr = int(b[i+1])
+			v := biosANSI[attr&15]
+			c.fg, c.bold, c.bg, c.blink = v&7, v > 7, biosANSI[attr>>4&7], attr&0x80 != 0
+			i++
+			continue
+		}
+		if n, ps, ok := sgrAt(b, i); n > 0 && ok && !slices.ContainsFunc(ps, func(p int) bool { return !(&sgrColours{kind: "ctrla"}).knows(p) }) {
+			c.attr = -1
+			c.code(b, i)
+			attr = c.attr
+			i += n - 1
+			continue
+		}
+		if attr != shown {
+			out = append(out, cbbsSGR(attr)...)
+			shown = attr
+		}
+		out = append(out, b[i])
+	}
+	return out
+}
+
 var boardModels = map[string]func([]byte) ([]byte, int, error){
 	"amiexpress": modelAE, "mystic": modelMystic, "pcboard": modelPCB, "synchronet": modelSync, "tempest": modelTempest,
 }
@@ -282,7 +362,8 @@ func checkPaced(t *testing.T, id string, stream []byte, ps []pause, what string)
 	if err != nil {
 		t.Fatalf("%s %s: %v", id, what, err)
 	}
-	if want := shown(id, stream); !bytes.Equal(got, want) {
+	got = cbbsCanon(got) // a board's colour codes and ANSI's SGRs that give the same colours are the same
+	if want := cbbsCanon(shown(id, stream)); !bytes.Equal(got, want) {
 		i := 0
 		for i < len(got) && i < len(want) && got[i] == want[i] {
 			i++
@@ -350,6 +431,9 @@ func TestBBSPausesThroughBoards(t *testing.T) {
 			runs = append(runs, run{"frames", s, ps})
 			a.frames = nil
 			for _, b := range bbsBoards {
+				if !b.shows("ansi") {
+					continue // the C64 boards: c64bbs_test.go
+				}
 				for _, x := range runs {
 					checkPaced(t, b.id, x.stream, x.ps, fmt.Sprintf("%s %dx%d %s", mode, size[0], size[1], x.what))
 				}
@@ -481,7 +565,7 @@ func TestBBSPausesSaved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(got, shown("pcboard", stream)) {
+	if !bytes.Equal(cbbsCanon(got), cbbsCanon(shown("pcboard", stream))) {
 		t.Fatal("the PCBoard copy does not show the draw order")
 	}
 	// Frames on the strip: the holds become pauses.

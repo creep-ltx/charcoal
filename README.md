@@ -235,6 +235,12 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its
   GitHub mirror), checked by SHA-1, into `~/.local/share/charcoal/chargen.bin`; Settings can do it too. bbmp's
   and an installed VICE's copies are used if present.
+- **C64 BBS codes**: a `.seq` written with **Image BBS**'s £ codes (`£C1`-`£CO` colours, `£F1` clear, `£R1`/`£R0`
+  reverse, `££` a £) opens with them acting, as Image shows the file (found by its codes, or **Open as** *C64:
+  Image BBS £ codes*); its other codes (`£V2` the caller's name, `£S` speed, `£W` waits ...) stay on the page as
+  text, and Save (*PETSCII with Image BBS £ codes*) writes the file back with them, a £ that would start a code as
+  `££`. Plain PETSCII art draws with £ too: none of the 239 petscii-bbs screens or the big check's 627 C64 files
+  is taken for Image's.
 - **C64 beyond PETSCII** (C64 and C128 40 columns, for graphics compos that take custom character sets): the
   page's **Screen** gadget picks the VIC-II's text mode. *Multicolour*: a cell of colour 8-15 is drawn in pixel
   pairs (00 the screen colour, 01 MC 1 = `$D022`, 10 MC 2 = `$D023`, 11 the cell's colour 0-7), colours 0-7 stay
@@ -453,12 +459,15 @@ before these changes, and now at each level:
 
 A modem was the pace: over telnet with no speed limit an animated file arrives at once and the effect flashes past.
 Many BBSes read a pause code of their own while they show a screen, so CharEdit can write that board's codes into
-the saved `.ans`: a pause every N cells of a draw order, after every frame of a frame effect, or each frame's hold
+the saved `.ans` or `.seq`: a pause every N cells of a draw order, after every frame of a frame effect, or each frame's hold
 for the frame strip. **Settings > My BBS** (default *none*) is used for every animated file you save; **Animate**
 shows it and can choose another board, or none, for one page (kept with the page's order), and can save one copy
 per board in one go beside the file (`name-amiexpress.ans`, `name-mystic.ans` ...). *None* is the safe choice for
 art packs, 16colo.rs and several boards: another board's codes show as junk text. The board takes the codes out,
 so the terminal gets exactly the plain file's bytes (tested through a model of each board's display code).
+Mystic, PCBoard and Synchronet files get the board's own colour codes too (`|nn`, `@Xnn`, Ctrl-A), smaller than
+ANSI's and the board's own kind of screen, unless a colour has no code there (blink on Mystic 1.10, italic on an
+Amiga page): then all the colours stay ANSI.
 
 | Board | Written first | Pause | Unit, most per code | The board's own character in the art | How known |
 |---|---|---|---|---|---|
@@ -467,11 +476,14 @@ so the terminal gets exactly the plain file's bytes (tested through a model of e
 | PCBoard 15 | `@POFF@` (no More?) | `@DELAY:n@` | 0.1 s, 255 | none exists; codes never cut by its 2047-byte lines | source |
 | Synchronet | | Ctrl-A `,` `;` `.` | 0.1 / 0.5 / 2 s | Ctrl-A as Ctrl-A `A`, Ctrl-Z as Ctrl-A `z`; Ctrl-A `Q` after `@`, `\|` and LF | source |
 | Tempest | | `~DELAY(n)` | 1/50 s | `~` as `~~` | manual only |
+| Image BBS (C64) | | `£Sx` before the next character that shows, `£S0` after it | 0.1 s, 1.5 s (longer: spread over the next characters) | `£` as `££`; never a code cut by its 80-byte lines, a line never starts with `↑` (it ends the file), a RETURN at the end (or the last line is lost) | source (1.2, 2.0) |
+| C*Base (C64) | | Ctrl-P and a reverse code that changes nothing | about 1/30 s (two jiffies) | `£` and `@` with a reverse code after them (`£N`, `@:` ... are codes); never cut by its 255-byte lines | source (3.3.8) |
 
 Not offered: boards with no fixed delay code (System-X, Sigma Express, DayDream, ENiGMA½, Talisman, Wildcat,
-Logic), with only whole seconds (FAME `~W`, CNet `{W}`, Image BBS `£W`) or a fixed 0.8 s (Renegade `%DE`,
-Telegard `@8`), Hydra (its timed pause shows a prompt) and Ami-Express 4.x (its manual has no `~w`). PETSCII,
-ATASCII and VT52 files get no codes.
+Logic), with only whole seconds (FAME `~W`, CNet `{W}`) or a fixed 0.8 s (Renegade `%DE`,
+Telegard `@8`), Hydra (its timed pause shows a prompt) and Ami-Express 4.x (its manual has no `~w`); on the C64,
+Image's `£W` (whole seconds, and in the 2.0 source no wait at all), Color 64 (only `£v`, a speed of unknown units),
+C-Net 64/128, DMBBS and Centipede (their codes are not known here). ATASCII and VT52 files get no codes.
 
 ## Animate a folder
 
@@ -618,6 +630,7 @@ come back cell for cell after saving in their own format.
 | `viewer.go` | CharView |
 | `export.go` | `.prg`, the `.c` array, XBin, HTML (`export_test.go` runs the `.prg` in a small 6502 emulator) |
 | `c64x.go`, `c64x_prg.go`, `c64x_d64.go`, `c64x_ctm.go` | C64 multicolour and ECM, CharEdit's own `.prg`, `.d64`, the ACME/BASIC exports with modes and sets, CharPad `.ctm` (`c64x_test.go` runs every program in a 6502) |
+| `c64bbs.go`, `boardcolours.go` | the C64 boards' pauses (Image BBS, C*Base) and Image's £ codes read and written; the PC boards' own colour codes in their animated files (`c64bbs_test.go` with models of Image's and C*Base's display code) |
 | `bbscodes.go` | BBS colour codes: pipe, Synchronet Ctrl-A, WWIV, Wildcat!, Celerity, read in front of the ANSI terminal and written (`bbscodes_test.go`; real files when fetched, see HANDOFF) |
 | `editorformats.go` | other editors' files: iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii, Marq's `.pet`/`.bas`/`.s`, Petmate JSON (`editorformats_test.go`; `editorformats_ext_test.go` checks against ansilove, IcyDraw's engine and Playscii's loader when they are there) |
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |

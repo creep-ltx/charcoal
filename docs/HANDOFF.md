@@ -409,10 +409,60 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   one page (`TestBBSCodesIcyDrawMembers`; IcyDraw writes @ as @@ in Ctrl-A, let off), Synchronet's text/menu
   (85 Ctrl-A files, every board's look) and WWIV's install/gfiles round-trip (`TestBBSCodesRealFiles`). Fuzz:
   every kind in FuzzParsers. How to fetch them and the board facts: the knowledge note on BBS colour codes in ~/Projects/Knowledge/bbs/.
-- Not done: "Save for board X" writing the board's colour codes (bbspause's boards: Mystic pipe, Synchronet
-  Ctrl-A, PCBoard @X; proposed only); PCBoard's @X00/@XFF save/restore (pcformats.go reads them as colours);
+- Not done: PCBoard's @X00/@XFF save/restore (pcformats.go reads them as colours);
   Telegard's backtick codes; Renegade's ^0-^9 user colours and Mystic's |T0-|T9 theme colours (shown as text);
   Animate a folder counts a codes file as "other" (written as .ans with ANSI colours).
+
+## C64 BBS graphics and the boards' own colour codes (2026-10-16, branch r3-c64bbs)
+
+- **What**: "Save for board X" (bbspause.go's boards: Settings' My BBS, Animate's choice and copies, Animate a
+  folder) now covers two C64 boards for animated `.seq` files, and the PC boards write their own colour codes.
+  `.seq` files with Image BBS's £ codes open with them and save back with them (format "imageseq").
+- `c64bbs.go`: boards appended to `bbsBoards` in `init` with a new field `paceFn` (the board paces its own way;
+  `pace` calls it first). **Image BBS** (`paceImage`, `imageLayout`): a pause of n tenths is `£S`+digit before
+  the next byte that shows (`printable`: &0x7F >= 0x20; Image 1.2 slows only those, 2.0 every byte) and `£S0`
+  after it; more than 15 tenths spread over the next characters; the slowed characters and their codes are one
+  piece, so no filler and no control byte is ever sent at a speed. Every £ of the art is `££`. Lines: Image's
+  dskin reads 80 bytes or up to a RETURN (not kept), so no piece is cut (filled with `£B0`, 0 bells = nothing,
+  moving 1-2 art bytes to the next line so the fill is whole codes; reverse no-op bytes only when nothing can
+  move), `£B0` before a line that would start with ↑ (read0 stops there), and a RETURN at the end (the last
+  byte comes with EOF status, and dskin then turns a line without RETURN into "↑": lost). `£W` is not used (first
+  second short; in the 2.0 source `comw` compares the seconds register with itself and returns at once).
+  **C*Base** (`paceCBase`, `cbaseLayout`): a unit is Ctrl-P (0x10) + a reverse code that changes nothing
+  (`petState.noop`); waiter2 waits for the jiffy clock's `& 6` to change, so ~1/30 s (its manual says 1/10 s).
+  After 0x10 C*Base prints the next byte without the MCI check: in quote mode (where a no-op reverse would print)
+  the 0x10 goes before the next art byte instead, and a £/@ there is written after a 0x10. Elsewhere every £ and
+  @ gets a no-op reverse after it (`£N T S V O P R L W I B` and `@:` are codes; both look at the next byte, even
+  past the line). Lines of 255 bytes with the RETURN kept.
+- `boardcolours.go`: `boardColourer(kind, stream)` (nil unless every SGR has a code: italic/underline never,
+  blink not for Mystic 1.10 which eats `|24`-`|31`), `code()` turns each SGR into `appendCodes` (pipe, ctrla) or
+  `@Xnn`, written only when the attribute changes. Boards get it by the `colours` field (Mystic "pipe", Synchronet
+  "ctrla", PCBoard "pcb"). PCBoard also: art `@X` + two hex digits gets `@DELAY:0@` after the `@` (before, the
+  board took it for a colour; the old test model did not look at @X).
+- **Image's codes read** (`imageTerm` in front of `PetTerm`, like `codeTerm`): `£C1`-`£CO` colour (the
+  command is the byte's low 6 bits, the number its low 4: `£Ca` = `£C1`), `£F` clear, `£R` reverse, `££` a £.
+  `£C0` (the caller's default colour) and everything else (`£V2` name, `£S`, `£W` ...) stay on the page as text.
+  `imageEscape` (the writer) doubles a £ only where `imageCodeAt` would read a code, so text codes go back as they
+  came. `isImageCodes` (detection, only on C64 pages with the ROMs): >= 3 codes typed as letters with a digit/J-O
+  after them, >= 2 acting, >= 2 kinds, at least half of the £ in codes; 0 of 239 petscii-bbs screens and 627 big
+  check C64 files taken. Glue: `parseSeq(b, cols, codes...)`, `splitStream` c64 case, `docOf`, `loadBytes`
+  (`as == "imageseq"`, detection after the mode, saveFmt), `encodeFor` hook `encodeImageSeq` (an animated page
+  writes its `.seq` animation; escaped unless a C64 board paced it), `writeOut` (own + codes), Open as list
+  (hidden without the ROMs), `framesFormats`, `animatedSave`/`copyBoards`/`writeCopies` treat imageseq as seq.
+- Tests (`c64bbs_test.go`): models of Image's read0/dskin/MCI and C*Base's readln3/bufout2 (fail on a cut code,
+  art taken for a code, a lost last line, a control byte at a speed); every draw order, effect and frame strip of
+  random pages full of £ @ : ↑ " through both, the terminal bytes = the plain stream minus no-op reverses, the
+  time within half a unit; layouts and escapes byte for byte; colour codes in Mystic/Synchronet/PCBoard files,
+  blink and italic keep ANSI; reading/writing Image codes, in the editor (open, Ctrl+S, Open as, animated saves +
+  a C*Base copy); Animate a folder for both boards; the 239 petscii-bbs `.seq` (`CHARCOAL_C64BBS_FILES`, default
+  ~/.cache/charcoal-c64bbs/petscii-bbs, skipped when missing). bbspause_test.go's models now act on the colour
+  codes (sending an SGR), `checkPaced` compares through `cbbsCanon`. FuzzParsers reads "seq image".
+- **Traps**: a real `.seq` with a stray `"` leaves quote mode on to the end of its line; a filler there would print
+  (only when a 2-byte C*Base piece meets the end of a 255-byte line in quote mode; the real-file test puts its
+  pauses after a RETURN). Test pages need `glyph0 = true` (screen code 0 is @) or `writeSeq` drops trailing @s.
+- **Open questions to the user**: Image's `£W` for long holds (whole seconds, unreliable per the 2.0 source); Color
+  64 (no pause code, only `£v` speed); writing Image's `£C` colours instead of PETSCII's (CharEdit writes PETSCII's:
+  the board passes them to C/G callers, and £C is for typists on other machines). Nothing was run on a real board.
 
 ## Amstrad CPC pages (2026-10-16, branch r1-cpc; roadmap step 5)
 
