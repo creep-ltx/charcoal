@@ -208,6 +208,9 @@ type Tab struct {
 	sky                 *skyLayer   // a SkyPix file's picture under the cells (skypix.go)
 	steps               int         // the page's depth: the steps that led to it (work stages: stages.go)
 	stages              *stageLog   // the work's history, thinned, for the work stages (stages.go)
+	layers              []Layer     // the page's layers, bottom first, when it has several (nil: one, the doc); see layers.go
+	lay                 int         // the layer being worked on: doc is it
+	others              int         // how the other layers are shown: 0 as they are, 1 dim, 2 hidden (view only)
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),

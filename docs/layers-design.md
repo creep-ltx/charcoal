@@ -81,17 +81,17 @@ to one without layers (`setMode`, `setMachine` to teletext...) asks to merge fir
 ```go
 // flatten: the page as it is seen and saved. Hidden layers are left out; a hidden bottom layer leaves blank cells.
 func flatten(ls []Layer, cur int, d *Doc /* the live current layer */) *Doc
-func (t *Tab) page() *Doc  // t.doc when t.layers == nil (the same pointer: nothing copied), else flatten
+func (t *Tab) seen() *Doc  // t.doc when t.layers == nil (the same pointer: nothing copied), else flatten
 func (a *App) shownAt(x, y int) (v uint32, from int) // one cell, for drawing and the pick tool
 ```
 
-`page()` is the only way out: every place that reads the *whole page* for output calls it. The audit of
+`seen()` is the only way out: every place that reads the *whole page* for output calls it. The audit of
 `a.doc` / `t.doc` (about 350 uses) sorts them into three kinds:
 
 | Kind | Where | With layers |
 |---|---|---|
 | **edit** (tools) | editor.go tools, shapes.go, blockjobs.go, tdf_ui.go (Logo), minitel_ui/msx (no layers), typing, paste/stamp, fill, shade | `a.doc` = the current layer, unchanged |
-| **page out** | `encodeFor` (editor.go: every writer), export.go:371 (PNG/HTML/GIF), compo.go:223/543 (party check, Save for the party), stages.go:246 + `recordStage` (work stages), transitions_ui.go:199 / transitions.go:1185 (Animate's draw order from the page), animcost*.go, batch.go:524-547, start.go thumbnails, refimage.go:285, collab | `a.page()` |
+| **page out** | `encodeFor` (editor.go: every writer), export.go:371 (PNG/HTML/GIF), compo.go:223/543 (party check, Save for the party), stages.go:246 + `recordStage` (work stages), transitions_ui.go:199 / transitions.go:1185 (Animate's draw order from the page), animcost*.go, batch.go:524-547, start.go thumbnails, refimage.go:285, collab | `a.seen()` |
 | **structure** (every layer) | `setCols`, `setRows`, rowscols.go insert/delete row and column, crop (Ctrl+K), `setMachine`/`setSTRes` width, PC/Amiga <-> Unicode conversion (`setMode`), `withEveryFrame` | `withEveryLayer(fn)`, like `withEveryFrame`: new docs for every layer, one undo step |
 
 The pick tool reads what is seen (`shownAt`), not the current layer: an artist picks the colour they see.
@@ -118,7 +118,7 @@ Flood fill, shade and the Select tool work on the current layer only (as in IcyD
     are merged (REXPaint shows 9).
   - `.psci` (one frame): every layer with z = its place, `visible`, `name`; clear cells are char 0 fg 0 bg 0
     (transparent), a `clear = 1` layer's background 0 is Playscii's index 0.
-  - **Every other format** gets `a.page()`. Hidden layers are not in it; the message says so once.
+  - **Every other format** gets `a.seen()`. Hidden layers are not in it; the message says so once.
 
 ### Saving a layered page as .ans (or any flat format)
 
@@ -145,18 +145,18 @@ flat). (Question 2: the alternative is the frames rule, "page stays dirty".)
   layers shared by all frames, the useful case for animation: a still background under moving letters.)
 - **Work stages:** `recordStage` packs `flatten` of the step's layers (the step's current layer = `s.doc`, the
   others as they are now; they cannot have changed in a cell step), so stages are what was seen.
-  `stageCands` flattens the same way. Party check and Save for the party use `page()`.
+  `stageCands` flattens the same way. Party check and Save for the party use `seen()`.
 - **Autosave:** `autosaveMeta` gets `Lay int` and `Layers []autosaveLayer{Name, Hidden, Clear, Rows, Keep}`;
   the cells of every layer follow one another in `.cells` (as frames do); the top-level Cols/Rows stay the
   current layer's. A meta without `Layers` reads as one layer, as today. `restoreAutosave` checks the length.
 - **Unicode styles:** `uniCompact` (uni.go:748 `addDocs`) must count every layer's cells and every snapshot's
   layers, or a compaction renumbers styles a hidden layer still uses. One line each; a test for it.
 - **Collaboration:** a layered page is not shared (`collabHost`/join refuse it like frames: "Moebius pages
-  are one picture: merge the layers first"), and New layer is refused during a session. Sharing `page()` is
+  are one picture: merge the layers first"), and New layer is refused during a session. Sharing `seen()` is
   not enough: a remote DRAW would have to land in some layer, and a cell covered by a higher layer would
   differ from the shadow forever.
-- **Animate:** the draw order (`order`) animates `page()` and Save writes it; making frames is refused (above).
-- **CharView** shows `page()`; it never keeps layers (it calls the flat readers, as today).
+- **Animate:** the draw order (`order`) animates `seen()` and Save writes it; making frames is refused (above).
+- **CharView** shows `seen()`; it never keeps layers (it calls the flat readers, as today).
 - **The big check:** readers are unchanged, so its report must not change. One new pass: for every .icy, .xp
   and .psci file, read layers, check `flatten(layers) == the flat reading` (the invariant above) and that a
   layered write and read gives the same layers; count how many files keep their layers.
@@ -173,7 +173,7 @@ flat). (Question 2: the alternative is the frames rule, "page stays dirty".)
   when the page has layers; the menu and keys do the rest.
 - **Menu:** Page > Layers (a group): New layer, Copy layer, Delete layer, Merge down, Merge all layers, Layer
   up, Layer down, Show / hide layer, Black shows below (tick), Other layers: as they are / dim / hidden,
-  Rename layer. Edit > Copy what is seen (copies `page()` cells of the selection).
+  Rename layer. Edit > Copy what is seen (copies `seen()` cells of the selection).
 - **Drawing:** `drawPage` draws `shownAt(x, y)` for each visible cell (top layer down until a cell that is not
   clear: about 16000 visible cells times the layers, no cache needed). Others = Dim: a cell that comes from a
   layer other than the current one is drawn, then `fb.blend` toward the paper (as the onion skin does, about
@@ -201,7 +201,7 @@ flat). (Question 2: the alternative is the frames rule, "page stays dirty".)
 
 ## 6. Keeping every existing test green
 
-- `layers == nil` is the only state any existing page, file, test or autosave can be in; `page()` returns
+- `layers == nil` is the only state any existing page, file, test or autosave can be in; `seen()` returns
   the same `*Doc`. Every new branch is behind `a.layers != nil`. So bytes written and PNGs drawn are the old
   ones by construction.
 - New tests prove it: for a set of pages (PC, Amiga, Unicode, PETSCII, Atari, ST) a two-layer page whose top
@@ -212,8 +212,8 @@ flat). (Question 2: the alternative is the frames rule, "page stays dirty".)
 
 1. `layers.go`: `Layer`, `Tab.layers/lay/others`, `flatten`, `page`, `shownAt`, `layerFields`, the nil rule,
    `a.layered()`. Tests: flatten per page type and both clear modes, hidden layers, short layers, one-layer
-   identity (`page() == doc`).
-2. Every "page out" use goes through `page()`; refusals (frames, collab, page types). Tests: two-layer pages
+   identity (`seen() == doc`).
+2. Every "page out" use goes through `seen()`; refusals (frames, collab, page types). Tests: two-layer pages
    save every format as their flattened one-layer page does; party check and stages see the flat page.
 3. Editing: `goLayer`, new / copy / delete / move / merge down / merge all / hide / rename / clear mode, undo
    (`Snap.lay/lwhole/layers`, `restore`, `snapshotLike`), `withEveryLayer` for W, H, rows/columns, crop,
