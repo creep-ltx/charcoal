@@ -922,7 +922,7 @@ func TestUniDrawing(t *testing.T) {
 		}
 	}
 	// A character no font has: a box, not nothing.
-	a.drawCell(fb, 0, 0, 1, uniCell(0x4E00, pairOf(15, 0)))
+	a.drawCell(fb, 0, 0, 1, uniCell(0x0E01, pairOf(15, 0))) // Thai: not in the art subset (kanji are, since wide characters)
 	if fb.px[2*fb.w+1] != 0xFFFFFFFF {
 		t.Error("no box for a character without a glyph")
 	}

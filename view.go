@@ -204,6 +204,20 @@ func (a *App) paintCellsAt(fb *FB, x0, y0, z int, get func(x, y int) uint32, w, 
 		return
 	}
 	H := a.cellH()
+	if a.uni() { // a wide character's halves (wide.go)
+		at := func(x, y int) uint32 {
+			if x < 0 || x >= w {
+				return blank
+			}
+			return get(x, y)
+		}
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				a.drawUniAt(fb, x0+x*a.cellW()*z, y0+y*H*z, z, get(x, y), at(x-1, y), at(x+1, y))
+			}
+		}
+		return
+	}
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			a.drawCellXY(fb, x0+x*a.cellW()*z, y0+y*H*z, z, px+x, py+y, get(x, y))
@@ -902,6 +916,12 @@ func (a *App) drawPage(u *UI, id string) {
 			a.drawLayersRow(fb, ox, oy+y*rowPx, colPx, rowPx, z, x0, x1, y)
 			continue
 		}
+		if a.uni() { // a wide character's halves (wide.go)
+			for x := x0; x < x1; x++ {
+				a.drawUniAt(fb, ox+x*colPx, oy+y*rowPx, z, a.doc.get(x, y), a.doc.get(x-1, y), a.doc.get(x+1, y))
+			}
+			continue
+		}
 		for x := x0; x < x1; x++ {
 			a.drawCellXY(fb, ox+x*colPx, oy+y*rowPx, z, x, y, a.doc.get(x, y))
 		}
@@ -958,6 +978,9 @@ func (a *App) drawPage(u *UI, id string) {
 	a.drawCollabCursors(fb, cell)
 	if (a.blink && viewer == nil && a.playing == nil) || (a.playing != nil && a.playing.frames == nil) { // the cursor, Amiga style: an orange block
 		r := cell(a.cx, a.cy, 1, 1)
+		if a.uni() && uniIsLead(a.doc.get(a.cx, a.cy)) && uniIsCont(a.doc.get(a.cx+1, a.cy)) {
+			r.w *= 2 // on a wide character: over both its cells
+		}
 		if a.insert {
 			h := max(2*z, r.h/4)
 			r.y, r.h = r.y+r.h-h, h

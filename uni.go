@@ -528,6 +528,9 @@ func uniGlyph(code int, vga bool) (g []byte, ok bool) {
 		o := f.at[code]
 		return f.glyphs[o : o+16], true
 	}
+	if code != uniCont && uniWideRune(r) { // a wide character squeezed (wide.go)
+		return uniWideSmall(r)
+	}
 	return nil, false
 }
 

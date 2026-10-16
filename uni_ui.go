@@ -10,27 +10,53 @@ import (
 	"strings"
 )
 
-// drawUniCell draws a Unicode cell at pixel (px, py), every font pixel z by z.
+// drawUniCell draws a Unicode cell at pixel (px, py), every font pixel z by z
+// (on its own: a wide character squeezed into it, as the character table shows it).
 func (a *App) drawUniCell(fb *FB, px, py, z int, v uint32) {
-	fg, bg := uniColoursOf(v)
-	fgc, bgc := 0xFF000000|colourRGB(fg, &a.pal), 0xFF000000|colourRGB(bg, &a.pal)
 	code := uniCode(v)
-	fl := uniFlagsOf(v)
-	it, ul := fl&italic != 0, fl&underline != 0
 	g, ok := uniGlyph(code, a.fontFor["uni"] != "unifont")
 	switch {
-	case code == 0 || code == 32:
+	case code == 0 || code == 32 || code == uniCont:
 		g = make([]byte, 16)
 	case !ok:
 		g = missingGlyph
 	}
+	a.drawUniBits(fb, px, py, z, v, func(r int) int { return int(g[r]) << 8 }, 0)
+}
+
+// drawUniAt draws a page's Unicode cell knowing its neighbours: a wide
+// character's left half over the lead, its right half over the cell after it
+// (each in its own cell's colours). A half without the other is drawn alone:
+// a lone character squeezed, a lone right half as a space.
+func (a *App) drawUniAt(fb *FB, px, py, z int, v, prev, next uint32) {
+	switch {
+	case uniIsLead(v) && uniIsCont(next):
+		g, _ := uniWideGlyph(uniRune(uniCode(v)))
+		a.drawUniBits(fb, px, py, z, v, func(r int) int { return int(g[r]) }, 0)
+	case uniIsCont(v) && uniIsLead(prev):
+		g, _ := uniWideGlyph(uniRune(uniCode(prev)))
+		a.drawUniBits(fb, px, py, z, v, func(r int) int { return int(g[r]) }, 8)
+	default:
+		a.drawUniCell(fb, px, py, z, v)
+	}
+}
+
+// drawUniBits draws 8 pixels of 16-pixel glyph rows (row(r): bit 15 the left
+// pixel), from pixel `from` on, in cell v's colours; italic leans the whole
+// 16-pixel row, so a wide character's halves lean as one.
+func (a *App) drawUniBits(fb *FB, px, py, z int, v uint32, row func(r int) int, from int) {
+	fg, bg := uniColoursOf(v)
+	fgc, bgc := 0xFF000000|colourRGB(fg, &a.pal), 0xFF000000|colourRGB(bg, &a.pal)
+	fl := uniFlagsOf(v)
+	it, ul := fl&italic != 0, fl&underline != 0
 	cl := fb.clip
 	inside := px >= cl.x && py >= cl.y && px+8*z <= cl.x+cl.w && py+16*z <= cl.y+cl.h
 	for r := 0; r < 16; r++ {
-		bits := int(g[r])
+		bits := row(r)
 		if it {
 			bits >>= max(0, (6-r/2)>>1)
 		}
+		bits = bits >> (8 - from) & 0xFF
 		if ul && r >= 14 {
 			bits = 0xFF
 		}

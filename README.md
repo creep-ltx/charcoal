@@ -883,7 +883,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | Sharp MZ-700 second set (`fonts/mz700-set2.font`) | CharEdit's own look-alike, drawn for it in `tools/mz700-set2.txt` (2026) | CC0 1.0, `fonts/mz700-set2-NOTICE.txt` |
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |
 | Minitel font (`minitel_font.go`) | Minitel-Canvas's Minitel font, Frédéric Bisson (github.com/Zigazou/Minitel-Canvas), drawn into 8x10 cells by `tools/minitel-font.py` | CC0, `fonts/minitel-NOTICE.txt` |
-| Unicode page font (`fonts/unifont-art.hex.gz`) | GNU Unifont 17.0.05, Roman Czyborra, Paul Hardy et al. (unifoundry.com): the blocks text art uses, cut by `tools/unifont.sh` | SIL Open Font License 1.1 (Unifont is dual-licensed OFL / GPL-2+ with the font exception; used under the OFL), `fonts/unifont-NOTICE.txt` |
+| Unicode page fonts (`fonts/unifont-art.hex.gz`, `fonts/unifont-wide.hex.gz`) | GNU Unifont 17.0.05, Roman Czyborra, Paul Hardy et al. (unifoundry.com): the blocks text art uses, and every wide character (CJK, kana, Hangul, emoji), cut by `tools/unifont.sh` | SIL Open Font License 1.1 (Unifont is dual-licensed OFL / GPL-2+ with the font exception; used under the OFL), `fonts/unifont-NOTICE.txt` |
 | durdraw's colour numbers and file format (`uniformats.go`) | durdraw, Sam Foster (github.com/cmang/durdraw), read from its source; no code copied | BSD 3-clause |
 | PETSCII flip and turn tables (`cbmturn.go`) | Marq's PETSCII editor, Marq / Fit^L!T, tables by Dr. TerrorZ | WTFPL, `third_party/marq-petscii-LICENSE.txt` |
 | Petmate's file formats | Petmate, C. T. Lin | MIT, `third_party/petmate-LICENSE.txt` |

@@ -581,7 +581,21 @@ func (a *App) drawLayersRow(fb *FB, ox, py, colPx, rowPx, z, x0, x1, y int) {
 	for x := x0; x < x1; x++ {
 		v, from := a.shownAt(x, y, only)
 		px := ox + x*colPx
-		a.drawCellXY(fb, px, py, z, x, y, v)
+		if a.uni() { // a wide character's halves, cut where another layer covers one (as flatten does)
+			prev, next := blank, blank
+			if x > 0 {
+				prev, _ = a.shownAt(x-1, y, only)
+			}
+			if x+1 < a.doc.cols {
+				next, _ = a.shownAt(x+1, y, only)
+			}
+			if uniIsLead(v) && !uniIsCont(next) {
+				v = uniSpaceOf(v)
+			}
+			a.drawUniAt(fb, px, py, z, v, prev, next)
+		} else {
+			a.drawCellXY(fb, px, py, z, x, y, v)
+		}
 		if a.others == 1 && from != a.lay {
 			fb.blend(Rect{px, py, colPx, rowPx}, a.layerPaper(v), 150)
 		}

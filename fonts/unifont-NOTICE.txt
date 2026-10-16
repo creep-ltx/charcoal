@@ -1,14 +1,17 @@
 fonts/unifont-art.hex.gz is a subset of GNU Unifont 17.0.05 (https://unifoundry.com/unifont/): the blocks
 text art uses (Latin, Greek, Cyrillic, punctuation, arrows, maths, technical, box drawing, blocks, shapes,
 symbols, dingbats, Braille, Symbols for Legacy Computing and its supplement), cut by tools/unifont.sh.
-Charcoal draws the characters of its Unicode page with it.
+fonts/unifont-wide.hex.gz is another subset of the same version: every character a terminal shows two
+columns wide (Unicode 17.0 East Asian Width W or F: CJK ideographs, kana, Hangul, fullwidth forms, emoji)
+that Unifont draws, cut by the same script.
+Charcoal draws the characters of its Unicode page with them.
 
 Copyright (C) 1998-2026 Roman Czyborra, Paul Hardy, Qianqian Fang, Andrew Miller, Johnnie Weaver,
 David Corbett, Ælla Chiana Moskopp, Rebecca Bettencourt, Minseo Lee, Ho-Seok Ee, et al.
 
 Unifont's glyphs are dual-licensed under the SIL Open Font License 1.1 and the GNU GPL version 2 or later
 with the GNU font embedding exception. Charcoal uses and passes them on under the SIL Open Font License 1.1,
-whose text follows. The subset is a Modified Version in the licence's sense; Unifont declares no Reserved
+whose text follows. Each subset is a Modified Version in the licence's sense; Unifont declares no Reserved
 Font Name.
 
 The SIL Open Font License version 1.1 is copied below, and is also

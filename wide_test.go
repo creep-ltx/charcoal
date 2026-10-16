@@ -98,3 +98,66 @@ func TestWideNormal(t *testing.T) {
 		t.Error("a narrow page changed")
 	}
 }
+
+// wideFPixels gives the fg/bg pattern of row r of a rendered picture, cells x0..x1, as a bit string.
+func wideFPixels(fb *FB, r, w int, fgc uint32) string {
+	s := make([]byte, w)
+	for x := 0; x < w; x++ {
+		s[x] = '.'
+		if fb.px[r*fb.w+x] == fgc {
+			s[x] = '#'
+		}
+	}
+	return string(s)
+}
+
+func TestWideDrawn(t *testing.T) {
+	a := testApp(t, "uni")
+	a.fontFor["uni"] = "univga"
+	d := wideFDoc(t, 4, "中a")
+	fb := a.renderDoc(d, 1)
+	g, ok := uniWideGlyph('中')
+	if !ok {
+		t.Fatal("Unifont has no 中")
+	}
+	fgc := 0xFF000000 | colourRGB(7, &a.pal)
+	for r := 0; r < 16; r++ {
+		want := make([]byte, 16)
+		for x := 0; x < 16; x++ {
+			want[x] = '.'
+			if g[r]&(0x8000>>x) != 0 {
+				want[x] = '#'
+			}
+		}
+		if got := wideFPixels(fb, r, 16, fgc); got != string(want) {
+			t.Fatalf("row %d: %s, want %s", r, got, want)
+		}
+	}
+	// A lone character (an old autosave) is squeezed into its cell; a lone right half is a space.
+	lone := newDoc(2, 1)
+	lone.uni = true
+	lone.cells[0] = uniCell('中', 7)
+	lone.cells[1] = uniCell(' ', 7)
+	fb = a.renderDoc(lone, 1)
+	small, _ := uniWideSmall('中')
+	for r := 0; r < 16; r++ {
+		want := make([]byte, 16)
+		for x := 0; x < 16; x++ {
+			want[x] = '.'
+			if x < 8 && small[r]&(0x80>>x) != 0 {
+				want[x] = '#'
+			}
+		}
+		if got := wideFPixels(fb, r, 16, fgc); got != string(want) {
+			t.Fatalf("lone row %d: %s, want %s", r, got, want)
+		}
+	}
+	lone.cells[0] = uniContOf(uniCell('中', 7))
+	if fb = a.renderDoc(lone, 1); wideFPixels(fb, 8, 16, fgc) != "................" {
+		t.Error("a lone right half shows something")
+	}
+	// The character table can show kanji (squeezed), so they can be typed.
+	if !a.uniHas(0x4E2D) {
+		t.Error("中 cannot be shown")
+	}
+}
