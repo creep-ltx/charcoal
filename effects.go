@@ -127,6 +127,10 @@ func (a *App) effectGlyphs() []int {
 	case "cpc":
 		add(0x81, 0x8E) // block graphics
 		add(0xD4, 0xD7) // triangles
+	case "msx":
+		add(0xC0, 0xDF) // block graphics
+	case "mz":
+		add(0xF1, 0xFF) // quarter blocks
 	}
 	return g
 }

@@ -74,6 +74,17 @@ func FuzzParsers(f *testing.F) {
 		f.Add(out)
 		f.Add([]byte("\x04\x00\x1c\x01\x02\x02\x1f\x05\x05\x01\x01\x19A12345678\x1a\x01\x02\x03\x04\x0b\x0bX"))
 	}
+	{ // MSX and Sharp MZ-700 (msx.go, mz.go)
+		d, s := newMSXDoc(1), newMSXSetup(1)
+		d.cells[3] = makeCell(0xDB, 0, 0, 0)
+		f.Add(writeMSXROM(msxDataOf(d, s, nil)))
+		f.Add(writeMSXBin(msxDataOf(d, s, make([]byte, 2048))))
+		f.Add(writePsciMSX([]*Doc{d}, nil, s))
+		m := newMZDoc()
+		m.cells[5] = mzCell(300, 2, 5)
+		f.Add(writeMZF(m, "F"))
+		f.Add([]byte("\x01IMAGE\r\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x12\x00\x12!\x00\x12\x00\xd0"))
+	}
 	{ // Minitel and Viewdata (minitel.go, viewdata.go)
 		d := newMTDoc()
 		d.cells[45] = makeCell('A', 3, 0, mtDW|mtDH)
@@ -241,6 +252,16 @@ func FuzzParsers(f *testing.F) {
 			return nil
 		})
 		check("xex", func() []*Doc { d, _, _ := readAtariProgram(b); return one(d) })
+		check("msx program", func() []*Doc { d, _, _, _ := readMSXProgram(b); return one(d) })
+		check("msx text", func() []*Doc { return one(msxText(b, 2)) })
+		check("mzf", func() []*Doc {
+			if tp, ok := readMZF(b); ok {
+				d, _ := readMZScreen(tp)
+				return one(d)
+			}
+			return nil
+		})
+		check("mz text", func() []*Doc { return one(mzText(b)) })
 		check("tap", func() []*Doc {
 			if scr, _, err := readTap(b); err == nil {
 				d, _ := parseSCR(scr)

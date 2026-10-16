@@ -71,8 +71,12 @@ against each platform's best editor. Each step says what it wins.
 
 ## Step 3: compo-ready (wins: party entrants, the most active artists)
 
-- **Work stages**: export 6-10 stages from the undo history (Revision wants exactly 10, Deadline 6).
-- **Party rule check**: size limits (Revision 80x500), no iCE/blink for PC, ROM font for PETSCII.
+- [x] **Work stages** (2026-10-16, stages.go, docs/workstages-design.md): File > Export work stages writes N
+  pictures (PNG 1x/2x, the page's format too) spread evenly over the work, from a thinned history kept with the
+  file across sessions and in the autosave. (Revision oldskool wants exactly 10, Zoo 2026 at least 15.)
+- [x] **Party rule check** (2026-10-16, compo.go): File > Check for a party against 10 compos' 2026 rules (size,
+  iCE/blink, own font/palette, animation, C64 modes, page type, teletext rows); quiet report, no fixing; "Save
+  for the party" writes the files a compo wants (+ work stages) into a folder.
 - **Runs on the machine**: C64 .prg (done) and .d64 (done 2026-10-16), Atari .xex, Spectrum .tap, a matching screenshot PNG
   with the border.
   - [x] Atari .xex and a boot .atr (2026-10-16, atari8.go): the page in its colour registers and font on any
@@ -126,6 +130,13 @@ against each platform's best editor. Each step says what it wins.
   the exporter's files (all 2024 compo entries, pixel-identical to their Caprice Forever screenshots). [x] CharEdit's .bin run in MAME (2026-10-16).
   Later: a real-CPC run, Caprice's 768x544 screenshot size, play the stream, custom
   characters (SYMBOL, not allowed in the compos).
+- [x] **MSX** (2026-10-16, msx.go): SCREEN 0 (40x24, two colours), SCREEN 1 (32x24, colours per 8 characters, border)
+  and the MSX2's 80 columns; the TMS9918 and V9938 palettes; C-BIOS's fonts (BSD) and an MSX BIOS ROM's when the
+  user has one; own fonts; a cartridge (.rom) and a BLOAD .bin that show the page (run in MAME on C-BIOS: pixel
+  for pixel), Playscii's msx charset. Later: a .dsk/.cas, an MSX BASIC listing, MSX2 blink.
+- [x] **Sharp MZ-700** (2026-10-16, mz.go): 40x25, both character sets, 8 colours per cell; .mzf that shows the
+  page (run in MAME's mz700: pixel for pixel), other .mzf pictures read; a public domain look-alike of the first
+  set, Sharp's ROM when the user has it. Later: the second set's look without the ROM.
 - **Spectrum**: UDG/charset editing; attributes-only painting.
 - [x] **Atari 8-bit** (2026-10-16, gtia.go, atari8.go): the real OS ROM font when present, the 128-colour palette
   (PAL and NTSC, atari800's model) with the machine's colour registers, custom fonts (load, edit, save .fnt; in the .xex).
@@ -154,7 +165,9 @@ against each platform's best editor. Each step says what it wins.
   palettes; PabloDraw's .pd; TheDraw 4's .td (read, page layers as frames); BSAVE .bsv; Petmate9's VIC-20, PET
   and C128 screens; SkyPix (Amiga BBS graphics) as a picture under the cells, the Amiga fonts fetched. Later:
   IcyDraw's Viewdata/Mode 7 pages, TheDraw 3 and .tdl, Playscii's teletext set on the teletext page, Marq's
-  DirArt as a .d64, MSX/Sharp sets on the MSX and MZ-700 pages when they come.
+  DirArt as a .d64. (Playscii's msx set opens on the MSX page; sharp, the Japanese MZ set, stays a PC page.)
+- **Sharp MZ-700**: a free look-alike of the second character set (Sharp's ROM cannot be shipped; without it those
+  cells show hex boxes, and real MZ art uses that set a lot).
 
 ## Later
 

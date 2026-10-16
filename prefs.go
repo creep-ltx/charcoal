@@ -45,6 +45,7 @@ type Prefs struct {
 	UIFont     string              `json:"ui_font,omitempty"`           // the interface text: "system" (""), "bundled", "topaz" or "file"
 	UIFontFile string              `json:"ui_font_file,omitempty"`      // with "file": a .ttf or .otf
 	UIFontSize int                 `json:"ui_font_size,omitempty"`      // in pixels ("": 13)
+	Party      string              `json:"party,omitempty"`             // Check for a party's last compo (compo.go)
 	Width      int                 `json:"width"`
 	Height     int                 `json:"height"`
 }
@@ -93,7 +94,7 @@ func loadPrefs() {
 	a.defSTRes = stResByID(prefs.STRes).id
 	a.fkeys = defaultFkeys()
 	for _, m := range pageModes {
-		if f := prefs.Fkeys[m]; validFkeys(f) || (m == "uni" && validUniFkeys(f)) {
+		if f := prefs.Fkeys[m]; validFkeys(f) || (m == "uni" && validUniFkeys(f)) || (m == "mz" && validMZFkeys(f)) {
 			a.fkeys[m] = f
 		}
 	}

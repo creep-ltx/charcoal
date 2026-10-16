@@ -31,6 +31,14 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 		a.drawMTCell(fb, px, py, z, mtCellAlone(v), true)
 		return
 	}
+	if a.msx() { // the screen's colours (msx.go)
+		a.drawMSXCell(fb, px, py, z, v)
+		return
+	}
+	if a.mz() { // two character sets (mz.go)
+		a.drawMZCell(fb, px, py, z, v)
+		return
+	}
 	if a.vicMode() != vicHires { // multicolour and ECM (c64x.go)
 		a.drawVICCell(fb, px, py, z, v)
 		return
@@ -556,7 +564,7 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			a.setMode(modeOrder[i])
 		})
 	} else {
-		modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, Plus/4, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti. CPC: Amstrad CPC, .bin. MT: Minitel, .vdt. VD: Viewdata (Prestel, Telstar), .cpt, .bin, Telstar .json. Uni: Unicode (terminals, IRC; a PC or Amiga page is converted, undoably), UTF-8 ANSI, .dur, .irc."
+		modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, Plus/4, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti. CPC: Amstrad CPC, .bin. MT: Minitel, .vdt. VD: Viewdata (Prestel, Telstar), .cpt, .bin, Telstar .json. MSX: SCREEN 0 and 1, .rom, .bin. MZ: Sharp MZ-700, .mzf. Uni: Unicode (terminals, IRC; a PC or Amiga page is converted, undoably), UTF-8 ANSI, .dur, .irc."
 		for _, m := range modeOrder {
 			label := modeNames[m]
 			if m == "cpc" {
@@ -576,6 +584,9 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			}
 			if m == "mt" || m == "vd" {
 				label = map[string]string{"mt": "MT", "vd": "VD"}[m]
+			}
+			if m == "mz" {
+				label = "MZ"
 			}
 			if u.button(fl.place(buttonW(label)), label, a.mode == m && !a.start, modeHint) != nil {
 				a.start = false
@@ -637,7 +648,7 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 		fontNames, fontIDs, cur = n2, id2, cur2
 	}
 	if len(fontNames) > 0 {
-		if !a.st() && !a.tt() && !a.uni() && !a.cpc() { // fonts from files and the font editor (fontedit.go)
+		if !a.st() && !a.tt() && !a.uni() && !a.cpc() && !a.mz() { // fonts from files and the font editor (fontedit.go)
 			fontNames = append(fontNames, "Load a font...", "Edit the font...")
 			fontIDs = append(fontIDs, "+load", "+edit")
 		}
@@ -665,6 +676,9 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			palNames, palIDs = append(palNames, p.name), append(palIDs, p.id)
 		}
 	}
+	if a.msx() { // the TMS9918's colours, or the MSX2's (msx.go)
+		palNames, palIDs = []string{msx1Palette.name, msx2Palette.name}, []string{msx1Palette.id, msx2Palette.id}
+	}
 	if a.ownPal != nil {
 		palNames, palIDs = append(palNames, "The file's own"), append(palIDs, "file")
 	}
@@ -673,7 +687,7 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			pcur = i
 		}
 	}
-	if !a.cpc() { // a CPC page's colours are its inks (the Colours)
+	if !a.cpc() && !a.mz() { // a CPC page's colours are its inks (the Colours); the MZ-700 has its 8
 		u.choice("palette", row("Palette", choiceW(palNames)), palNames, pcur, "Palette (Shift+click a colour below to change it)", func(i int) {
 			a.paletteFor[a.mode] = palIDs[i]
 			a.setPalette()
@@ -696,6 +710,19 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 		r := fl.place(textW("32 x 24") + 8)
 		fb.text(r.x+4, r.y+3, "32 x 24", cText)
 		u.setHint(r, "The Spectrum's screen")
+	case a.mz():
+		r := fl.place(textW("40 x 25") + 8)
+		fb.text(r.x+4, r.y+3, "40 x 25", cText)
+		u.setHint(r, "The MZ-700's screen")
+	case a.msx():
+		var names []string
+		for _, m := range msxModes {
+			names = append(names, m.name)
+		}
+		u.choice("msxmode", row("Screen", choiceW(names)), names, a.msxSet.mode, "The MSX's text mode: SCREEN 0 (two colours), SCREEN 1 (colours per 8 characters), or the MSX2's 80 columns", func(i int) {
+			a.start = false
+			a.setMSXMode(i)
+		})
 	case a.cpc():
 		var names []string
 		for _, m := range cpcModes {
@@ -1215,6 +1242,11 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		switch {
 		case a.ted(): // the TED attribute byte (ted.go)
 			x = fb.text(x+digitsW(2), y, fmt.Sprintf("%d colour $%02X", c, tedAttr(v)), cText) + 24
+		case a.mz(): // the set, the display code, the attribute byte (mz.go)
+			x = fb.text(x+digitsW(2), y, fmt.Sprintf("%s, attribute $%02X", mzCharHint(mzChar(v)), mzAttr(v)), cText) + 24
+		case a.msx(): // the screen's colours for it (msx.go)
+			fg, bg := a.msxSet.colours(c)
+			x = fb.text(x+digitsW(2), y, fmt.Sprintf("%d fg %d bg %d", c, fg, bg), cText) + 24
 		case !a.uni():
 			x = fb.text(x+digitsW(2), y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 		}
@@ -1222,6 +1254,12 @@ func (a *App) drawStatus(u *UI, r Rect) {
 	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum", "tt": "Teletext", "uni": "Unicode", "mt": "Minitel", "vd": "Viewdata"}[a.mode]
 	if a.cpc() {
 		set = fmt.Sprintf("Amstrad CPC mode %d", a.cpcSet.mode)
+	}
+	if a.msx() {
+		set = "MSX " + a.msxSet.info().name
+	}
+	if a.mz() {
+		set = "Sharp MZ-700"
 	}
 	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, a.doc.rows), cText) + 24
 	name := filepath.Base(a.path) // the whole path is in the title bar and Info

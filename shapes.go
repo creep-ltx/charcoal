@@ -302,6 +302,10 @@ func (a *App) shadeSteps() []int {
 		return []int{32, '.', ':', '+', '#', 0x8F} // the full block graphic
 	case "cpc":
 		return []int{32, 0x90, 0xCF, 0x8F} // the dot, the checkerboard, the full block
+	case "msx":
+		return []int{32, 0xD7, 0xDB} // the checkerboard, the full block
+	case "mz":
+		return []int{32, 0xD0, 0x43} // the checkerboard, the full block
 	case "tt", "vd", "mt":
 		return nil
 	}
@@ -397,6 +401,8 @@ func (a *App) boxChars() []int {
 		return []int{'━', '┃', '┏', '┓', '┗', '┛'}
 	case a.cpc() && a.shapeStyle == "single": // the CPC's line characters
 		return []int{0x9A, 0x95, 0x96, 0x9C, 0x93, 0x99}
+	case a.msx() && a.shapeStyle == "single": // the MSX's line characters
+		return []int{0x17, 0x16, 0x18, 0x19, 0x1A, 0x1B}
 	}
 	return nil
 }
@@ -406,7 +412,7 @@ func (a *App) shapeStyles() ([]string, []string) {
 	switch {
 	case a.pc():
 		return []string{"brush", "single", "double", "half"}, []string{"Brush", "Single lines", "Double lines", "Half blocks"}
-	case a.c64(), a.atari(), a.cpc():
+	case a.c64(), a.atari(), a.cpc(), a.msx():
 		return []string{"brush", "single"}, []string{"Brush", "Box lines"}
 	case a.uni():
 		return []string{"brush", "single", "double", "round", "heavy", "half"}, []string{"Brush", "Single lines", "Double lines", "Rounded lines", "Heavy lines", "Half blocks"}

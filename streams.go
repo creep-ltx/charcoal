@@ -126,7 +126,7 @@ type splitInfo struct {
 
 // streamSplit looks at the page's file: how many pictures it shows.
 func (a *App) streamSplit() splitInfo {
-	if a.source == nil || a.srcKind != "" || a.sourceBin || a.zx() || a.tt() || a.cpc() || a.mt() {
+	if a.source == nil || a.srcKind != "" || a.sourceBin || a.zx() || a.tt() || a.cpc() || a.mt() || a.msx() || a.mz() {
 		return splitInfo{}
 	}
 	docs, _, homes := splitStream(a.source, a.tedMode(), a.doc.cols, a.amiga(), a.res(), false, lineBps(a.baud), a.codes)

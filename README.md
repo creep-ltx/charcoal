@@ -1,7 +1,7 @@
 # Charcoal
 
 Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer, for text art on every
-platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum, Amstrad CPC, teletext, Viewdata and Minitel, each with its real font, colours
+platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum, Amstrad CPC, MSX, Sharp MZ-700, teletext, Viewdata and Minitel, each with its real font, colours
 and file formats.
 
 ![CharEdit with a PC ANSI by Platinum](docs/screenshots/hero.png)
@@ -56,7 +56,7 @@ An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, the BBS c
 Renegade, Synchronet, WWIV, Wildcat! and Celerity, XBin, iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii),
 Unicode terminal art (UTF-8 ANSI in 256 and 24-bit colours, durdraw) and IRC art (mIRC colour codes),
 Atari ATASCII, Atari ST VT52 and IGS, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens, Amstrad CPC
-text art (AMSCII), teletext (BBC Micro Mode 7, Ceefax), Viewdata (Prestel, Telstar) and Minitel (Videotex `.vdt`), drawn with the real bitmap fonts: Topaz
+text art (AMSCII), MSX (SCREEN 0 and 1), Sharp MZ-700, teletext (BBC Micro Mode 7, Ceefax), Viewdata (Prestel, Telstar) and Minitel (Videotex `.vdt`), drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA, EGA 8x14,
 VGA 8x8 (80x50) and the code pages 850 and 866 on a PC page (CP437), the C64's two character sets on a C64 page;
 or a font of your own, drawn in its font editor.
@@ -131,10 +131,11 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   on this computer (`ATARIXL.ROM` or `ATARIOSB.ROM` in CharEdit's data folder, `~/.atari800` or
   `/usr/share/atari800`; Atari's ROMs may not be passed on, so CharEdit brings none) the Font gadget also offers
   "Atari (OS ROM)" and the XL's international set. Own fonts: Load a font (`.fnt`, 1024 bytes), the font editor.
-  Colours are the machine's registers, from GTIA's 128 colours (Palette: Atari PAL or Atari NTSC): text
+  Colours are the machine's registers, from GTIA's 128 colours (Palette: Atari PAL or NTSC, Altirra's or atari800's): text
   (COLOR1, 709: only its luminance counts, the text takes the screen's hue, as in GRAPHICS 0), screen (COLOR2,
   710) and border (COLOR4, 712); left / right / middle click in the 16 x 8 colour grid, the values to poke shown
-  under it. Start-up colours 202 on 148, border 0. The colours are atari800's palette model (its standard preset).
+  under it. Start-up colours 202 on 148, border 0. The default colours are Altirra's PAL palette (what compo screenshots
+  are taken with); Altirra's NTSC and atari800's PAL and NTSC palettes are in the Palette gadget.
   **Runs on the machine**: `.xex` (a program for any Atari 400/800/XL/XE: the page in its colours, with its own
   font when it has one; DOS, a loader or an emulator runs it) and `.atr` (a single density disk that boots straight
   into it). Both open again. The first 24 rows are shown; a 38-wide page sits at the screen editor's column 2.
@@ -223,6 +224,33 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   CPC's text codes. All 2024 AMSCII Compo entries open. Pictures (`.png`, GIF, APNG) are 768x544 in every mode,
   the size and place of Caprice Forever's screenshots that the compos use, so a saved PNG matches the other
   entries' pixel for pixel. Typing `^` gives the caret (0xA0; the CPC's 0x5E is an up arrow).
+- **MSX page**: the MSX's text screens (the **Screen** gadget): SCREEN 0, 40x24 characters of 6x8 pixels in two
+  colours for the whole screen; SCREEN 1, 32x24 of 8x8 with a colour pair for each group of 8 characters (0-7,
+  8-15, ...) and a border; the MSX2's SCREEN 0 WIDTH 80 (cells 6x16: its pixels are half as wide). A cell is a
+  character only: the colours are the screen's, as on the machine, so in SCREEN 1 a typed letter takes its
+  group's colours. Colours (the TMS9918's 15 and transparent, which shows the border): left click is the
+  foreground, right click the background, of the screen in SCREEN 0 or of the brush character's group in
+  SCREEN 1; middle click the border (SCREEN 1). Palettes: MSX1 (TMS9918, as MAME has it) and MSX2 (V9938). The
+  font is C-BIOS's (international, Japanese, Brazilian; BSD licence, `fonts/msx-cbios-NOTICE.txt`), since
+  Microsoft's MSX BIOS may not be passed on; put an MSX BIOS ROM in CharEdit's data folder as `msx.rom` and
+  its font is offered too ("MSX (BIOS ROM)"). An own font (2048 bytes, or the font editor) goes into the files.
+  Saved as a **cartridge** (`.rom`, 16 KB: runs on any MSX and in emulators on C-BIOS) or a **BLOAD file**
+  (`.bin`: `BLOAD"ART.BIN",R` from MSX BASIC; a key goes back to BASIC): a small program that sets the screen up
+  through the BIOS (ERAFNK, INITXT/INIT32, CHGCLR) and copies the page, the colour table and an own font into
+  the VRAM (LDIRVM). Both open again. Playscii `.psci` with its `msx` charset and palette is read and written.
+  Pictures are openMSX's size: 320x240 (640x480 at 80 columns), the backdrop round the screen. Open as MSX
+  reads text (code 1 + a letter for the characters 0-31, as MSX BASIC prints them).
+- **Sharp MZ-700 page** (MZ): the MZ-700's 40x25 screen, each cell a character of either of its two sets with a
+  foreground and a background of the 8 colours. The character table shows both sets (512 characters; the
+  second from 256 on); typing gives the first set (Sharp's display codes: letters, digits, lower case). The
+  font: Sharp's character ROM may not be passed on, so the first set is Russell Marks's public domain
+  look-alike (`fonts/mz700-NOTICE.txt`) and the second set's characters show their code in a box; with Sharp's
+  ROM (`mz700fon.int`, 4096 bytes) in CharEdit's data folder or MAME's `roms` (`mz700.zip`), CharEdit draws
+  both sets with it ("MZ-700 (Sharp ROM)"). Saved as a **tape file** (`.mzf`: load it with the monitor's `L`,
+  or in an emulator): a program at $1200 that copies the display codes to $D000 and the attributes to $D800.
+  Opens CharEdit's `.mzf` and other `.mzf` pictures that copy two 1000-byte blocks there (as the Demodulation
+  2021 entry "Princess" does). Pictures are the screen, 320x200. UTF-8 text keeps the second set's characters
+  (Unicode's Symbols for Legacy Computing). Open as Sharp MZ-700 reads text.
 - **Minitel page** (MT): the Minitel's 40x25 screen (row 0 is its status row) in 8x10 cells, as the STUM 1B
   (the Minitel's specification) describes it. A cell is a letter (G0, the G2 signs £ § ← ↑ → ↓ ° ± ÷ ¼ ½ ¾ Œ œ ß
   and the accented letters à â ä è é ê ë î ï ô ö ù û ü ç) in a colour, or a mosaic of 2x3 blocks (the character
@@ -329,7 +357,7 @@ open again become the page's file (Save writes the same format again).
 | TheDraw, ACiDDraw | `.bsv` | PC, 80 columns | a BASIC BSAVE screen dump (`BLOAD` loads it into the text screen) | yes | TheDraw's manual |
 | REXPaint | `.xp` | PC | one layer, 24-bit colours | yes (layers put together) | IcyDraw's reader |
 | Playscii | `.psci` | PC (dos), Amiga (amiga_topaz), PETSCII (c64_real_*, commodore_pet), Atari (atari) | every frame with its hold, one layer; Playscii's own charset and palette by name | yes, also c64_petscii, c64_edscii (Playscii's defaults) and jpetscii; other charsets open as a PC page; layers put together | Playscii's own loader (art.py); its glyph order compared with the ROM fonts |
-| Playscii | `.psci` | PC with Playscii's set as its font: Apple II, Agat, BBC Master, Intellivision, MSX, Pac-Man, Sharp MZ, ZX81 (`speccy`); Atari ST (`atari_st`) | the same charset and palette names and numbers as read (a palette other than ansi/ega is the page's own colours: the 16 the art uses most of a bigger one) | yes; the sets' pictures and Playscii's palettes are fetched on first use (see Licences) | Playscii's charset.py/palette.py; its own art (56 files) |
+| Playscii | `.psci` | PC with Playscii's set as its font: Apple II, Agat, BBC Master, Intellivision, Pac-Man, Sharp MZ (Japanese), ZX81 (`speccy`); Atari ST (`atari_st`) | the same charset and palette names and numbers as read (a palette other than ansi/ega is the page's own colours: the 16 the art uses most of a bigger one) | yes; the sets' pictures and Playscii's palettes are fetched on first use (see Licences) | Playscii's charset.py/palette.py; its own art (56 files) |
 | Marq's PETSCII editor | `.pet` | C64 | screen codes, colours, border, background, case | yes | its source (m_c64.pde) |
 | Marq's PETSCII editor | `.bas`, `.s` | C64 | a BASIC listing (for petcat) and an ACME program of a 40x25 screen (data only for other sizes); with a custom set, multicolour or ECM: the registers and the set (BASIC: VIC bank 3, screen `$C400`, set `$C800`; ACME: the set at `$2000`) | no | its source; the ACME output assembled by ACME 0.97 and run in a 6502 (c64x_test.go) |
 | CharPad | `.ctm` (v5-v9) | C64 | (read only) the character set, mode, colours; the map laid out as characters | yes, as a font or a page | CharPad 2.7's format pages; c64lib's test projects (`testdata/charpad`), every version the same page |
@@ -346,7 +374,8 @@ for `.ans`); PabloDraw cannot store characters 1-6 in a `.pd` (left out, the sav
 ACiDDraw have no files of their own beyond ANSI/BIN/XBin (ACiDDraw's `.adf` is ArtWorx's); TheDraw's `.tdf`
 are fonts. Not done: TheDraw 3's `.td` and libraries (`.tdl`), its COM/OBJ/C/Pascal/ASM exports; IcyDraw's
 Viewdata and Mode 7 pages, sixel layers, live text and effects; Playscii's teletext_uk, ultima4, ui and
-osamu-micro sets (glyphs wider than a cell: they open by number); Marq's DirArt as a disk.
+osamu-micro sets (glyphs wider than a cell: they open by number); Marq's DirArt as a disk. Playscii's `msx` set
+opens on the MSX page, its `sharp` set (the Japanese MZ's, with kana and kanji) on a PC page with the set as its font.
 
 ## Frames and animation
 
@@ -577,6 +606,28 @@ charedit --animate FOLDER|FILES... [--effect NAME|random] [--bbs amiexpress|myst
 It prints the report; `charedit --help` lists every option, `--effects` the effects. Exit status 0: done; 1: a
 file could not be written or nothing was animated; 2: a bad command line.
 
+## For compos: party check and work stages
+
+**File > Check for a party...** checks the page against a compo's published rules (read from each party's own
+page in October 2026; the link is shown) and lists only what breaks them: the page's size, iCE colours and
+blinking, an own font or palette, frames or a draw order (an animation), C64 multicolour/ECM, the wrong page type
+or machine, teletext rows a broadcast overwrites. It changes nothing. Rules it knows: Revision (ASCII / ANSI /
+PETSCII, and oldskool graphics), Evoke (one-screen ANSI / ASCII), Lovebyte (text graphics of at most 256
+characters: on machine pages the box around what is drawn counts), Zoo (PETSCII), Deadline (textmode), X
+(PETSCII), Logiker's AMSCII and ATASCII, the Teletext Advent Calendar. It also says what to hand in, how many work
+stages, and the rules it cannot check (no AI, no conversions).
+
+**Save for the party** (in the same requester) writes the files that compo wants into a folder beside the page's
+file, `name-<compo>/`: e.g. the `.ans` and a PNG, the C64 `.prg` and a PNG, the CPC `.bin` (8-character name),
+`.dsk`, PNG and `.psci`, and the work stages in `workstages/` when the compo asks for them.
+
+**File > Export work stages...** writes N pictures of the work (`name-stage01.png` ... at 1x or 2x, and in the
+page's own format if ticked), spread evenly from the start of the work to now; the last one is the page as it is.
+CharEdit keeps a thin history of every page for this (at most 64 pictures, packed: a few hundred KB for an 80x500
+page) and keeps it with the file when you save, in the data folder (`stages/`), so the stages span every evening
+you worked on it. A file changed by another program starts a new history. With fewer different pictures than
+asked, fewer stages are written (never copies). Design: `docs/workstages-design.md`.
+
 ## Keys
 
 Every shortcut can be changed in `~/.config/charcoal/keys` (`action = key, key`; written with the defaults and
@@ -667,7 +718,9 @@ The files that run on a machine were run in emulators (`emu_test.go`, `tools/emu
 `.prg`/`.d64` (every mode, own sets, both cases) in VICE, Atari `.xex`/`.atr` (38/40 columns, ROM and own font,
 800XL and 800) in atari800, Spectrum `.tap` in Fuse, Amstrad CPC `.bin` on a `.dsk` (modes 0-2) in MAME. Each
 emulator's screen is CharEdit's PNG export pixel for pixel, border included (the colours as each emulator's
-palette has them).
+palette has them). MSX cartridges (SCREEN 0, SCREEN 1, own fonts, and 80 columns on an MSX2) ran in MAME on
+C-BIOS, and MZ-700 `.mzf` files in MAME's mz700 with a stand-in monitor that loads them (`msx_test.go`,
+`mz_test.go`): the same, colours by RGB too.
 
 ## Files
 
@@ -691,6 +744,7 @@ palette has them).
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
 | `gtia.go`, `atari8.go`, `zxtap.go` | Atari GTIA colours and the colour registers; the Atari `.xex`/`.atr` and the OS ROM's font; the Spectrum `.tap` (`mach_test.go` runs the Atari program in a small 6502 with a model of ANTIC and compares its screen with the PNG export pixel for pixel) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
+| `msx.go`, `mz.go` | MSX pages (screens, colours, the `.rom`/`.bin` programs, Playscii's msx charset) and Sharp MZ-700 pages (two character sets, the `.mzf`); `tools/msxmz-fonts.py` makes their fonts (`msx_test.go`, `mz_test.go` run the programs in a small Z80) |
 | `minitel.go`, `minitel_ui.go`, `viewdata.go` | Minitel pages (the screen, a small Minitel that reads `.vdt`, the `.vdt` writer) and Viewdata pages (streams, 960-byte frames, Telstar frames); the editor's side of both (`minitel_test.go`, `viewdata_test.go`) |
 | `keys.go` | the table of actions and their default keys, the keys file, the help's key list |
 | `rowscols.go`, `blockjobs.go` | insert/delete rows and columns; fill, move and crop a block |
@@ -698,6 +752,7 @@ palette has them).
 | `anim.go`, `apng.go` | GIF and APNG export |
 | `animcost.go`, `animcost_ui.go` | animation detail levels, the cost of a saved animation (size, time at a speed, weight), Play's line timing, the Animate requester's cost, marks and preview at a speed |
 | `autosave.go` | autosave and offering it back, `.bak` on save, recent files |
+| `compo.go`, `stages.go` | Check for a party (compo rules as data, the check, Save for the party); the work's thinned history and Export work stages (`compo_test.go`) |
 | `paths.go`, `keymods.go`, `platform_*.go` | per system: the settings and data folders, Cmd and AltGr, drives, is a CharEdit still running |
 | `menus.go`, `layout.go`, `panel.go` | the menu bar (built from the actions in keys.go), the Studio and Focus layouts, the drawing gadgets both arrange |
 | `theme.go`, `uifont.go` | the themes, the interface text through a face (Topaz, or TrueType / OpenType: the system's, the Go font, a file) |
@@ -715,9 +770,12 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | IBM VGA 8×16 | rendered from Px437_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` |
 | IBM EGA 8×14, IBM VGA 8×8, IBM VGA 8×16 code pages 850 and 866 (`fonts/IBM_*.f08/.f14/.f16`) | drawn from Bm437_IBM_EGA_8x14, Bm437_IBM_VGA_9x8 and BmPlus_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* v2.2 (int10h.org), by `tools/pcfonts.py` | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` (the pack's licence) |
 | Atari 8-bit fonts | AltirraOS, from the Altirra emulator | all-permissive, `fonts/AltirraOS-LICENSE.txt` |
-| Atari GTIA colours (`gtia.go`) | the model and measured numbers of atari800's palette generator (`colours_ntsc.c`, `colours_pal.c`, github.com/atari800/atari800): luma steps, colour delays, PAL delay table; written anew from its description, no code taken | facts (numbers); atari800 itself is GPL-2+ |
+| Atari GTIA colours, the default (`gtia.go` `altirraTable`) | the model of Altirra's palette generator, Avery Lee (Altirra 4.40, `palettegenerator.cpp` and its default PAL/NTSC presets, virtualdub.org/altirra.html): luma ramp, hue angles, saturation, PAL phase table, colour matrices; written anew, no code taken | facts (numbers); Altirra itself is GPL-2+ |
+| Atari GTIA colours, atari800's (`gtia.go` `gtiaTable`) | the model and measured numbers of atari800's palette generator (`colours_ntsc.c`, `colours_pal.c`, github.com/atari800/atari800): luma steps, colour delays, PAL delay table; written anew from its description, no code taken | facts (numbers); atari800 itself is GPL-2+ |
 | ZX Spectrum font | the 48K ROM's character set | © Amstrad, who allow passing it on, `fonts/zx-spectrum-NOTICE.txt` |
 | Amstrad CPC font | the CPC firmware ROM's character set (the same in the 464, 664 and 6128) | © Amstrad; Amstrad has kindly given its permission for its copyrighted material to be redistributed but Amstrad retains its copyright, `fonts/amstrad-cpc-NOTICE.txt` |
+| MSX fonts (`fonts/msx-cbios*.font`) | C-BIOS 0.29a's character sets (international by Eric Boon, Japanese, Brazilian), cbios.sourceforge.net | BSD 2-clause, `fonts/msx-cbios-NOTICE.txt` |
+| Sharp MZ-700 font (`fonts/mz700-rjm.font`) | Russell Marks's hand-drawn MZ-700-like set from mz700em (1996), kept in github.com/mkoeppe/mz800em | public domain, `fonts/mz700-NOTICE.txt` |
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |
 | Minitel font (`minitel_font.go`) | Minitel-Canvas's Minitel font, Frédéric Bisson (github.com/Zigazou/Minitel-Canvas), drawn into 8x10 cells by `tools/minitel-font.py` | CC0, `fonts/minitel-NOTICE.txt` |
 | Unicode page font (`fonts/unifont-art.hex.gz`) | GNU Unifont 17.0.05, Roman Czyborra, Paul Hardy et al. (unifoundry.com): the blocks text art uses, cut by `tools/unifont.sh` | SIL Open Font License 1.1 (Unifont is dual-licensed OFL / GPL-2+ with the font exception; used under the OFL), `fonts/unifont-NOTICE.txt` |
@@ -745,7 +803,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE
 project; for the Plus/4 its KERNAL ROM, which holds the characters) and the EmuTOS font sources (GPL; 8x8, 8x16 and, for IGS's small text, 6x6), for PETSCII and Atari ST
-pages; Playscii's charset pictures (Apple II, Agat, BBC Master, Intellivision, MSX, Pac-Man, Sharp MZ, ZX81) and
+pages; Playscii's charset pictures (Apple II, Agat, BBC Master, Intellivision, Pac-Man, Sharp MZ, ZX81) and
 palettes, from Playscii's source at a fixed version (Playscii is MIT, but the glyphs are the machines' own); the
 Amiga fonts SkyPix files name (Topaz, the Workbench fonts and the 8x8 IBM set SkyPix terminals draw text in),
 as IcyDraw 0.6's source keeps them (Amiga's own fonts). Not included and not fetched: an Atari OS ROM (Atari's; used only when it is already on the computer).

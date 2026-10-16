@@ -6,7 +6,10 @@ package main
 // (editorformats.go, cpc.go); the others whose glyphs fit a text cell (8 pixels
 // wide, 16 high at most) open on a PC page with Playscii's set as the page's own
 // font, so the art shows as Playscii shows it: Apple II, Agat, BBC Master, the
-// Intellivision, MSX, Pac-Man, Sharp MZ and the ZX81 ("speccy"). A palette other
+// Intellivision, Pac-Man, Sharp MZ and the ZX81 ("speccy"). (Playscii's "msx" opens on the
+// MSX page, msx.go. Its "sharp" is the Japanese MZ's set in an order of its own, 352 glyphs
+// with katakana; the MZ-700 page has the European set's codes and no ROM to compare with,
+// so it stays a PC page with the set as its font.) A palette other
 // than ansi and ega becomes the page's own colours on such pages (and on dos/dos40
 // pages); a palette of more than 16 colours gives the 16 the art uses most, the
 // others shown as the nearest of them.
@@ -47,7 +50,6 @@ var psciSets = map[string]psciSet{
 	"apple2":        {"Apple II", 16, 8, "2b2d00e4b44c703ad3c7fc42a32806c24e222516"},
 	"bbc_master":    {"BBC Master", 16, 14, "ca7ee6c69f8b791cfad1c94e6124d5f98c0b26ec"},
 	"intellivision": {"Intellivision", 16, 14, "e32fecc09cdd33e723fc3a26faedc5c724b9ee0d"},
-	"msx":           {"MSX", 32, 8, "d62642174ed60ef3f76c3ec470dab9361e14c788"},
 	"pacman":        {"Pac-Man", 16, 6, "e41d3eeede40ece5e2df2cb742bab27ee06de5e4"},
 	"sharp":         {"Sharp MZ", 16, 22, "c3c3101c17862d3f3b91cb490191a25165f9584d"},
 	"speccy":        {"ZX81", 16, 4, "2ce645bd51258ad355d8f366330f9ad7a21af786"},

@@ -33,7 +33,7 @@ func openFontEditor() {
 		a.msg("A Unicode page draws with Unifont (and VGA): fonts of 256 characters are for the other pages")
 		return
 	}
-	if a.st() || a.tt() || a.cpc() || a.mt() {
+	if a.st() || a.tt() || a.cpc() || a.mt() || a.mz() {
 		a.msg("An " + modeNames[a.mode] + " page keeps its own font")
 		return
 	}
@@ -462,7 +462,7 @@ func openFontRequester() {
 		a.msg("A Unicode page draws with Unifont (and VGA): fonts of 256 characters are for the other pages")
 		return
 	}
-	if a.st() || a.tt() || a.cpc() || a.mt() {
+	if a.st() || a.tt() || a.cpc() || a.mt() || a.mz() {
 		a.msg("An " + modeNames[a.mode] + " page keeps its own font")
 		return
 	}

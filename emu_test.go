@@ -512,9 +512,10 @@ func TestEmuAtari(t *testing.T) {
 	}
 }
 
-// atari800's own colours (its default PAL and NTSC model) are CharEdit's:
-// its 128 colours compared one by one. The measured palette files in
-// atari800's source (act/), when there, are compared too, for the report.
+// atari800's own colours (its default PAL and NTSC model) are CharEdit's
+// atari800 palettes: its 128 colours compared one by one. How far they are
+// from CharEdit's default (Altirra's PAL) and the measured palette files in
+// atari800's source (act/), when there, are logged for the report.
 func TestEmuAtariPalette(t *testing.T) {
 	s := emuFStart(t)
 	empty := filepath.Join(t.TempDir(), "empty.xex") // no program: only the palette is wanted
@@ -522,7 +523,7 @@ func TestEmuAtariPalette(t *testing.T) {
 	for _, tv := range []struct {
 		opt  string
 		ours *[256]uint32
-	}{{"-pal", &gtiaPAL}, {"-ntsc", &gtiaNTSC}} {
+	}{{"-pal", &gtia800PAL}, {"-ntsc", &gtiaNTSC}} {
 		g := emuFA800(t, s, empty, 1, "-xl", "-xl-rev", "altirra", tv.opt)
 		worst, at := 0, 0
 		for v := 0; v < 256; v += 2 {
@@ -530,10 +531,18 @@ func TestEmuAtariPalette(t *testing.T) {
 				worst, at = d, v
 			}
 		}
-		t.Logf("atari800 %s: largest difference from CharEdit's table %d (colour $%02X: %06X, ours %06X)",
+		if tv.opt == "-pal" {
+			sum := 0
+			for v := 0; v < 256; v += 2 {
+				sum += emuFRGBDist(g.rgb(uint32(v)), gtiaPAL[v])
+			}
+			t.Logf("atari800 -pal against CharEdit's default (Altirra's PAL): mean difference %d; $94 %06X, ours %06X",
+				sum/128, g.rgb(0x94), gtiaPAL[0x94]&0xFFFFFF)
+		}
+		t.Logf("atari800 %s: largest difference from CharEdit's atari800 table %d (colour $%02X: %06X, ours %06X)",
 			tv.opt, worst, at, g.rgb(uint32(at)), tv.ours[at]&0xFFFFFF)
 		if worst > 3 {
-			t.Errorf("atari800's %s colours are not CharEdit's", tv.opt)
+			t.Errorf("atari800's %s colours are not CharEdit's atari800 palette", tv.opt)
 		}
 	}
 	acts, _ := filepath.Glob(filepath.Join(s.cache, "src", "atari800", "act", "*.act"))
@@ -549,7 +558,7 @@ func TestEmuAtariPalette(t *testing.T) {
 			lum += emuFLuma(gtiaPAL[v])
 			theirsLum += emuFLuma(rgb)
 		}
-		t.Logf("%s: mean difference from CharEdit's PAL %d; mean brightness %d, ours %d; $94 is %02X%02X%02X, ours %06X",
+		t.Logf("%s: mean difference from CharEdit's default PAL (Altirra's) %d; mean brightness %d, ours %d; $94 is %02X%02X%02X, ours %06X",
 			filepath.Base(f), sum/128, theirsLum/128, lum/128, b[0x94*3], b[0x94*3+1], b[0x94*3+2], gtiaPAL[0x94]&0xFFFFFF)
 	}
 }

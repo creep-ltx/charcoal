@@ -15,8 +15,11 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
   runs-on-the-machine exports), then step 4/5 (docs/roadmap.md).
 - **Release how-to:** bump `const version` in main.go (X.YbN = beta), commit, push main, `git tag -a vX.YbN -m ...`,
   push the tag; GitHub Actions builds the three zips and a prerelease (tags with "b"). Check the run with
-  `gh run watch`, then `gh release view`. Before tagging: `go test ./...` and, after merges touching readers, the
-  big check (tools/bigcheck) compared with the previous report.
+  `gh run watch`, then `gh release view`. Before tagging: `go test ./...`, the same as CI runs it (Go 1.24 from
+  go.mod, no downloaded ROMs/fonts: `HOME=<empty> GOMODCACHE=$(go env GOMODCACHE) GOCACHE=$(go env GOCACHE)
+  GOPATH=$(go env GOPATH) XDG_DATA_HOME=<empty> XDG_CONFIG_HOME=<empty> GOTOOLCHAIN=go1.24.0 go test ./...` -
+  0.1b8's first tag failed in CI on exactly that), after merges touching readers the big check (tools/bigcheck)
+  compared with the previous report, and for machine programs `CHARCOAL_EMU=1 go test -run TestEmu .`.
 - **How the user wants work done:** showy new features are built on a local branch (git worktrees, never pushed),
   shown first (a video on the NAS /mnt/nas/home/*.mp4 and screenshots opened with Read: they show on the user's
   phone), released only after the user says yes. Several helpers in parallel worktrees, then one local integration
@@ -58,6 +61,8 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | Minitel (2026-10-16) | .vdt (Videotex stream; screens a clear ends become frames); Bisson's Minitel font (CC0) built in; see "Minitel and Viewdata pages" |
 | Viewdata (2026-10-16) | a teletext page of 24 rows: .cpt streams (.car carousels as frames), 960-byte .bin frames, Telstar .json frames, and .tti / edit.tf |
 | Plus/4, C16 (2026-10-16) | a PETSCII model: Marq's Plus/4 .prg and .c, .d64, TED Screen Editor .scrn (+ .proj), Petmate9 c16 screens, .seq; TED colours and flash; see "Plus/4 and C16 pages" |
+| MSX (2026-10-16) | SCREEN 0 (40x24), SCREEN 1 (32x24, colours per 8 characters), MSX2 WIDTH 80; .rom cartridge and BLOAD .bin (both read back), Playscii .psci; C-BIOS fonts (BSD) built in; see "MSX and Sharp MZ-700 pages" |
+| Sharp MZ-700 (2026-10-16) | 40x25, two character sets, 8 colours per cell; .mzf (CharEdit's, and other pictures that copy to $D000/$D800); a public domain look-alike of the first set built in, Sharp's ROM when found |
 | Unicode (2026-10-16) | UTF-8 ANSI (256/24-bit SGR), durdraw .dur (frames), mIRC .irc (also written from PC pages), HTML; GNU Unifont's art blocks built in (OFL); see "Unicode page" below |
 | SkyPix (2026-10-16) | Amiga BBS graphics (.spx, .ans with `ESC[n!`) on a PC page: the drawing under the cells; also IcyDraw's PETSCII/ATASCII/ST .icy, PabloDraw .pd, TheDraw .td, BSAVE .bsv, Playscii's other sets: see "The rest of other editors' files" |
 
@@ -756,8 +761,8 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 - **The user's decisions (2026-10-16, "I trust you"):** PAL default; the GTIA model re-implemented from atari800's
   numbers (no code) is fine; the OS ROM font is the default when a ROM is found (prefs.go); a .xex shows 24 rows
-  with a note, no scrolling; a measured palette becomes the default once one with a shippable licence is found
-  (the emulator check, branch r3-emu, gathers the evidence).
+  with a note, no scrolling; ~~a measured palette becomes the default~~ **done 2026-10-16 (r3-emu): Altirra's
+  default PAL palette, computed from its model's constants, is the default** (compo screenshots are Altirra's).
 
 - **Atari colours** (`gtia.go`): an Atari page's `Doc.bg/ink/border` are now the machine's registers as values
   0-255: COLOR2 (710, the screen), COLOR1 (709: only its luminance shows, the text takes the screen's hue:
@@ -766,8 +771,16 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   meta) go through `atariFromOld`. RGB: `a.atariRGB(v)` = `a.gtia()[v&$FE]` (luminance bit 0 ignored in text
   modes); **never `a.pal[d.bg]` on an Atari page** (it panics on values > 15): the sites that did (drawCell,
   borderPx, HTML, strip, paperRGB, paperColour, convertFromMachine, Playscii) have an atari case. `a.pal` on
-  an Atari page is 16 hues at luminance 8 (for code that wants some palette). Palettes `atari` (PAL, default) and
-  `atarintsc`, tables `gtiaPAL`/`gtiaNTSC` made at start by atari800's model (standard preset: gamma 2.35, levels
+  an Atari page is 16 hues at luminance 8 (for code that wants some palette). **Palettes (2026-10-16, r3-emu):**
+  `atari` "Atari PAL (Altirra)" = `gtiaPAL`, the default; `atarintscalt` "Atari NTSC (Altirra)" = `gtiaAltNTSC`;
+  `atari800pal` "Atari PAL (atari800)" = `gtia800PAL`; `atarintsc` "Atari NTSC (atari800)" = `gtiaNTSC`
+  (`gtiaPalettes`, `isGTIAPalette`, `gtiaFor`). The ids are old: `atari` meant atari800's PAL before, so old
+  prefs/autosaves naming it now get Altirra's; `atariFromOld` still converts with `gtia800PAL` (the table of the
+  time). `altirraTable` = Altirra 4.40's palettegenerator.cpp model with presets default_pal/default_ntsc (XL luma
+  ramp, hue start -12 / -57, range 18.3x15 / 27.1x15, saturation 0.29 / 0.20, PAL even/odd phase table; NTSC also
+  brightness -0.04, contrast 1.04, gamma 2.2 + NTSC primaries to sRGB), only constants taken; PAL is pinned by
+  `TestEmuAltirraPalette` (all 256 values; $94 #005F8A, grey 14 #EEEEEE). Its NTSC is *computed, not compared
+  with Altirra* (greys tint slightly: its primaries' white is illuminant C). atari800's tables were made at start by its model (standard preset: gamma 2.35, levels
   16-235, delay 26.8 / 23.2 degrees, PAL's even/odd delay table; *read* from its colours_ntsc.c / colours_pal.c,
   written anew). They come out darker than measured palettes (atari800's act/jakub.act, Real.act: $94 is
   #2D769D there, #034653 here): the model is what atari800 shows by default, not a measurement.
@@ -824,8 +837,8 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   (GTK) on GTK's Broadway backend (`broadwayd`, no screen) recording an uncompressed FMF movie, read by
   `emuFFMF`; MAME `cpc6128 -video none -seconds_to_run` with Caprice32's ROMs (`get-cpc-roms.sh`). All with
   `env -i`, a temporary HOME, `timeout -k 5` and a 4 GB scope.
-- **Colours** (logged by the tests): atari800's default PAL and NTSC palettes are CharEdit's `gtiaPAL`/`gtiaNTSC`
-  exactly (0 difference over all 128 colours each), so "darker than measured" is atari800's own default look.
+- **Colours** (logged by the tests): atari800's default PAL and NTSC palettes are CharEdit's `gtia800PAL`/`gtiaNTSC`
+  (until the switch to Altirra's, `gtiaPAL`) exactly (0 difference over all 128 colours each), so "darker than measured" is atari800's own default look.
   atari800's act/ files are brighter (mean brightness 136-146 against our 99; $94 jakub #2D769D, Real #3E75A4,
   ours #034653); Altirra 4.40's default PAL, computed from its palettegenerator.cpp (not run: Windows), is between
   (mean 120, $94 #005F8A, grey 14 #EEEEEE against our #D3D3D3). VICE's default C64 palette differs from ours
@@ -857,7 +870,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   Glue: `icyMachineLoad` in loadEditor's icy case, `reparseIcyMachine` in reparseEditor, `writeIcyMachine` in
   encodeEditor, Save as "IcyDraw" offered on c64/atari/st pages (init). XEP80 (80 columns) shows its first 40;
   VDC's per-cell set: the one most cells use (note says how many differ).
-- **Playscii** (`psciown.go`): sets with no page (`psciSets`: agat, apple2, bbc_master, intellivision, msx,
+- **Playscii** (`psciown.go`): sets with no page (`psciSets`: agat, apple2, bbc_master, intellivision,
   pacman, sharp, speccy = ZX81) open on a PC page with the set's picture as the page's own font (glyph i = the
   picture's i-th cell; on = not black; <= 8 wide, 6-16 high; **glyph 0 and 32 trade places**, `psciSwap`, since a
   PC page draws nothing for 0 and types space as 32); a palette other than ansi/ega becomes the page's own colours
@@ -865,10 +878,12 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   numbers (`psciPage.own`, from `a.psciOwnOf()` re-reading the source). atari_st opens on an ST page (low <= 40
   columns, high for 2 colours, else medium); it saves back with the file's palette, each pen as a palette colour
   that reads back as that pen (`psciPenColour`; ansi alone does not round-trip yellow/light yellow). The pictures
-  (8 sets, 21 palettes) are fetched on first use from github.com/michael-lazar/playscii at `psciVersion`, SHA-1
+  (7 sets, 21 palettes) are fetched on first use from github.com/michael-lazar/playscii at `psciVersion`, SHA-1
   checked (`psciNeeds` asks; `psciURL` is a var for tests). Not done: teletext_uk (12x20 glyphs; the Unicode or
-  teletext page would fit), ultima4/ui/osamu-micro (too wide): by number as before. msx and sharp: when the MSX
-  and MZ-700 pages (round 4, other helper) are merged they could open there (msx index = MSX code - 32).
+  teletext page would fit), ultima4/ui/osamu-micro (too wide): by number as before. Playscii's `msx` opens on the MSX page (msx.go,
+  checked before psciSets); `sharp` stays a PC page with its own font: it is the Japanese MZ's set (kana, kanji,
+  352 glyphs in an order of its own), the MZ-700 page holds the European set's display codes and no ROM to
+  compare glyphs with, so no exact mapping exists.
 - **PabloDraw `.pd`, TheDraw `.td`, BSAVE `.bsv`** (`othformats.go`): `.pd` = .NET string font id (or "" and the
   font: int16 w, h, count, rows) + int16 palette count + RGB + TundraDraw body without header (PabloDraw's
   `Tundra.Save`: position after chars 0-6, fg not written for spaces, both start at attribute 0); width from
@@ -913,6 +928,130 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   eddbe237 = IcyDraw 0.6.0) + `crates/icy_engine/examples/ccicy.rs` (dump / make / render / skypix), built with
   `sandbox.sh cargo build --offline --release -p icy_engine --example ccicy` (bwrap: no network, only that folder
   writable; PATH must not hold ~/.cargo/bin and /dev, /proc must be given). Recipe in the knowledge note.
+## Compos: party check and work stages (2026-10-16, branch r4-compo; design: docs/workstages-design.md)
+
+- **The user's decisions (2026-10-16, "I trust your judgement"):** Lovebyte's 256 counts the box round what is
+  drawn on machine pages; stages never include the empty page, are spread by edit steps, and are fewer rather than
+  repeated; iCE on with no bright backgrounds passes "no iCE"; File menu, no default keys, Save for the party
+  writes beside the file.
+
+- **Party check** (`compo.go`): `compoRules` is the data table (id, name, edition, URL, the key sentences quoted
+  in comments, `plats` = the kinds of entry with page modes, machine, max cols/rows, exact cols, max cells, what is
+  allowed (iCE, blink, own font, own palette, animation, VIC modes), rows to keep empty, formats to hand in; stages
+  and `atLeast`; `also` = rules CharEdit cannot check). `compoCheck` returns only the problems; `compoPlatFor` picks
+  the kind by page mode and machine. Lovebyte counts the drawing (`drawnSize`: the page on PC/Amiga, the box
+  around `usedCell`s on machine pages). Blink = bright background without iCE on PC/Amiga pages. A draw order
+  (Animate) counts as an animation when Save would write it. UI: `PartyReq` (File > Check for a party,
+  action `party_check`, no key; Up/Down change the compo; `prefs.Party` remembers it). Rules read 2026-10-16
+  (Revision 2026, Evoke 2026, Lovebyte 2025 (no 2026 page), Zoo 2026, Deadline 2026 at demoparty.berlin, X 2026,
+  AMSCII 2024, ATASCII 2026, Yle teletext 2026): the KB survey's older numbers were wrong in places (Zoo now >= 15
+  stages, Deadline's 6 stages are not for textmode, Revision textmode wants none).
+- **Save for the party** (`saveForParty`): needs a saved page; writes `deliver` formats through `encodeStage`
+  (a copy of the tab with only the picture: no source, frames, order, never "unchanged") into
+  `<dir>/<name>-<compo id>/`, CPC names cut to 8 characters (`cpcTarget` set for the .dsk), and the compo's
+  stages in `workstages/`. The status line counts broken rules.
+- **Work stages** (`stages.go`): `Tab.steps` = depth (pushSnap: s.step + 1; restore: s.step; `Snap.step`),
+  `Tab.stages *stageLog` = pictures at depths that are multiples of `every`; `recordStage` (from pushSnap) drops
+  pictures deeper than the step (an undone branch) and skips other frames' steps; past 64 pictures or 24 MB
+  `every` doubles. Pictures are flate-packed little-endian cells (`packDoc`; Unicode styles renumbered into the
+  picture's own `Pairs`, so `uniCompact` cannot break them). Measured: 63 real PC ANSIs pack to 7.5% (worst 16%);
+  80x500 typical art ~2-12 KB a picture. Kept: `writeStages` after an own-format save, to
+  `<data dir>/stages/<sha1 of the absolute path>.json` with the SHA-1 of the bytes written; `restoreStages` in
+  openPath takes it only if the file still has those bytes and the page type matches (openPath clears
+  steps/stages before loading). Autosave: `<id>.stages`. `stageCands` = log + undo stack (same mode, current
+  frame) + now; `pickStages` = stage k nearest depth k*D/N, strictly deeper than the one before, leaving room for
+  the rest; depth 0 (the empty page) is not a stage; fewer pictures -> fewer stages. `exportStages` writes
+  `name-stageNN.png` (+ the page's format). UI: `StagesReq` (File > Export work stages, action `work_stages`).
+- script.go: `do ACTION` runs any action by id (for headless shots of key-less actions).
+- Tests (`compo_test.go`): log thinning/spread/content over 1000 steps, undo branches, pickStages cases, the log
+  kept with the file across a restart (and refused after an outside change), autosave carries it, Unicode
+  pictures, packing, the rules table (every format id and page mode exists), the check on PC/C64/Atari/teletext
+  pages, Save for the party (PC, CPC 8-char names, 10 stages for Revision oldskool), `FuzzCompoStageLog`;
+  `CHARCOAL_COMPO_FILES=dir` measures packing on real .ans.
+- Not done: a log is not kept for pages only ever exported; pictures keep cells only (font, CPC inks, C64 modes
+  are the page's now); no check of the colour count beyond the page type's own; Coloured ATASCII and AMSCII's
+  mode 0/2 categories are not separate entries; no timelapse video.
+
+## MSX and Sharp MZ-700 pages (2026-10-16, branch r4-msxmz)
+
+- **Decided (2026-10-16, the user trusts these calls):** C-BIOS's font as the MSX default (a real MSX shows its
+  ROM font; only an own font travels); MSX pictures at openMSX's 320x240, MZ at the bare 320x200; the MSX .bin
+  loads at $9000 and resets to SCREEN 0 on a key, the cartridge never returns; MZ display codes 0x00/0x20 swapped
+  inside CharEdit (files hold the real codes). The MZ second set without Sharp's ROM: drawing a free look-alike is
+  on the roadmap (real MZ art uses it a lot; hex boxes until then). CharView lists .mzf .xex .atr .tap .dur .irc
+  .ig .igs .psci .icy .xp .msg too.
+
+- **MSX** (`msx.go`): page type "msx" (`a.msx()`). `Tab.msxSet msxSetup` = mode (0 SCREEN 0 40x24, 1 SCREEN 1
+  32x24, 2 SCREEN 0 WIDTH 80), fg/bg (SCREEN 0: the whole screen; border = bg), border (SCREEN 1's backdrop),
+  `ct [32]byte` (SCREEN 1's colour table, fg<<4|bg per 8 characters). **A cell holds only its character**
+  (`makeCell(ch, 0, 0, 0)`): `drawMSXCell` takes the colours from the setup (`msxSetup.colours(ch)`; colour 0 =
+  transparent = the backdrop, `a.msxRGB`), so cells are blank to `blankAt` and the colours cannot drift. `setFg`/
+  `setBg` (keys, Swap, the Colours) go to `msxSetColour`: the screen's pair in SCREEN 0, the brush character's
+  group in SCREEN 1, undoable (`Snap.msx`, also in frames.go's snapshot); `msxBrushColours` keeps `a.fg/a.bg` as
+  the brush shows. Cells 6x8 (SCREEN 0, the glyph's left 6 pixels as the TMS9918 shows), 8x8, 6x16 (80
+  columns, pixels half as wide). 24 rows fixed. Palettes `msx1` (MAME's TMS9918 table, R. Nabet's from TI's data
+  book; *verified* equal to MAME's screenshots) and `msx2` (openMSX's V9938_PALETTE, 3-bit GRB levels); the
+  Palette gadget lists only those two.
+- **Font**: C-BIOS 0.29a's three sets (`fonts/msx-cbios*.font`, BSD, made by `tools/msxmz-fonts.py` from
+  font_us/jp/br.asm). Microsoft's MSX ROM font may not be shipped: `loadMSXROMFont` (main, headlessApp) adds
+  "MSX (BIOS ROM)" from `msx.rom`/`msx1.rom`/`msx2.rom` in the data folder (32 KB, CGTABL at 0x0004). An own font
+  (2048 bytes in `parseFontFile`, or the font editor) is carried by the programs; C-BIOS's sets and the ROM's
+  are not (`msxProgramFont`): a real MSX shows its own ROM font then.
+- **Files**: `.rom` (16 KB, "AB", INIT 0x4010) and `.bin` (BLOAD: FE start end exec, at 0x9000; a key returns
+  to BASIC on a cleared SCREEN 0). Same program (`msxProgram`): ERAFNK; FORCLR/BAKCLR/BDRCLR (SCREEN 0: BDRCLR =
+  bg, since C-BIOS's CHGCLR takes BDRCLR where MSX BASIC's takes BAKCLR); LINL40 (40/80) + INITXT or LINL32 +
+  INIT32; CHGCLR; LDIRVM of the own font to (CGPBAS), the names to (NAMBAS), SCREEN 1's colours to (T32COL);
+  then `JR $` (cartridge) or KILBUF/CHGET/INITXT/RET (.bin). After it "CharEdit MSX", a version byte, mode, fg,
+  bg, border, flags (bit 0 own font), the names, the 32-byte colour table (always), the font: how
+  `readMSXProgram` reads it back. Other people's .rom/.bin are not read (`loadMSX` returns false on auto).
+  Playscii `msx` charset = codes 32-255 then 0-31 (`psciMSXIndex`), `msx` palette = 15 colours in Playscii's own
+  order (`psciMSXColours`, matched to the MSX2 palette); reading picks the mode by width and the commonest
+  colours (per group in SCREEN 1). Open as MSX: text, code 1 + 0x40-0x5F for 0-31 (`msxText`), saved as UTF-8.
+- **Sharp MZ-700** (`mz.go`): page type "mz". Cells: character + fg + bg (0-7, colour code = G4 R2 B1), and
+  `mzSet2` (1<<20) for the second character set. **Display code 0x00 (space) and 0x20 (the digit 0) change
+  places inside CharEdit** (`mzCode`, an involution used for fonts, files and runes), so the space is 32 as
+  everywhere; `Doc.glyph0` is set on MZ pages (`applyLook`) so the digit 0 is not empty. The brush and F-keys
+  hold 0-511 (256+ = second set): `mzCell`, `mzChar`, `validMZFkeys` (prefs.go accepts them), the character
+  table shows 512 (panel.go `drawCharset`). Empty cell: space, white on blue (the monitor's $71).
+- **Font**: Sharp's CG ROM is copyrighted (MAME needs it, nobody may ship it). Built in: Russell Marks's public
+  domain look-alike of the first set (mz700em's font.txt, in github.com/mkoeppe/mz800em; `fonts/mz700-NOTICE.txt`);
+  the second set is drawn as its code in a box (`mzHexFont`). `loadMZROMFonts` finds `mz700fon.int` (or `.jpn`)
+  in the data folder, ~/.mame/roms, /usr/share/mame/roms, as a file or in `mz700.zip`, and adds "MZ-700 (Sharp
+  ROM)" with its second set (`mzROMSet2`; MAME's layout: 512 glyphs, the low bit the leftmost pixel). Own fonts
+  and the font editor are refused (the MZ-700 has no programmable characters).
+- **Files**: `.mzf` (`writeMZF`): header (1, name ended by 0x0D, size, load = start = $1200), program `DI; LD
+  HL,codes; LD DE,$D000; LD BC,1000; LDIR; LD HL,attrs; LD DE,$D800; ...; JR $`, "CharEdit MZ-700", 1000 display
+  codes, 1000 attributes (bit 7 set 2, 6-4 fg, 2-0 bg). `readMZScreen`: our mark, or any program that names
+  $D000 and $D800 within 12 bytes of an LD HL/DE/BC of an address with 1000 bytes in the file (z88dk's memcpy
+  pushes, LDIR): pixelrat's "Princess" (Demodulation 2021, from demodulation.retroscene.org) opens. Open as
+  Sharp MZ-700: UTF-8/Latin-1 text. UTF-8 export (`encodeMZ`) keeps the second set (Legacy Computing code
+  points, from Wikipedia's Sharp MZ character set, European tables). Pictures 320x200, no border.
+- **Glue**: init() in each file (fonts, palettes before Custom, pageModes, modeOrder, modeNames, openAs,
+  modeNoStream, editorOwn, formats after cpcdsk); editor.go: Tab/Snap fields, cellW/H, cell, brushCell,
+  setPalette, printable, charToByte, runeOf, snapshot/restore, maxRows, pick, setFg/setBg, nColours,
+  defaultColours, swapColours, reparse/load/encode chains, setMode, makeTab, setRows/setCols, play, applyLook's
+  glyph0; view.go (drawCell, labels, Screen gadget, palette list, status line), panel.go, uni_ui.go
+  (previewCell, charLabel), anim.go (openMSX's 320x240 border), cpc.go's borderPx, frames, rowscols, strip,
+  effects, shapes (MSX box lines 17 16 18 19 1A 1B), fontfile/fontedit, streams, menus, start (tiles), main,
+  batch, autosave (`msxAutosave`), prefs, editorformats (psci), dialogs (help), fuzz_test.
+- **Tests** (`msx_test.go`, `mz_test.go`, helpers `msxF*`/`mzF*`): fonts, runes, palettes, typing, colours and
+  undo, every program (3 modes x own font x .rom/.bin) run in a small Z80 (`msxFZ80`) with a model of the BIOS
+  and compared pixel for pixel with the page; editor round trips (.rom, .bin, .psci); Playscii charset;
+  Open as text; picture sizes; autosave; ROM font detection; MZ: quarter-block bit order, second set,
+  pick, .mzf run in the Z80 (video RAM byte for byte), round trip, other programs (memcpy and LDIR forms;
+  `CHARCOAL_MZ_FILES=dir` opens real .mzf files and writes PNGs), text and UTF-8, ROM fonts.
+  **Emulators** (CHARCOAL_EMU=1): `TestEmuMSX` runs the cartridges in MAME's hb10p (MSX1) and phc23 (MSX2) with
+  C-BIOS as their BIOS (`tools/emucheck/get-msx-roms.sh`; MAME warns "WRONG CHECKSUMS" and runs it): SCREEN 0,
+  SCREEN 1, own fonts and WIDTH 80 are CharEdit's PNG pixel for pixel, and MAME's RGB equals msx1Palette.
+  `TestEmuMZ` runs the .mzf in MAME's mz700 with a stand-in monitor ROM written by the test (copies the .mzf to
+  $1200 and jumps; Sharp's monitor may not be shipped) and a CG ROM of CharEdit's font: pixel for pixel, RGB too.
+  `TestMSXMZSamples` (`CHARCOAL_MSXMZ_SAMPLES=dir`) writes sample files.
+- **Not done**: other people's MSX .rom/.bin/.dsk/.cas (no known text-art format; the 2025 MSX ASCII piece was
+  not found as a file), a .dsk with the .bin, an MSX BASIC listing, MSX2 blink attributes, sprites; the
+  monitor's own loading of the .mzf on a real MZ-700 (MAME ran it through the stand-in monitor), the MZ-700
+  "Character Graphics Editor"'s files (a Japanese Windows tool seen in a Shadow Party 2024 entry's work stages;
+  not found), Playscii's "sharp" charset (another layout), flips of second-set characters (they use the first
+  set's mirror table), the 2nd set's look without Sharp's ROM (codes in boxes).
 
 ## Keys and safety (2026-10-13, evening)
 
