@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -74,6 +75,12 @@ func FuzzParsers(f *testing.F) {
 				f.Add(b)
 			}
 		}
+	}
+	{ // Atari ST IGS (igs.go)
+		f.Add([]byte(igsFSample))
+		f.Add([]byte("G#&>0,636,4,0,>CL@,16,0)1,3:1)319,99,x,0:0C1,2:1L319,99,+2,0:&>20,60,20,0,W@2,0,x,a@b@c@:"))
+		f.Add([]byte("G#X>7,1,\r\n" + strings.Repeat("XX--XX--XX--XX--@", 16) + ":A>4,1,1:Z>r,R,9999,9999:G>0,6,0,0,99,99,5,5:"))
+		f.Add([]byte("G#X>11,1,3,\xff\x00\xff\x00G#T>2,1,41:T>2,1,50:J>1,1,500,9,0,3600:E>31,20,1:W>9,9,Hi@F>5,5:"))
 	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		check := func(name string, run func() []*Doc) {
@@ -151,6 +158,15 @@ func FuzzParsers(f *testing.F) {
 		check("petmate", func() []*Doc { return screens(parsePetmate(b)) })
 		check("prg", func() []*Doc { d, _, _ := parsePrg(b); return one(d) })
 		check("vt52", func() []*Doc { return one(parseVT52(b, stResolutions[0], 0)) })
+		check("igs", func() []*Doc { // and what it writes back reads back
+			l := readIGS(b, -1)
+			d := l.cells.clone()
+			d.set(0, 0, makeCell('Z', 1, 2, 0))
+			if back := readIGS(writeIGS(l, d), l.res); !igsSameCells(back.cells, d) {
+				t.Fatalf("igs: the cells do not read back")
+			}
+			return one(l.cells)
+		})
 		check("cpc bin", func() []*Doc { d, _, _, _ := parseCPCBin(b); return one(d) })
 		check("cpc dsk", func() []*Doc {
 			if f, _, err := dskArt(b); err == nil {

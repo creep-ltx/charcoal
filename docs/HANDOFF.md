@@ -49,6 +49,9 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | Atari (ATASCII) | .ata (width 38/40 guessed); AltirraOS font built in |
 | Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL) |
 | PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form, or CharEdit's for sets/modes) .d64, CharPad .ctm read; multicolour and ECM (C64, C128 40); ROMs from VICE on first use |
+
+| Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL); IGS .ig (2026-10-16): the drawing as a picture under the cells, see "Atari ST IGS" below |
+| PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form); ROMs from VICE on first use |
 | ZX Spectrum | .scr (6912 bytes); 48K ROM font built in (Amstrad allows passing it on) |
 | Amstrad CPC | modes 0/1/2; .bin (AMSDOS program), .dsk, Playscii .psci (Logiker's exporter); firmware ROM font built in (Amstrad's permission) |
 | Teletext | .tti .ep1, edit.tf links (.url), Mode 7 dumps; Bedstead font (CC0) built in; a .tti carousel opens as frames (one per subpage) and saving rewrites only changed subpages' OL 0-24 rows, every other line kept (teletext.go writeTTIFrames) |
@@ -505,6 +508,60 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   stalls in this package), `FuzzC64x`, FuzzParsers has prg/d64/ctm.
 - Not done: DirArt (directory art) on the .d64; a run in VICE or on a real C64; Petmate/Marq .c files with modes
   (neither editor has them); CharPad writing; Petmate JSON with a custom charset.
+
+## Atari ST IGS (2026-10-16, branch r2-igs; design: docs/igs-design.md)
+
+- What: IGS files (`G#` commands drawing with GEM VDI inside a VT52 stream) open as an Atari ST page whose
+  drawing is a **picture under the cells** (`Tab.igs *igsLayer`, `a.igsPage()`). An empty cell (`isBlank`:
+  space/0 on pen 0) shows the picture (`drawCellXY`, called by drawPage and `paintCellsAt`, so PNG/GIF exports
+  and CharView have it); other cells are VT52 text drawn over it. `setPalette` takes the file's registers.
+  Typing goes over it; saving `.ig` (`writeIGS`) = the drawing's bytes + CR + the cells as VT52 (`ESC q ESC w`,
+  `ESC Y` per run, pens where they change; a run is cut before a '#' that follows a 'G') + the kept commands
+  (`G#...:` + CR each) + the closing. **Unchanged cells save the source bytes exactly.** Not editable: the drawing.
+- `igs.go`: `igsParse` cuts the file into items (commands, VT52 runs, ESC E alone). Values are read IG 2.18's
+  way (CR/LF inside a value ignored, `_` too); a command ends at `:` (then chained: the next letter needs `>` or
+  a space and a value - so `p>24,19:We all` prints "We all", the spec's example, and `k 1:` is a command), or after
+  its value count (`igsWant`). W's text runs to `@` (CR/LF dropped, IG 2.20). Loops (`&`): tokens, chain gangs
+  (`>CL@`, index then values, `)` or the letter separating), `W@` texts, `x y + - !`; every group of a chain gang
+  runs (IcyDraw runs only the first: its 00-IGNIT render differs there, 99.6%). X 7 patterns, X 11 bitmaps (the
+  32000/4000 raw bytes after the command, ST planar, `planar`), X 12 palettes. `igsVM` runs commands into
+  `pix` (registers); VT52 on the pixels (`vt52`, `putGlyph`, scrolling). Random values: fixed seed. A work budget
+  (`igsWorkMax`, 40M; real files <= 18M) stops hostile files; the note says so.
+- `igs_vdi.go`: the port of IcyDraw's vdi_paint (EmuTOS VDI): Bresenham lines with masks (always replace mode,
+  as IcyDraw), wide lines with the pen's quarter circle and arrow/round ends, polygon scan fill bottom-up,
+  `igsCurve` (1800-step sine table), rounded boxes, flood fill, polymarkers, text (6x6/8x8/8x16, scale 2 above
+  size 15; thickened/ghosted/skewed/underlined/outlined; 4 rotations), blits (logic ops masked to the planes).
+- `igs_page.go`: `readIGS` splits the file: **head** = up to the last drawing command or wipe (`s`, `I`, `R`,
+  ESC E) before the last visible thing; **text part** = VT52 + IG's text commands (`c p m l d i r v w`) into
+  cells via `STTerm` from the head's cursor/colours, other commands **kept**; **closing** = from the first wipe
+  after the last visible thing (BBS screens end "pause, sound, clear, reset"). Palette shown: of those the
+  kept commands go through (fade-out, reveal, cycling), the one with most distinct colours on the picture, then
+  the brightest, later wins ties (`igsBestPalette`). Resolution: R before any drawing, else a probe run
+  (`vm.probe`, loops expanded) of the coordinates (x > 319 medium, y > 199 high), else low; the Resolution
+  gadget re-reads in another (`reparseIGS` uses `a.stres` when `forceCols` is set). A head that ends in an X 11
+  cut short is padded with zeros so text added after it is not read as bitmap.
+- Fonts: EmuTOS `fnt_st_6x6.c` added to `stFontFiles` (SHA-1 `stFont6SHA1`; `loadIGSFont6`, 192-byte rows);
+  `hasSTFont` still means 8x8 + 8x16 (old downloads keep working); opening an IGS file asks for the download when
+  the 6x6 is missing. All three are byte-identical to IcyDraw's Atari fonts (checked).
+- Glue: `init()` in igs_page.go (formats "igs" `.ig`, editorOwn, Open as "Atari ST IGS"); editor.go: Tab.igs,
+  `loadIGS` after loadCPC (and `a.igs = nil`), `reparseIGS` with reparseEditor/CPC, `encodeIGS` after encodeCPC,
+  setPalette; view.go: drawCellXY in drawPage, paintCells -> paintCellsAt (the float passes its page position);
+  rowscols.go: fixedHeight; st.go: the 6x6 font; dialogs.go: "three small files".
+- Tests (`igs_test.go`): IcyDraw's 14 test scripts + renders in `testdata/igs/icydraw` pixel for pixel; parsing
+  (chains, W text over lines, values over lines, chain gang, W@); drawing (lines, loops, fill, palette words, X 11
+  planar, X 7 patterns, a hostile loop's time); resolution guesses; the split (head/cells/kept/closing, fade-out,
+  reveal, ESC E before text); app round trip (open, unchanged save = source, typed + erased cells, PNG shows the
+  picture, reopen identical, .vt, plain page as .ig); detection; `FuzzIGS` (typed cell must read back; 2 min
+  clean; its 5 regression inputs in testdata/fuzz/FuzzIGS) and FuzzParsers' "igs". External:
+  `CHARCOAL_IGS_ICY=<icy_tools>/crates` compares all 79 of IcyDraw's renders (65 at 100%; the rest are files
+  IcyDraw itself skips), `CHARCOAL_IGS_FILES=dir` round-trips real files (46 from IcyDraw's benches, the IG 2.20
+  disk, GoF: all pass), `CHARCOAL_ST_FONTS=dir` gives the tests the three EmuTOS font files.
+- Not done: editing the drawing (only text over it), sound/music (`b n N`), pauses and timed playback (`t q`,
+  loop delays: everything is drawn at once), XOR stepping in loops (as IcyDraw: ignored), mouse zones/input
+  (`X 3-6`, `<`, `?`), `X 9` MIDI buffer, `g` scaling, `I 5`, text below the screen's last row (cut, the ST would
+  scroll), autosave keeps the cells only (the picture comes back when the file is opened again), Split/frames
+  on IGS pages, the Animate draw orders in .ig. A space on pen 0 in the text part shows the picture (on the ST it
+  paints pen 0): the only place the page differs from the ST.
 
 ## Keys and safety (2026-10-13, evening)
 

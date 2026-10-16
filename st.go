@@ -61,7 +61,10 @@ const emutosVersion = "02c2db75fc875265c1449efea014450466cf20b7" // EmuTOS maste
 var stFontFiles = []struct{ id, name, file, sha1 string }{
 	{"st8x8", "Atari ST 8x8 (EmuTOS)", "fnt_st_8x8.c", "e4287c1956d383d3777b7af4ba04289854dddc2a"},
 	{"st8x16", "Atari ST 8x16 (EmuTOS)", "fnt_st_8x16.c", "fc916a8a36639f4cfb45f4aad0cbc6baae95855c"},
+	{"st6x6", "Atari ST 6x6 (EmuTOS)", "fnt_st_6x6.c", stFont6SHA1}, // VDI's small text on IGS pages (igs.go)
 }
+
+const stFont6SHA1 = "f385111d1dd9e7c9ae430df295529c2c75ed5f37"
 
 func stFontPath(file string) string { return filepath.Join(appDataDir(), "emutos-"+file) }
 
@@ -73,6 +76,10 @@ var hexWord = regexp.MustCompile(`0x([0-9a-fA-F]{4})`)
 // a byte per character per row, 8 or 16 rows.
 func loadSTFonts() bool {
 	for _, f := range stFontFiles {
+		if f.id == "st6x6" {
+			readIGSFont6()
+			continue
+		}
 		if fontByID(f.id) != nil {
 			continue
 		}

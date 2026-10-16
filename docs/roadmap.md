@@ -108,7 +108,11 @@ against each platform's best editor. Each step says what it wins.
   characters (SYMBOL, not allowed in the compos).
 - **Spectrum**: UDG/charset editing; attributes-only painting.
 - **Atari 8-bit**: the real OS ROM font when present, the 128-colour palette, custom fonts.
-- **Atari ST**: IGS (ST BBS graphics), ST/STE palettes.
+- [x] **Atari ST IGS** (done 2026-10-16, igs.go, docs/igs-design.md): IGS files (the ST BBS graphics language) shown
+  exactly (IcyDraw's engine ported; every one of IcyDraw's passing test renders matched pixel for pixel) as a
+  picture under the ST page's cells; type VT52 text over it and save `.ig` with the drawing, sounds and closing
+  kept byte for byte; ST/STE palettes from the file's S / X 1 / X 12 (STE's 4-bit levels). Later: editing the
+  drawing itself (IcyDraw has a script editor), playing the sounds and pauses, the palette on plain ST pages.
 - [x] **Terminals** (2026-10-16, docs/unicode-design.md): a Unicode page (blocks, sextants and octants, Braille,
   box drawing, any Unifont character; 16, 256 and 24-bit colours) for terminal artists (durdraw's crowd): UTF-8
   ANSI and durdraw `.dur` (frames) read and written, mIRC colour codes read and written (also from a PC page),
