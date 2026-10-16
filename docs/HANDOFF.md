@@ -849,6 +849,45 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Not done: flash on the Spectrum (not in the movie), C128/VIC-20/PET programs (x128/xvic/xpet not installed),
   Plus/4 (another helper's area), a real machine, Altirra itself.
 
+## Compos: party check and work stages (2026-10-16, branch r4-compo; design: docs/workstages-design.md)
+
+- **Party check** (`compo.go`): `compoRules` is the data table (id, name, edition, URL, the key sentences quoted
+  in comments, `plats` = the kinds of entry with page modes, machine, max cols/rows, exact cols, max cells, what is
+  allowed (iCE, blink, own font, own palette, animation, VIC modes), rows to keep empty, formats to hand in; stages
+  and `atLeast`; `also` = rules CharEdit cannot check). `compoCheck` returns only the problems; `compoPlatFor` picks
+  the kind by page mode and machine. Lovebyte counts the drawing (`drawnSize`: the page on PC/Amiga, the box
+  around `usedCell`s on machine pages). Blink = bright background without iCE on PC/Amiga pages. A draw order
+  (Animate) counts as an animation when Save would write it. UI: `PartyReq` (File > Check for a party,
+  action `party_check`, no key; Up/Down change the compo; `prefs.Party` remembers it). Rules read 2026-10-16
+  (Revision 2026, Evoke 2026, Lovebyte 2025 (no 2026 page), Zoo 2026, Deadline 2026 at demoparty.berlin, X 2026,
+  AMSCII 2024, ATASCII 2026, Yle teletext 2026): the KB survey's older numbers were wrong in places (Zoo now >= 15
+  stages, Deadline's 6 stages are not for textmode, Revision textmode wants none).
+- **Save for the party** (`saveForParty`): needs a saved page; writes `deliver` formats through `encodeStage`
+  (a copy of the tab with only the picture: no source, frames, order, never "unchanged") into
+  `<dir>/<name>-<compo id>/`, CPC names cut to 8 characters (`cpcTarget` set for the .dsk), and the compo's
+  stages in `workstages/`. The status line counts broken rules.
+- **Work stages** (`stages.go`): `Tab.steps` = depth (pushSnap: s.step + 1; restore: s.step; `Snap.step`),
+  `Tab.stages *stageLog` = pictures at depths that are multiples of `every`; `recordStage` (from pushSnap) drops
+  pictures deeper than the step (an undone branch) and skips other frames' steps; past 64 pictures or 24 MB
+  `every` doubles. Pictures are flate-packed little-endian cells (`packDoc`; Unicode styles renumbered into the
+  picture's own `Pairs`, so `uniCompact` cannot break them). Measured: 63 real PC ANSIs pack to 7.5% (worst 16%);
+  80x500 typical art ~2-12 KB a picture. Kept: `writeStages` after an own-format save, to
+  `<data dir>/stages/<sha1 of the absolute path>.json` with the SHA-1 of the bytes written; `restoreStages` in
+  openPath takes it only if the file still has those bytes and the page type matches (openPath clears
+  steps/stages before loading). Autosave: `<id>.stages`. `stageCands` = log + undo stack (same mode, current
+  frame) + now; `pickStages` = stage k nearest depth k*D/N, strictly deeper than the one before, leaving room for
+  the rest; depth 0 (the empty page) is not a stage; fewer pictures -> fewer stages. `exportStages` writes
+  `name-stageNN.png` (+ the page's format). UI: `StagesReq` (File > Export work stages, action `work_stages`).
+- script.go: `do ACTION` runs any action by id (for headless shots of key-less actions).
+- Tests (`compo_test.go`): log thinning/spread/content over 1000 steps, undo branches, pickStages cases, the log
+  kept with the file across a restart (and refused after an outside change), autosave carries it, Unicode
+  pictures, packing, the rules table (every format id and page mode exists), the check on PC/C64/Atari/teletext
+  pages, Save for the party (PC, CPC 8-char names, 10 stages for Revision oldskool), `FuzzCompoStageLog`;
+  `CHARCOAL_COMPO_FILES=dir` measures packing on real .ans.
+- Not done: a log is not kept for pages only ever exported; pictures keep cells only (font, CPC inks, C64 modes
+  are the page's now); no check of the colour count beyond the page type's own; Coloured ATASCII and AMSCII's
+  mode 0/2 categories are not separate entries; no timelapse video.
+
 ## Keys and safety (2026-10-13, evening)
 
 - `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's

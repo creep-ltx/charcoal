@@ -3,7 +3,7 @@ package main
 // A test script for running without a person: CHARCOAL_SCRIPT holds steps
 // separated by ";" that are played into the window one per frame, e.g.
 //
-//	CHARCOAL_SCRIPT="click 100 200; rclick 10 10; move 50 60; drag 1 2 3 4 [shift]; key ctrl+S; text abc; wheel 3; drop /tmp/a.png; shot /tmp/a.png; quit"
+//	CHARCOAL_SCRIPT="click 100 200; rclick 10 10; move 50 60; drag 1 2 3 4 [shift]; key ctrl+S; text abc; wheel 3; drop /tmp/a.png; do party_check; shot /tmp/a.png; quit"
 //
 // Used with SDL_VIDEODRIVER=offscreen to check the program headless.
 
@@ -115,6 +115,10 @@ func scriptStep() bool {
 		keyDown(&sdl.KeyboardEvent{Type: sdl.KEYDOWN, Keysym: sdl.Keysym{Sym: code, Mod: mod}})
 	case "drop": // a file dropped on the window
 		handleEvent(&sdl.DropEvent{Type: sdl.DROPFILE, File: step[1]})
+	case "do": // an action of keys.go by its id, also one without a key
+		if ac := actionByID[step[1]]; ac != nil {
+			ac.run()
+		}
 	case "wait": // milliseconds
 		scriptWait = time.Now().Add(time.Duration(n(1)) * time.Millisecond)
 	case "shot":

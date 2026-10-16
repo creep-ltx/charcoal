@@ -49,6 +49,8 @@ func init() {
 			{label: "Save", action: "save"},
 			{label: "Save as...", action: "save_as"},
 			{label: "Info and SAUCE...", action: "info"},
+			{label: "Check for a party...", action: "party_check"},
+			{label: "Export work stages...", action: "work_stages"},
 			menuSep,
 			{label: "Load a font...", action: "font_load"},
 			{label: "Font editor...", action: "font_editor"},
