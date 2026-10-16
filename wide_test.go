@@ -570,3 +570,26 @@ func TestWideBeyondBMP(t *testing.T) {
 		t.Error("F-keys do not come back")
 	}
 }
+
+// A UTF-8 file with any wide character opens on a Unicode page (a PC page could
+// only show it as ?), unless a SAUCE record names a PC or Amiga font.
+func TestWideDetect(t *testing.T) {
+	rx := "\x1b[0m" + strings.Repeat(" ", 23) + "\x1b[3;38;5;12m機\x1b[0m  \x1b[3;38;5;12m動\x1b[0m  \x1b[3;38;5;12m戦\x1b[0m  \x1b[3;38;5;12m士\x1b[0m" + strings.Repeat(" ", 26) + "\n" +
+		strings.Repeat("\x1b[34m█▓▒░ \x1b[0m like RX-78\n", 30)
+	for _, c := range []struct {
+		name, text string
+		uni        bool
+	}{
+		{"rx.ans", rx, true}, // escape codes and four kanji (MC_FRESHER-RX-78.ANS)
+		{"x.ans", "\x1b[31m███ ˆ hello\x1b[0m\n", false},       // U+02C6, a decoding artefact: still a PC page
+		{"x.ans", "\x1b[31m███ ©\ufe0f Ω ═ ▀\x1b[0m\n", false}, // a VS16 sequence and ambiguous width: not wide
+		{"x.ans", rx + sauceFor("IBM VGA"), false},             // the record says PC
+		{"x.ans", "😀 \x1b[32mhi\x1b[0m\n", true},               // an emoji
+	} {
+		a := uniFApp(t)
+		uniFOpen(a, []byte(c.text), c.name)
+		if a.uni() != c.uni {
+			t.Errorf("%q: opened as %s", c.text[:min(40, len(c.text))], a.mode)
+		}
+	}
+}

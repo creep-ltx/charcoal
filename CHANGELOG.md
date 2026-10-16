@@ -12,7 +12,9 @@ Each version's section is also its release page on GitHub. Newest first.
   itself shows CharEdit's files with them as they are.
 - **Changed:** the 76 wide symbols a Unicode page could already type (⌚ ☕ ✅ ⭐ ☰ and the like) take two cells
   now, so files with them line up in a terminal. Files that count a kanji as one column, padding the line
-  with blanks, open on a Unicode page as a terminal shows them.
+  with blanks, open as a terminal shows them.
+- **Changed:** a UTF-8 file with any wide character opens on a Unicode page (a PC page could only show `?`),
+  unless its SAUCE record names a PC or Amiga font.
 - The program is about 1 MB larger: every wide character's picture is built in (GNU Unifont).
 
 ## 0.1b12 (2026-10-16)

@@ -115,8 +115,8 @@ phase 2 checks it with a pty test.) One helper `wideNormal(cells, x0, x1)` appli
     characters, so 63 columns wide in a terminal. The tool that made it counted a kanji as one column. Rule:
     blanks (spaces on the default background) that run past the last column and are followed only by the
     line end are dropped, not wrapped; anything else past the column wraps as a terminal does. That file
-    then opens (as Unicode) with the kanji where a terminal shows them. (By default it still opens as a PC
-    page: needsUni counts four kanji as a few letters.)
+    then opens with the kanji where a terminal shows them. (Decided in phase 2: any wide character makes a
+    UTF-8 file open as Unicode, unless SAUCE names a PC or Amiga font.)
 - **UTF-8 ANSI, mIRC, plain text write**: the lead's character, nothing for the continuation (the terminal
   advances 2). mIRC reads like ANSI (width 2), its line measure counts bytes as now.
 - **HTML**: each wide character in `<span class=w>` with `display:inline-block;width:2ch`, because a
@@ -132,8 +132,8 @@ phase 2 checks it with a pty test.) One helper `wideNormal(cells, x0, x1)` appli
   reads it and its export is the page (*verified*, `TestWideExternalDurdraw`). Reading: the same stream, colour
   i with character i; what is pushed past the page is dropped. (The grid reading planned above, the right half
   written as a space, was tried first: durdraw's export then showed every such row one column longer.)
-- Detection is unchanged: a few Japanese words in a long text still do not make it Unicode art (needsUni's
-  letter rule; its test of an English text with a few Japanese words keeps passing).
+- Detection (changed in phase 2 by the user's choice): any wide character makes a UTF-8 file a Unicode page,
+  since a PC page could only show `?`; a SAUCE record naming a PC or Amiga font still wins.
 
 ## Memory, styles, collab, CharView
 

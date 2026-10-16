@@ -1027,7 +1027,8 @@ func writeUniHTML(d *Doc, pal *[16]uint32, title string) []byte {
 var extColours = regexp.MustCompile(`\x1b\[[0-9;]*(?:[34]8;5;(?:1[6-9]|[2-9][0-9]|1[0-9][0-9]|2[0-5][0-9])|[34]8;2;)`)
 
 // One drawing character CP437 lacks (arrows, shapes, symbols, Braille, legacy
-// computing: uniArtRune) is enough. Letters CP437 lacks count only when they are
+// computing: uniArtRune) is enough, and so is one wide character (CJK, kana,
+// Hangul, emoji: East Asian Width W or F), which a PC page could only show as ?. Letters CP437 lacks count only when they are
 // many and a good part of the text (a text in another script); punctuation never:
 // a stray … — ˆ or Ɗ in PC or Amiga art, Hungarian names in a web page, a few
 // Japanese words in a text are no Unicode art, and a byte order mark or
@@ -1050,7 +1051,7 @@ func needsUni(b []byte) bool {
 		if _, ok := cp437Rev[r]; ok {
 			continue
 		}
-		if uniArtRune(r) {
+		if uniArtRune(r) || uniWideRune(r) { // (a wide character: a PC page could only show it as ?; wide.go)
 			return true
 		}
 		if unicode.IsLetter(r) {

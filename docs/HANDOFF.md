@@ -395,10 +395,14 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   character once, the line padded at its end; reading: characters move on by two after a wide one, colours go
   with the characters. *Verified*: durdraw 0.31.0 reads such a file and its `--export-ansi` is the page
   (`TestWideExternalDurdraw`, `CHARCOAL_DURDRAW_SRC`). PC conversion: a wide character `?` + space.
-- **Real file**: MC_FRESHER-RX-78.ANS (Mistigris 2025-08, in the big check) pads a kanji line to 59 characters
-  (63 columns). It still opens as a PC page (needsUni: four kanji in ANSI art are "a few letters"), the kanji as
-  `?`, as before. Opened as Unicode it shows 機 動 戦 士 at columns 23, 27, 31, 35 as a terminal does (before:
-  squeezed into one cell each, the spacing wrong); the page stays 80 wide (readers take 80 at least).
+- **Detection** (the user's choice, 2026-10-16): `needsUni` is true for a UTF-8 file with any wide character
+  (W/F; not ambiguous, not VS16 sequences), since a PC page could only show `?`; a SAUCE record naming a PC or
+  Amiga font still wins (`pcSauce`). Before, CJK counted as letters (8+ and 5% of the text needed).
+  Big check: 3 files changed page type, all Amiga -> Unicode, all in the teletext group (Mistigris packs):
+  MC_FRESHER-RX-78.ANS (ANSI art: 機 動 戦 士 now at columns 23, 27, 31, 35 as a terminal shows them, page 80x32;
+  before `?`), CROWKEEPER-RENEWAL.LIT (a poem with one line "#稲荷神社": the kanji show), and
+  CHRIS_GODBER-GLITCH_V1.3.HTML (a Twine web page's source with ☕ and an ideographic space: shown as text, as
+  before, the two characters now right). Issues unchanged (29, as report-before-r1).
 - **Not checked**: the terminal rule against a real xterm/VTE (none here, foot/alacritty need a display); an input
   method's window (`imeAt` = SDL_SetTextInputRect at the cursor; no IME installed here). Collab: PC pages only, so
   no wide character reaches Moebius.

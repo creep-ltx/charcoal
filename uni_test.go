@@ -1137,16 +1137,16 @@ func TestUniFNotUniByAccident(t *testing.T) {
 		name, text string
 		uni        bool
 	}{
-		{"x.txt", "\x1b[31m███ Ŀ ˆ café \x1b[0m\n", false},                               // a stray letter or accent (lp!-yj_pt2.txt)
-		{"x.txt", "\ufeff\x1b[31m███ hello\n", false},                                    // a byte order mark (CROWKEEPER-AURIC.LIT)
-		{"x.txt", "████ … the end\n", false},                                             // punctuation CP437 lacks
-		{"x.txt", strings.Repeat("words — more words … ", 30), false},                    // a lot of it (JM-SILICO.LIT)
-		{"x.txt", strings.Repeat("a line of English text here\n", 20) + "白狐間の稲な", false}, // a few Japanese words in a long text
-		{"x.txt", "Привет, как дела у вас всех\n", true},                                 // a text in another script
-		{"x.txt", "██ ▀▄ ◢◣\n", true},                                                    // a drawing character CP437 lacks
-		{"x.txt", "⣿\n" + sauceFor("IBM VGA"), false},                                    // the record says PC
-		{"x.txt", "\x1b[38;5;200mX\n" + sauceFor("Amiga Topaz 2+"), false},               // ... or Amiga
-		{"x.txt", "⣿\n" + sauceFor(""), true},                                            // a record without a font says nothing
+		{"x.txt", "\x1b[31m███ Ŀ ˆ café \x1b[0m\n", false},                              // a stray letter or accent (lp!-yj_pt2.txt)
+		{"x.txt", "\ufeff\x1b[31m███ hello\n", false},                                   // a byte order mark (CROWKEEPER-AURIC.LIT)
+		{"x.txt", "████ … the end\n", false},                                            // punctuation CP437 lacks
+		{"x.txt", strings.Repeat("words — more words … ", 30), false},                   // a lot of it (JM-SILICO.LIT)
+		{"x.txt", strings.Repeat("a line of English text here\n", 20) + "白狐間の稲な", true}, // a few Japanese words: wide characters, which a PC page shows as ? (wide.go)
+		{"x.txt", "Привет, как дела у вас всех\n", true},                                // a text in another script
+		{"x.txt", "██ ▀▄ ◢◣\n", true},                                                   // a drawing character CP437 lacks
+		{"x.txt", "⣿\n" + sauceFor("IBM VGA"), false},                                   // the record says PC
+		{"x.txt", "\x1b[38;5;200mX\n" + sauceFor("Amiga Topaz 2+"), false},              // ... or Amiga
+		{"x.txt", "⣿\n" + sauceFor(""), true},                                           // a record without a font says nothing
 	} {
 		uniFOpen(a, []byte(c.text), c.name)
 		if a.uni() != c.uni {
