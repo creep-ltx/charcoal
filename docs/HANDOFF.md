@@ -851,6 +851,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## Compos: party check and work stages (2026-10-16, branch r4-compo; design: docs/workstages-design.md)
 
+- **The user's decisions (2026-10-16, "I trust your judgement"):** Lovebyte's 256 counts the box round what is
+  drawn on machine pages; stages never include the empty page, are spread by edit steps, and are fewer rather than
+  repeated; iCE on with no bright backgrounds passes "no iCE"; File menu, no default keys, Save for the party
+  writes beside the file.
+
 - **Party check** (`compo.go`): `compoRules` is the data table (id, name, edition, URL, the key sentences quoted
   in comments, `plats` = the kinds of entry with page modes, machine, max cols/rows, exact cols, max cells, what is
   allowed (iCE, blink, own font, own palette, animation, VIC modes), rows to keep empty, formats to hand in; stages
