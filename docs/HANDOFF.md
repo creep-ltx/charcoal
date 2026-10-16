@@ -50,6 +50,7 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL) |
 | PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form); ROMs from VICE on first use |
 | ZX Spectrum | .scr (6912 bytes); 48K ROM font built in (Amstrad allows passing it on) |
+| Amstrad CPC | modes 0/1/2; .bin (AMSDOS program), .dsk, Playscii .psci (Logiker's exporter); firmware ROM font built in (Amstrad's permission) |
 | Teletext | .tti .ep1, edit.tf links (.url), Mode 7 dumps; Bedstead font (CC0) built in; a .tti carousel opens as frames (one per subpage) and saving rewrites only changed subpages' OL 0-24 rows, every other line kept (teletext.go writeTTIFrames) |
 
 CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide art shrunk to fit, m plays.
@@ -335,6 +336,53 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   Ctrl-A, PCBoard @X; proposed only); PCBoard's @X00/@XFF save/restore (pcformats.go reads them as colours);
   Telegard's backtick codes; Renegade's ^0-^9 user colours and Mystic's |T0-|T9 theme colours (shown as text);
   Animate a folder counts a codes file as "other" (written as .ans with ANSI colours).
+
+## Amstrad CPC pages (2026-10-16, branch r1-cpc; roadmap step 5)
+
+- `cpc.go`. Page type "cpc" (`a.cpc()`). `Tab.cpcSet cpcSetup` = mode (0/1/2), `ink [16]int` (firmware colours
+  0-26), border, `ok`; it belongs to the page, not to a Doc (Doc copies in withCols/blankLike/... would lose it).
+  `Snap.cpc` (pointer, nil on other pages) makes ink, border and mode changes undoable; `restore` applies it.
+  Cells: `makeCell(ch, pen, paper)`, pens/papers are ink numbers, masked to the mode (`cpcSetup.mask`) when drawn
+  and written, as the firmware does. `setPalette` makes `a.pal` from the inks (no palette choice on the page).
+  Empty cell `cpcBlank()` = space, pen 1, paper 0. Mode 0 cells are 16x8 (`cpcWide` doubles glyph bits in
+  `drawCell`), mode 1 8x8, mode 2 8x16 (doubled rows): each mode in the CPC's shape. 25 rows fixed, width by mode.
+- Colours: `firmware n = 9 green + 3 red + blue`, levels 00/80/FF (`cpcColour`), names in `cpcColourNames`.
+  Power-on inks `cpcStartInks`, border 1.
+- Font: `fonts/amstrad-cpc-charset.font` = OS ROM 0x3800-0x3FFF (same in 464/664/6128, from Caprice32's ROMs),
+  notice in `fonts/amstrad-cpc-NOTICE.txt` (the COPYRIGHT.TXT condition: keep the acknowledgement). Own fonts and
+  the font editor are refused on CPC pages (custom characters break the compo rules).
+- .bin: `writeCPCBin` = AMSDOS header (`amsdosHeader`, checksum of bytes 0-66) + `cpcStub` (21 bytes at 0x1000:
+  LD HL,stream / LD BC,len / loop TXT OUTPUT with BC pushed / JP KM WAIT CHAR) + `cpcStream` (4 mode, 29 border, 28
+  every ink of the mode, then cells with 14 paper / 15 pen on change, no pen for a space, no paper for 0x8F, 1 before
+  0-31). Reading (`parseCPCBin`): `cpcArtStream` finds `LD HL,nn` + a CALL BB5A in the first bytes (Logiker's two
+  stubs and ours), `LD BC` after it gives our length; `cpcScreen` is the text VDU (codes and parameter counts from
+  the Firmware Guide; scroll, LOCATE, CLS, clears, swap, transparent, SYMBOL/windows/flash noted in `note()`).
+  **Trap**: Logiker's streams end with 0x1F and a file on a disk has junk after it: `print(b, program=true)` stops at
+  a 0x1F where a code is due; a bare stream (Open as Amstrad CPC, `srcKind ""`) reads 0x1F as LOCATE.
+- .dsk: `writeDSK` Extended DSK, 40 tracks x 9 x 512, sectors C1-C9 interleaved C1 C6 C2 C7 ..., directory in
+  logical sectors 0-3, 1 KB blocks from 2, extents of 16 KB; the file padded with 0x1A to 128. `readDSK` reads
+  Extended and standard images (side 0), `dskArt` the first art .bin. Name inside = the saved file's name
+  (`cpcTarget`, set in writeOut).
+- Playscii: `parsePsci` hands CPC charsets (`isCPCCharset`: CPC_Mode0/1/2, glyph 0 = space; old "cpc" = codes
+  32-255) to `psciCPC` (own layer merge; inks allocated in order of first use, paper before pen, as the exporter
+  does; border from selected_bg_color-1); `writePsci` hands cpc pages to `writePsciCPC`. `psciArt.cpc` carries the setup.
+- Glue (kept small for merges): `init()` in cpc.go appends to pageModes, modeOrder, modeNames, openAs, modeNoStream,
+  editorOwn and adds " cpc" to the modes of the utf8/png/png2/gif/apng/psci formats; editor.go: Tab/Snap fields,
+  the cell size/font/palette/printable/runes/maxRows/nColours/defaultColours/setMode/makeTab/setRows/setCols
+  cases, `loadCPC` after loadEditor, `reparseCPC` with reparseEditor, `encodeCPC` before encodeFor's switch, two
+  format lines; small cases in view.go (drawCell, Mode gadget, no palette gadget), panel.go (`drawCPCColours`),
+  anim.go (`borderPx`), rowscols, strip, frames, effects, shapes (box lines 9A 95 96 9C 93 99, shades 20 90 CF 8F),
+  fontfile/fontedit, start (tile), menus, main, autosave (`cpcAutosave`), fuzz_test.
+- Tests (`cpc_test.go`): font SHA-1 and glyphs, colours, runes; .bin round trip in every mode run through a small
+  Z80 interpreter (`cpcFZ80`: the stub prints exactly the stream); the exporter's two stubs + its stream layout
+  read back and agree with what its program prints; control codes; .dsk round trip and 3 extents; .psci round trip
+  and the old charset; the editor (typing, undo of inks/border/mode, .bin/.dsk/.psci save and reopen, Ctrl+S,
+  autosave, PNG border); `TestCPCRealFiles` with `CHARCOAL_CPC_FILES=dir` (2024 compo entries from
+  files.scene.org/browse/parties/2024/amstrad_ascii_compo24/: 26 files open; renders were pixel-identical to the
+  entries' Caprice Forever PNGs, offset 64,82 in their 768x544); `FuzzCPC` and FuzzParsers' cpc checks.
+- Not done: CharEdit's .bin has not run on a real CPC or an emulator (no CPC emulator here; the stub is checked by
+  the Z80 test only); play (m) of the stream; the PNG is the generic 32-pixel border, not Caprice's 768x544;
+  BASIC listing; flashing inks shown as their first colour; custom characters (SYMBOL) ignored.
 
 ## Keys and safety (2026-10-13, evening)
 

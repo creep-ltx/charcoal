@@ -1,0 +1,15 @@
+amstrad-cpc-charset.font is bytes 0x3800-0x3FFF (the character set, codes 0-255, 8 bytes each) of the
+Amstrad CPC operating system (firmware) ROM, as distributed with the Caprice32 emulator
+(github.com/ColinPitrat/caprice32, rom/cpc6128.rom, SHA-1 5977adbad3f7c1e0e082cd02fe76a700d9860c30).
+The CPC 464 (rom/cpc464.rom, 56d39c463da60968d93e58b4ba0e675829412a20) and 664 ROMs hold the same
+2048 bytes (SHA-1 of the character set: 0718dc1d75187837154ba11eae1220ca53b81cdf).
+
+Copyright (c) 1984, 1985 Amstrad Consumer Electronics plc. Amstrad has kindly given its permission for its
+copyrighted material to be redistributed but Amstrad retains its copyright.
+
+The condition, from the COPYRIGHT.TXT that comes with the CPC ROMs in the CPC scene's archives
+(https://amstrad.eu/wp-content/uploads/ftp_cpcscene/Resources/Roms/Amstrad/COPYRIGHT.TXT, after Cliff
+Lawson of Amstrad): "You can redistribute copies of these copyrighted code as long as a) copyright messages
+are not changed b) either in the program or the documentation you acknowledge that 'Amstrad has kindly given
+it's permission for it's copyrighted material to be redistributed but Amstrad retains it's copyright.'"
+The character set is part of the firmware ROM (Amstrad's), not of Locomotive BASIC.

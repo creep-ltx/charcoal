@@ -115,6 +115,7 @@ func init() {
 			machine("PETSCII (Commodore)", "c64"),
 			machine("ZX Spectrum", "zx"),
 			machine("Teletext", "tt"),
+			machine("Amstrad CPC", "cpc"),
 			menuSep,
 			{label: "iCE colours", action: "ice", tick: func() bool { return a.ice }},
 			{label: "9-pixel letter spacing", action: "ninepx", tick: func() bool { return a.pc() && a.ninePx() }},

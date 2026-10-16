@@ -61,7 +61,7 @@ func main() {
 		viewer = &Viewer{info: true}
 	}
 	if viewer != nil && len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
-		fmt.Println("usage: charview FILE|FOLDER...\nShows Amiga and PC ANSI, Atari, Atari ST, PETSCII (PET, VIC-20, C64, C128), ZX Spectrum and teletext art.\nn / Right / Space next, p / Left previous, a auto-scroll, m play, e edit, q / Esc quit.")
+		fmt.Println("usage: charview FILE|FOLDER...\nShows Amiga and PC ANSI, Atari, Atari ST, PETSCII (PET, VIC-20, C64, C128), ZX Spectrum, Amstrad CPC and teletext art.\nn / Right / Space next, p / Left previous, a auto-scroll, m play, e edit, q / Esc quit.")
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
@@ -69,7 +69,7 @@ func main() {
 		return
 	}
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
-		fmt.Println("usage: charedit [FILE...]\nA character art editor for Amiga and PC ANSI, Atari, Atari ST, PETSCII (PET, VIC-20, C64, C128),\nZX Spectrum and teletext pages. Help > Keys and mouse (F12) in the window lists the keys.")
+		fmt.Println("usage: charedit [FILE...]\nA character art editor for Amiga and PC ANSI, Atari, Atari ST, PETSCII (PET, VIC-20, C64, C128),\nZX Spectrum, Amstrad CPC and teletext pages. Help > Keys and mouse (F12) in the window lists the keys.")
 		fmt.Println("\n" + animateUsage)
 		return
 	}
@@ -87,7 +87,7 @@ func main() {
 	mode := prefs.Mode // the last page type, if it can be had without a download
 	switch {
 	case mode == "c64" && a.hasC64, mode == "st" && hasSTFont():
-	case mode == "pc", mode == "atari", mode == "zx", mode == "tt":
+	case mode == "pc", mode == "atari", mode == "zx", mode == "tt", mode == "cpc":
 	default:
 		mode = "amiga"
 	}

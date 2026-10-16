@@ -57,6 +57,7 @@ type autosaveMeta struct {
 	Ref          *RefPref        `json:"reference,omitempty"`  // the page's reference picture
 	OwnFont      *ArtFont        `json:"own_font,omitempty"`   // the page's own font, in id.font (fontfile.go)
 	Order        *drawOrder      `json:"draw_order,omitempty"` // the order Save draws a stream file in
+	CPC          *cpcAutosave    `json:"cpc,omitempty"`        // an Amstrad CPC page's mode, inks and border
 }
 
 // autosaveFrame is one frame of an autosaved page.
@@ -110,6 +111,9 @@ func writeAutosave(t *Tab) error {
 		Title: t.info.title, Author: t.info.author, Group: t.info.group, WriteSauce: t.info.writeSauce,
 		Clear: t.info.clear, Notes: t.info.notes}
 	m.SrcKind, m.Order = t.srcKind, t.order
+	if t.mode == "cpc" {
+		m.CPC = &cpcAutosave{Mode: t.cpcSet.mode, Inks: t.cpcSet.ink, Border: t.cpcSet.border}
+	}
 	if t.ref != nil {
 		m.Ref = t.ref.pref()
 	}
@@ -272,6 +276,9 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	}
 	if m.STRes != "" {
 		a.stres = stResByID(m.STRes).id
+	}
+	if m.CPC != nil {
+		a.cpcSet = m.CPC.setup()
 	}
 	if m.Font != "" {
 		a.fontFor[mode] = m.Font

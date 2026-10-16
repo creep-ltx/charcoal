@@ -44,6 +44,7 @@ func startTiles() []startTile {
 		{"C128", "c64", c128, "", 13, 16},
 		{"ZX Spectrum", "zx", "", "", 0, 8},
 		{"Teletext", "tt", "", "", 7, 8},
+		{"Amstrad CPC", "cpc", "", "", 1, 4},
 	}
 }
 
@@ -117,7 +118,9 @@ func (a *App) pickTile(tl startTile) {
 		a.fg, a.bg = a.res().fg, a.res().bg
 	case tl.mode == "zx":
 		a.fg, a.bg = 0, 7
-	case old.mode == "st" || old.mode == "zx":
+	case tl.mode == "cpc":
+		a.fg, a.bg = 1, 0
+	case old.mode == "st" || old.mode == "zx" || old.mode == "cpc":
 		a.fg, a.bg = 7, 0
 	}
 	savePrefs()
