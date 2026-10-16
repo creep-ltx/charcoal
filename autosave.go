@@ -61,6 +61,7 @@ type autosaveMeta struct {
 	OwnFont      *ArtFont        `json:"own_font,omitempty"`   // the page's own font, in id.font (fontfile.go)
 	Order        *drawOrder      `json:"draw_order,omitempty"` // the order Save draws a stream file in
 	UniPairs     [][3]int        `json:"uni_pairs,omitempty"`  // a Unicode page's styles 256 and up: fg, bg, italic|underline (uni.go)
+	UniExtra     []rune          `json:"uni_extra,omitempty"`  // its characters beyond the BMP: code 0xDD00 and up (wide.go)
 	CPC          *cpcAutosave    `json:"cpc,omitempty"`        // an Amstrad CPC page's mode, inks and border
 	MSX          *msxAutosave    `json:"msx,omitempty"`        // an MSX page's screen mode and colours (msx.go)
 	VIC          *vicSetup       `json:"vic,omitempty"`        // a C64 page's text mode and $D022-$D024 (c64x.go)
@@ -130,6 +131,7 @@ func writeAutosave(t *Tab) error {
 	m.GTIA = t.mode == "atari"
 	if t.mode == "uni" {
 		m.UniPairs = uniPairsSnapshot()
+		m.UniExtra = uniExtrasSnapshot()
 	}
 	if t.mode == "cpc" {
 		m.CPC = &cpcAutosave{Mode: t.cpcSet.mode, Inks: t.cpcSet.ink, Border: t.cpcSet.border}
@@ -321,6 +323,7 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	}
 	if mode == "uni" {
 		uniRemapPairs(docs, m.UniPairs) // this run's table numbers them differently
+		uniExtrasRemap(docs, m.UniExtra)
 		for _, d := range docs {
 			wideMendOld(d) // a wide character in one cell, from before wide characters (wide.go)
 		}

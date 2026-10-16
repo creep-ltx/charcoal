@@ -12,6 +12,7 @@ import (
 	"compress/gzip"
 	_ "embed"
 	"encoding/hex"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -245,6 +246,137 @@ func uniWideSmall(r rune) ([]byte, bool) {
 	}
 	f.small[r] = g
 	return g, true
+}
+
+// ---------------------------------------------------------------- beyond the BMP
+
+// Codes uniExtraBase up to uniCont stand for wide characters beyond the BMP
+// (emoji, CJK Extension B and on), from one process-wide, append-only table
+// like the styles': undo, frames, the clipboard and other tabs share them;
+// autosaves and work stages keep the characters and get this run's codes back.
+const uniExtraBase = 0xDD00
+
+var uniExtras struct {
+	sync.RWMutex
+	list  []rune
+	index map[rune]int
+	full  bool // a character found no room: it became '?'
+}
+
+// uniExtraCode is the code of a character beyond the BMP, '?' and false when the table is full.
+func uniExtraCode(r rune) (int, bool) {
+	uniExtras.RLock()
+	c, ok := uniExtras.index[r]
+	uniExtras.RUnlock()
+	if ok {
+		return c, true
+	}
+	uniExtras.Lock()
+	defer uniExtras.Unlock()
+	if c, ok := uniExtras.index[r]; ok {
+		return c, true
+	}
+	if uniExtraBase+len(uniExtras.list) >= uniCont {
+		uniExtras.full = true
+		return '?', false
+	}
+	if uniExtras.index == nil {
+		uniExtras.index = map[rune]int{}
+	}
+	c = uniExtraBase + len(uniExtras.list)
+	uniExtras.list = append(uniExtras.list, r)
+	uniExtras.index[r] = c
+	return c, true
+}
+
+// uniExtraRune is the character of a code of the table, '?' for one this run never made.
+func uniExtraRune(code int) rune {
+	uniExtras.RLock()
+	defer uniExtras.RUnlock()
+	if i := code - uniExtraBase; i >= 0 && i < len(uniExtras.list) {
+		return uniExtras.list[i]
+	}
+	return '?'
+}
+
+// uniExtraNote is what the status line adds when the table ran out.
+func uniExtraNote() string {
+	uniExtras.RLock()
+	defer uniExtras.RUnlock()
+	if !uniExtras.full {
+		return ""
+	}
+	return fmt.Sprintf(" (more than %d different emoji or characters beyond the BMP in this session: new ones are ?)", uniCont-uniExtraBase)
+}
+
+// uniExtraOf is the character of a cell's code when it is from the table, else 0.
+func uniExtraOf(v uint32) rune {
+	if c := uniCode(v); c >= uniExtraBase && c < uniCont {
+		return uniExtraRune(c)
+	}
+	return 0
+}
+
+// uniExtrasRemap gives cells whose codes came from another table (an autosave,
+// a work stage) this run's codes; saved[i] is code uniExtraBase+i there.
+func uniExtrasRemap(docs []*Doc, saved []rune) {
+	for _, d := range docs {
+		for i, v := range d.cells[:d.rows*d.cols] {
+			if c := uniCode(v); c >= uniExtraBase && c < uniCont {
+				n := int('?')
+				if k := c - uniExtraBase; k < len(saved) {
+					n, _ = uniCodeOf(saved[k])
+				}
+				d.cells[i] = uniWithCode(v, n)
+			}
+		}
+	}
+}
+
+// uniExtrasSnapshot is the table as it is now, for an autosave.
+func uniExtrasSnapshot() []rune {
+	uniExtras.RLock()
+	defer uniExtras.RUnlock()
+	return append([]rune(nil), uniExtras.list...)
+}
+
+// wideFkeysOut gives the Unicode F-keys with characters beyond the BMP as the
+// characters (for prefs.json: codes are this run's); wideFkeysIn the other way.
+func wideFkeysOut(fk map[string][][]int) map[string][][]int {
+	sets, ok := fk["uni"]
+	if !ok {
+		return fk
+	}
+	out := map[string][][]int{}
+	for k, v := range fk {
+		out[k] = v
+	}
+	conv := make([][]int, len(sets))
+	for i, set := range sets {
+		conv[i] = make([]int, len(set))
+		for j, c := range set {
+			if c >= uniExtraBase && c < uniCont {
+				c = int(uniExtraRune(c))
+			}
+			conv[i][j] = c
+		}
+	}
+	out["uni"] = conv
+	return out
+}
+
+func wideFkeysIn(sets [][]int) [][]int {
+	conv := make([][]int, len(sets))
+	for i, set := range sets {
+		conv[i] = make([]int, len(set))
+		for j, c := range set {
+			if c > 0xFFFF {
+				c, _ = uniCodeOf(rune(c))
+			}
+			conv[i][j] = c
+		}
+	}
+	return conv
 }
 
 // imeAt places an input method's window at a rectangle of the window (main.go sets it; nothing in tests).

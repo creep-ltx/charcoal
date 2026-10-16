@@ -60,8 +60,8 @@ func uniRune(code int) rune {
 		return rune(0x1CC00 + code - 0xD900)
 	case code == uniCont: // a wide character's right half (wide.go)
 		return ' '
-	case code >= 0xDD00 && code <= 0xDFFF:
-		return '?'
+	case code >= uniExtraBase && code < uniCont: // beyond the BMP, from the table (wide.go)
+		return uniExtraRune(code)
 	case code == 0:
 		return ' '
 	}
@@ -79,6 +79,8 @@ func uniCodeOf(r rune) (int, bool) {
 		return int(0xD800 + r - 0x1FB00), true
 	case r >= 0x1CC00 && r <= 0x1CFFF:
 		return int(0xD900 + r - 0x1CC00), true
+	case uniWideRune(r) && r <= 0x10FFFF: // a wide character beyond the BMP (emoji, CJK): the table (wide.go)
+		return uniExtraCode(r)
 	}
 	return '?', false
 }

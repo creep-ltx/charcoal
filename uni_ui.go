@@ -257,7 +257,7 @@ func validUniFkeys(sets [][]int) bool {
 			return false
 		}
 		for _, c := range set {
-			if c < 0x20 || c > 0xFFFF {
+			if c < 0x20 || c > 0x10FFFF { // beyond 0xFFFF: a character (wideFkeysIn)
 				return false
 			}
 		}

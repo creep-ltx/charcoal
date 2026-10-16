@@ -102,6 +102,9 @@ func loadPrefs() {
 	a.fkeys = defaultFkeys()
 	for _, m := range pageModes {
 		if f := prefs.Fkeys[m]; validFkeys(f) || (m == "uni" && validUniFkeys(f)) || (m == "mz" && validMZFkeys(f)) {
+			if m == "uni" {
+				f = wideFkeysIn(f) // characters beyond the BMP get this run's codes (wide.go)
+			}
 			a.fkeys[m] = f
 		}
 	}
@@ -193,7 +196,7 @@ func savePrefs() {
 	p.Machine = a.defMachine
 	p.STRes = a.defSTRes
 	p.UIScale = scale
-	p.Fkeys, p.Dir, p.Baud = a.fkeys, a.lastDir, a.baud
+	p.Fkeys, p.Dir, p.Baud = wideFkeysOut(a.fkeys), a.lastDir, a.baud
 	p.Custom = nil
 	for _, c := range a.custom {
 		p.Custom = append(p.Custom, fmt.Sprintf("#%06x", c&0xFFFFFF))

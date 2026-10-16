@@ -88,7 +88,7 @@ func TestUniCodes(t *testing.T) {
 			}
 		}
 	}
-	for _, r := range []rune{0xD800, 0x1F600, 0x10FFFF} {
+	for _, r := range []rune{0xD800, 0x1D538, 0x10FFFF} { // (emoji have cells since wide characters: wide.go)
 		if _, ok := uniCodeOf(r); ok {
 			t.Errorf("%U: a cell cannot hold it", r)
 		}
@@ -646,9 +646,9 @@ func TestUniTyping(t *testing.T) {
 			t.Errorf("cell %d: %q, want %q", i, got, r)
 		}
 	}
-	textInput("😀") // no cell holds it
-	if !strings.Contains(a.message, "not") || uniCode(a.doc.get(5, 0)) == 0x1F600 {
-		t.Errorf("an emoji: %q", a.message)
+	textInput("𝔸") // no cell holds it (beyond the BMP and narrow; emoji are wide characters now: wide_test.go)
+	if !strings.Contains(a.message, "not") || uniRune(uniCode(a.doc.get(5, 0))) == '𝔸' {
+		t.Errorf("a character beyond the BMP: %q", a.message)
 	}
 	// The brush in any colour.
 	a.setUniFg(201)

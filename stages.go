@@ -46,6 +46,7 @@ type stagePic struct {
 	Glyph0 bool      `json:"glyph0,omitempty"`
 	Uni    bool      `json:"uni,omitempty"`
 	Pairs  [][3]int  `json:"pairs,omitempty"` // a Unicode page's styles past 256, numbered from 256 in this picture
+	Extra  []rune    `json:"extra,omitempty"` // its characters beyond the BMP, numbered from uniExtraBase in this picture (wide.go)
 	Cells  []byte    `json:"cells"`           // flate of the cells, 4 bytes each, little-endian
 }
 
@@ -73,7 +74,7 @@ func packDoc(d *Doc, step int) stagePic {
 	p := stagePic{Step: step, At: time.Now(), Cols: d.cols, Rows: d.rows, Bg: d.bg, Border: d.border, Ink: d.ink, Glyph0: d.glyph0, Uni: d.uni}
 	n := d.cols * d.rows
 	raw := make([]byte, 0, 4*n)
-	local := map[int]int{}
+	local, localX := map[int]int{}, map[rune]int{}
 	for _, v := range d.cells[:n] {
 		if d.uni {
 			if pr := uniPair(v); pr >= 256 {
@@ -85,6 +86,15 @@ func packDoc(d *Doc, step int) stagePic {
 					p.Pairs = append(p.Pairs, [3]int{fg, bg, int(fl)})
 				}
 				v = uniWithPair(v, l)
+			}
+			if r := uniExtraOf(v); r != 0 {
+				l, ok := localX[r]
+				if !ok {
+					l = uniExtraBase + len(p.Extra)
+					localX[r] = l
+					p.Extra = append(p.Extra, r)
+				}
+				v = uniWithCode(v, l)
 			}
 		}
 		raw = binary.LittleEndian.AppendUint32(raw, v)
@@ -114,6 +124,7 @@ func (p stagePic) doc() *Doc {
 	d.bg, d.border, d.ink, d.glyph0 = p.Bg, p.Border, p.Ink, p.Glyph0
 	if p.Uni {
 		uniRemapPairs([]*Doc{d}, p.Pairs) // the picture's own table: Pairs[0] is its style 256
+		uniExtrasRemap([]*Doc{d}, p.Extra)
 	}
 	return d
 }

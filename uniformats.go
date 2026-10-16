@@ -1141,7 +1141,7 @@ func (a *App) loadUni(b []byte, name, path, as string) bool {
 	if n := a.nFrames(); n > 1 {
 		msg += fmt.Sprintf(", %d frames (%s and %s go through them)", n, keyName("frame_previous"), keyName("frame_next"))
 	}
-	a.msg(msg + uniFullNote())
+	a.msg(msg + uniFullNote() + uniExtraNote())
 	return true
 }
 

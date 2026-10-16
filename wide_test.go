@@ -524,3 +524,49 @@ func TestWideCharacterTable(t *testing.T) {
 		t.Errorf("typed %q", r)
 	}
 }
+
+func TestWideBeyondBMP(t *testing.T) {
+	a := wideFApp(t, 8, "")
+	textInput("a😀𠀀")
+	if r := wideFRow(a.doc, 0); r != "a😀|𠀀|   " {
+		t.Fatalf("typed %q", r)
+	}
+	if g, ok := uniWideGlyph('😀'); !ok || g[8] == 0 {
+		t.Error("Unifont has no 😀")
+	}
+	b := writeUniAnsi(a.doc)
+	if !bytes.Contains(b, []byte("a😀𠀀")) {
+		t.Errorf("written %q", b)
+	}
+	got, _ := parseUniArt(b, 8)
+	wideFSame(t, "emoji in UTF-8 ANSI", got, a.doc)
+	// Another run numbers them differently: an autosave keeps the characters.
+	saved := uniExtrasSnapshot()
+	c, _ := uniCodeOf('😀')
+	old := wideFDoc(t, 2, "")
+	old.cells[0], old.cells[1] = uniCell(c, 7), uniCell(uniCont, 7)
+	moved := []rune{'𠀀', '😀'} // in that run 😀 was the second
+	old.cells[0] = uniCell(uniExtraBase+1, 7)
+	uniExtrasRemap([]*Doc{old}, moved)
+	if uniRune(uniCode(old.cells[0])) != '😀' {
+		t.Errorf("remapped to %q", uniRune(uniCode(old.cells[0])))
+	}
+	if len(saved) == 0 {
+		t.Error("no table")
+	}
+	// Work stages keep their own numbering.
+	p := packDoc(a.doc, 1)
+	if len(p.Extra) != 2 {
+		t.Errorf("stage picture keeps %d characters", len(p.Extra))
+	}
+	wideFSame(t, "stage picture", p.doc(), a.doc)
+	// F-keys in prefs.json hold the characters.
+	fk := map[string][][]int{"uni": {{c, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'}}, "pc": {{1}}}
+	out := wideFkeysOut(fk)
+	if out["uni"][0][0] != '😀' || fk["uni"][0][0] != c || out["pc"][0][0] != 1 {
+		t.Errorf("out %v", out)
+	}
+	if !validUniFkeys(out["uni"]) || wideFkeysIn(out["uni"])[0][0] != c {
+		t.Error("F-keys do not come back")
+	}
+}
