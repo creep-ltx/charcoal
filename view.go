@@ -1210,7 +1210,10 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		} else if a.printable(c) {
 			a.pageGlyph(fb, x, y, c)
 		}
-		if !a.uni() {
+		switch {
+		case a.ted(): // the TED attribute byte (ted.go)
+			x = fb.text(x+digitsW(2), y, fmt.Sprintf("%d colour $%02X", c, tedAttr(v)), cText) + 24
+		case !a.uni():
 			x = fb.text(x+digitsW(2), y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 		}
 	}
