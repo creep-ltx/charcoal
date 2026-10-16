@@ -1432,6 +1432,9 @@ func writePsci(docs []*Doc, holds []int, p psciPage) (out []byte, missed int) {
 			}
 			return psciTile{Char: float64(idx), Fg: float64(cellFg(v) + 1), Bg: float64(shownBg(v, p.ice) + 1)}
 		}
+		if p.own != nil && psciSets[p.own.charset].cols > 0 { // a set of Playscii's: glyph 0 is the page's 32 (psciown.go)
+			ch = psciSwap(ch)
+		}
 		if p.own != nil && p.own.pal != nil {
 			return psciTile{Char: float64(ch), Fg: float64(p.own.index[cellFg(v)]), Bg: float64(p.own.index[shownBg(v, p.ice)])}
 		}
@@ -1572,7 +1575,7 @@ func parsePsci(b []byte) (*psciArt, error) {
 		if s, ok := psciSets[cs]; ok { // a set of Playscii's: the page's own font (psciown.go)
 			art.mode, art.own = "pc", &psciOwn{charset: cs, palette: f.Palette, font: psciCharsetFont(cs)}
 			n := min(256, s.cols*s.rows)
-			glyph = func(i int) (int, bool) { return i & 255, i >= 0 && i < n }
+			glyph = func(i int) (int, bool) { return psciSwap(i & 255), i >= 0 && i < n }
 			if art.own.font == nil {
 				unknownCharset = cs
 			}

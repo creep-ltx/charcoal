@@ -190,6 +190,13 @@ func psciFontOf(img image.Image, cols, rows int, name string) *Font {
 			data = append(data, v)
 		}
 	}
+	// Glyph 0 (the space in Playscii's sets) is the page's character 32, and the other way
+	// round: a PC page shows nothing for character 0 and types a space as 32.
+	if len(data) >= 33*gh {
+		g0 := append([]byte(nil), data[:gh]...)
+		copy(data[:gh], data[32*gh:33*gh])
+		copy(data[32*gh:33*gh], g0)
+	}
 	f := newFont(ownID, name, "pc", data, gh, min(256, cols*rows))
 	f.format = "psci"
 	return f
@@ -422,4 +429,15 @@ func psciPenColour(pens [16]uint32, pen int, pal []uint32) int {
 		return psciNearest(pens[pen], pal)
 	}
 	return best
+}
+
+// psciSwap is a glyph of one of Playscii's sets as the page's character and back: 0 and 32 trade places.
+func psciSwap(c int) int {
+	switch c {
+	case 0:
+		return 32
+	case 32:
+		return 0
+	}
+	return c
 }

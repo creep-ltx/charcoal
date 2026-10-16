@@ -590,7 +590,7 @@ func TestOthPsciOwnSet(t *testing.T) {
 	}
 	for c := 0; c < 64; c++ {
 		for row := 0; row < 8; row++ {
-			if f.row(c, row) != glyphs[c*8+row] {
+			if f.row(psciSwap(c), row) != glyphs[c*8+row] { // glyph 0 is the page's 32
 				t.Fatalf("glyph %d row %d: %02x, want %02x", c, row, f.row(c, row), glyphs[c*8+row])
 			}
 		}
@@ -601,11 +601,13 @@ func TestOthPsciOwnSet(t *testing.T) {
 	a.setPalette()
 	for i, tl := range tiles {
 		v := a.doc.cells[i]
-		if cellCh(v) != tl[0] || a.pal[cellFg(v)]&0xFFFFFF != colours[tl[1]-1] {
+		if cellCh(v) != psciSwap(tl[0]) || a.pal[cellFg(v)]&0xFFFFFF != colours[tl[1]-1] {
 			t.Fatalf("tile %d %v opened as %08x (fg %06x)", i, tl, v, a.pal[cellFg(v)])
 		}
 	}
 	a.doc.set(0, 0, makeCell(5, cellFg(a.doc.cells[0]), cellBg(a.doc.cells[0]), 0))
+	a.doc.set(1, 0, makeCell(32, cellFg(a.doc.cells[1]), cellBg(a.doc.cells[1]), 0)) // a space: glyph 0
+	tiles[1][0] = 0
 	a.dirty = true
 	a.save(false)
 	b, _ := os.ReadFile(path)
