@@ -854,6 +854,12 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## The rest of other editors' files (2026-10-16, branch r4-others)
 
+- **Decided (2026-10-16, the user trusts these calls):** Playscii's sets/palettes and SkyPix's Amiga fonts are
+  downloads, not built in (machines' own glyphs); IcyDraw XEP80 pages show their first 40 columns; a C128 80
+  page with mixed sets uses the most-used set and says how many differ; a PETSCII .icy gets CharEdit's palette
+  written in; SkyPix follows the spec for ESC[row;colH (IcyDraw is one row high); opening SkyPix makes VGA 8x8
+  the PC default like any 8x8 file.
+
 - **IcyDraw's other pages** (`icymach.go`): an `.icy` with buffer type 2 PETSCII / 3 ATASCII / 5 Atari ST opens on
   that machine's page; the `SCREEN` record (IcyDraw 0.6.0, version 1: tag 1 machine u16 + mode u16, 2 border,
   3 screen colour, each 4 bytes; unknown or repeated fields refuse the file, as IcyDraw) gives machine and case
