@@ -131,10 +131,11 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   on this computer (`ATARIXL.ROM` or `ATARIOSB.ROM` in CharEdit's data folder, `~/.atari800` or
   `/usr/share/atari800`; Atari's ROMs may not be passed on, so CharEdit brings none) the Font gadget also offers
   "Atari (OS ROM)" and the XL's international set. Own fonts: Load a font (`.fnt`, 1024 bytes), the font editor.
-  Colours are the machine's registers, from GTIA's 128 colours (Palette: Atari PAL or Atari NTSC): text
+  Colours are the machine's registers, from GTIA's 128 colours (Palette: Atari PAL or NTSC, Altirra's or atari800's): text
   (COLOR1, 709: only its luminance counts, the text takes the screen's hue, as in GRAPHICS 0), screen (COLOR2,
   710) and border (COLOR4, 712); left / right / middle click in the 16 x 8 colour grid, the values to poke shown
-  under it. Start-up colours 202 on 148, border 0. The colours are atari800's palette model (its standard preset).
+  under it. Start-up colours 202 on 148, border 0. The default colours are Altirra's PAL palette (what compo screenshots
+  are taken with); Altirra's NTSC and atari800's PAL and NTSC palettes are in the Palette gadget.
   **Runs on the machine**: `.xex` (a program for any Atari 400/800/XL/XE: the page in its colours, with its own
   font when it has one; DOS, a loader or an emulator runs it) and `.atr` (a single density disk that boots straight
   into it). Both open again. The first 24 rows are shown; a 38-wide page sits at the screen editor's column 2.
@@ -699,7 +700,8 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | IBM VGA 8×16 | rendered from Px437_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` |
 | IBM EGA 8×14, IBM VGA 8×8, IBM VGA 8×16 code pages 850 and 866 (`fonts/IBM_*.f08/.f14/.f16`) | drawn from Bm437_IBM_EGA_8x14, Bm437_IBM_VGA_9x8 and BmPlus_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* v2.2 (int10h.org), by `tools/pcfonts.py` | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` (the pack's licence) |
 | Atari 8-bit fonts | AltirraOS, from the Altirra emulator | all-permissive, `fonts/AltirraOS-LICENSE.txt` |
-| Atari GTIA colours (`gtia.go`) | the model and measured numbers of atari800's palette generator (`colours_ntsc.c`, `colours_pal.c`, github.com/atari800/atari800): luma steps, colour delays, PAL delay table; written anew from its description, no code taken | facts (numbers); atari800 itself is GPL-2+ |
+| Atari GTIA colours, the default (`gtia.go` `altirraTable`) | the model of Altirra's palette generator, Avery Lee (Altirra 4.40, `palettegenerator.cpp` and its default PAL/NTSC presets, virtualdub.org/altirra.html): luma ramp, hue angles, saturation, PAL phase table, colour matrices; written anew, no code taken | facts (numbers); Altirra itself is GPL-2+ |
+| Atari GTIA colours, atari800's (`gtia.go` `gtiaTable`) | the model and measured numbers of atari800's palette generator (`colours_ntsc.c`, `colours_pal.c`, github.com/atari800/atari800): luma steps, colour delays, PAL delay table; written anew from its description, no code taken | facts (numbers); atari800 itself is GPL-2+ |
 | ZX Spectrum font | the 48K ROM's character set | © Amstrad, who allow passing it on, `fonts/zx-spectrum-NOTICE.txt` |
 | Amstrad CPC font | the CPC firmware ROM's character set (the same in the 464, 664 and 6128) | © Amstrad; Amstrad has kindly given its permission for its copyrighted material to be redistributed but Amstrad retains its copyright, `fonts/amstrad-cpc-NOTICE.txt` |
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |

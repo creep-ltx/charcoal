@@ -12,7 +12,9 @@ package main
 //
 // as values 0-255, what a program pokes there. Start-up: 148 ($94), 202 ($CA), 0.
 //
-// The RGB of each value comes from the model of atari800's palette generator
+// The RGB of each value comes from one of two emulators' models. The default
+// (palette "atari", since 2026-10-16) is Altirra's (altirraTable below), what
+// compo screenshots are taken with. The other is atari800's palette generator
 // (src/colours_ntsc.c and colours_pal.c, github.com/atari800/atari800; its
 // "standard" preset: gamma 2.35, black level 16, white 235, colour delay 26.8
 // degrees on NTSC and 23.2 on PAL), written again here from its description:
@@ -28,11 +30,20 @@ import (
 // The Atari's start-up registers.
 const atariBg, atariInk, atariBorder = 0x94, 0xCA, 0x00
 
-var gtiaPAL, gtiaNTSC = gtiaTable(true), gtiaTable(false)
+// gtiaPAL is the default table (Altirra's PAL), gtiaAltNTSC Altirra's NTSC;
+// gtia800PAL and gtiaNTSC are atari800's.
+var gtiaPAL, gtiaAltNTSC = altirraTable(true), altirraTable(false)
+var gtia800PAL, gtiaNTSC = gtiaTable(true), gtiaTable(false)
 
 // The palettes in the Palette gadget; their 16 colours are the hues at a middle
 // luminance (other pages' code may index them), an Atari page uses gtiaFor.
-var atariPalette, atariNTSCPalette = gtiaPalette("atari", "Atari PAL", &gtiaPAL), gtiaPalette("atarintsc", "Atari NTSC", &gtiaNTSC)
+// The ids "atari" and "atarintsc" are older than the Altirra palettes: "atari"
+// was atari800's PAL until 2026-10-16 and now is Altirra's, the default.
+var atariPalette, atariNTSCPalette = gtiaPalette("atari", "Atari PAL (Altirra)", &gtiaPAL), gtiaPalette("atarintsc", "Atari NTSC (atari800)", &gtiaNTSC)
+var atari800Palette, atariAltNTSCPalette = gtiaPalette("atari800pal", "Atari PAL (atari800)", &gtia800PAL), gtiaPalette("atarintscalt", "Atari NTSC (Altirra)", &gtiaAltNTSC)
+
+// gtiaPalettes are the Atari page's palettes, in the gadget's order.
+var gtiaPalettes = []*Palette{atariPalette, atariAltNTSCPalette, atari800Palette, atariNTSCPalette}
 
 func gtiaPalette(id, name string, t *[256]uint32) *Palette {
 	p := &Palette{id: id, name: name}
@@ -42,19 +53,34 @@ func gtiaPalette(id, name string, t *[256]uint32) *Palette {
 	return p
 }
 
-func init() { // the NTSC palette after the PAL one
+func init() { // the other GTIA palettes after the default one
 	for i, p := range palettes {
 		if p == atariPalette {
-			palettes = append(palettes[:i+1], append([]*Palette{atariNTSCPalette}, palettes[i+1:]...)...)
+			palettes = append(palettes[:i+1], append(append([]*Palette{}, gtiaPalettes[1:]...), palettes[i+1:]...)...)
 			break
 		}
 	}
 }
 
-// gtiaFor is the colour table a palette id gives (PAL unless it is the NTSC one).
+// isGTIAPalette: one of the Atari page's palettes.
+func isGTIAPalette(p *Palette) bool {
+	for _, q := range gtiaPalettes {
+		if p == q {
+			return true
+		}
+	}
+	return false
+}
+
+// gtiaFor is the colour table a palette id gives (Altirra's PAL for any other id).
 func gtiaFor(id string) *[256]uint32 {
-	if id == "atarintsc" {
+	switch id {
+	case "atarintsc":
 		return &gtiaNTSC
+	case "atari800pal":
+		return &gtia800PAL
+	case "atarintscalt":
+		return &gtiaAltNTSC
 	}
 	return &gtiaPAL
 }
@@ -114,6 +140,80 @@ func gtiaTable(pal bool) [256]uint32 {
 	return out
 }
 
+// altirraTable makes the 256 colours of Altirra's default PAL or NTSC palette
+// (Avery Lee's Altirra 4.40, src/Altirra/source/palettegenerator.cpp and the
+// presets default_pal / default_ntsc in gtia.cpp; GPL-2+): written again here
+// from its model, only its constants taken. Luminance is the 800XL's measured
+// luma ramp; chroma a vector of the saturation at the hue's angle (hue 1 at
+// the start angle, a step per hue), on PAL the average of the even and odd
+// lines' phases and inversions; YIQ to RGB. PAL: no colour matching, RGB as it
+// is. NTSC: brightness -0.04, contrast 1.04, then NTSC primaries to sRGB.
+func altirraTable(pal bool) [256]uint32 {
+	ramp := [16]float64{0, 0.0658340, 0.1435022, 0.2093362, 0.2750246, 0.3408586, 0.4185267, 0.4843608,
+		0.5156392, 0.5814733, 0.6591414, 0.7249754, 0.7906638, 0.8564978, 0.9341660, 1}
+	// The PAL GTIA's phase per hue 1-15 in hue steps, and its sign, even and odd lines.
+	phase := [15][4]float64{{0, 1, 0, 1}, {1, 1, 1, 1}, {-6, -1, 2, 1}, {-5, -1, -5, -1}, {-4, -1, -4, -1},
+		{-3, -1, -3, -1}, {-1, -1, -1, -1}, {0, -1, 0, -1}, {1, -1, 1, -1}, {-6, 1, 2, -1}, {-4, 1, -4, 1},
+		{-3, 1, -3, 1}, {-2, 1, -2, 1}, {-1, 1, -1, 1}, {0, 1, 0, 1}}
+	start, hueRange, sat, bright, contrast := -12.0, 18.3*15, 0.29, 0.0, 1.0
+	if !pal {
+		start, hueRange, sat, bright, contrast = -57, 27.1*15, 0.20, -0.04, 1.04
+	}
+	rad := math.Pi / 180
+	step := hueRange / 15 * rad
+	// NTSC (SMPTE C primaries) to XYZ, XYZ to linear sRGB.
+	fromNTSC := [3][3]float64{{0.6068909, 0.1735011, 0.2003480}, {0.2989164, 0.5865990, 0.1144845}, {0, 0.0660957, 1.1162243}}
+	toSRGB := [3][3]float64{{3.2404542, -1.5371385, -0.4985314}, {-0.9692660, 1.8760108, 0.0415560}, {0.0556434, -0.2040259, 1.0572252}}
+	var out [256]uint32
+	for hue := 0; hue < 16; hue++ {
+		var i, q float64
+		if hue > 0 {
+			if pal {
+				ph := phase[hue-1]
+				a2, a3 := start*rad+step*ph[0], start*rad+step*ph[2]
+				i = (math.Cos(a2)*ph[1] + math.Cos(a3)*ph[3]) * 0.5 * sat
+				q = (math.Sin(a2)*ph[1] + math.Sin(a3)*ph[3]) * 0.5 * sat
+			} else {
+				a := start*rad + step*float64(hue-1)
+				i, q = sat*math.Cos(a), sat*math.Sin(a)
+			}
+		}
+		chroma := [3]float64{0.956*i + 0.621*q, -0.272*i - 0.647*q, -1.107*i + 1.704*q}
+		for lum := 0; lum < 16; lum++ {
+			y := contrast*ramp[lum] + bright
+			var rgb [3]float64
+			for k := range rgb {
+				rgb[k] = y + chroma[k]
+			}
+			if !pal { // gamma 2.2 to linear, NTSC primaries to sRGB, sRGB's curve
+				var lin, xyz [3]float64
+				for k := range lin {
+					lin[k] = math.Pow(max(rgb[k], 0), 2.2)
+				}
+				for r := range xyz {
+					for k := range lin {
+						xyz[r] += fromNTSC[r][k] * lin[k]
+					}
+				}
+				for r := range rgb {
+					x := 0.0
+					for k := range xyz {
+						x += toSRGB[r][k] * xyz[k]
+					}
+					if x < 0.0031308 {
+						rgb[r] = x * 12.92
+					} else {
+						rgb[r] = 1.055*math.Pow(x, 1/2.4) - 0.055
+					}
+				}
+			}
+			c := func(x float64) uint32 { return uint32(max(0, min(255, math.Round(x*255)))) }
+			out[hue<<4|lum] = 0xFF000000 | c(rgb[0])<<16 | c(rgb[1])<<8 | c(rgb[2])
+		}
+	}
+	return out
+}
+
 // gtiaPALChroma is a PAL hue's U and V: the PAL GTIA delays the subcarrier by a base
 // delay, maybe a second fixed one, and 0-7 steps of the DEL pin's delay, different
 // in even and odd lines (measured on oscillograms, see atari800's colours_pal.c);
@@ -165,7 +265,7 @@ func atariFromOld(d *Doc) {
 		case 3:
 			return atariInk
 		}
-		return gtiaNearest(atariOld16[i&15], &gtiaPAL)
+		return gtiaNearest(atariOld16[i&15], &gtia800PAL) // the table of the time
 	}
 	d.bg, d.ink, d.border = conv(d.bg), conv(d.ink), conv(max(0, d.border))
 }

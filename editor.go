@@ -484,7 +484,7 @@ func (a *App) setPalette() {
 	if a.c64() && !strings.Contains(" c64 colodore vic20 vdc petgreen petamber petwhite custom ", " "+p.id+" ") {
 		p = paletteByID(a.mach().palette)
 	}
-	if a.atari() && p != atariPalette && p != atariNTSCPalette { // PAL or NTSC GTIA (gtia.go)
+	if a.atari() && !isGTIAPalette(p) { // a GTIA palette (gtia.go)
 		p = atariPalette
 	}
 	if a.zx() && p.id != "custom" {

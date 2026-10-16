@@ -755,8 +755,8 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 - **The user's decisions (2026-10-16, "I trust you"):** PAL default; the GTIA model re-implemented from atari800's
   numbers (no code) is fine; the OS ROM font is the default when a ROM is found (prefs.go); a .xex shows 24 rows
-  with a note, no scrolling; a measured palette becomes the default once one with a shippable licence is found
-  (the emulator check, branch r3-emu, gathers the evidence).
+  with a note, no scrolling; ~~a measured palette becomes the default~~ **done 2026-10-16 (r3-emu): Altirra's
+  default PAL palette, computed from its model's constants, is the default** (compo screenshots are Altirra's).
 
 - **Atari colours** (`gtia.go`): an Atari page's `Doc.bg/ink/border` are now the machine's registers as values
   0-255: COLOR2 (710, the screen), COLOR1 (709: only its luminance shows, the text takes the screen's hue:
@@ -765,8 +765,16 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   meta) go through `atariFromOld`. RGB: `a.atariRGB(v)` = `a.gtia()[v&$FE]` (luminance bit 0 ignored in text
   modes); **never `a.pal[d.bg]` on an Atari page** (it panics on values > 15): the sites that did (drawCell,
   borderPx, HTML, strip, paperRGB, paperColour, convertFromMachine, Playscii) have an atari case. `a.pal` on
-  an Atari page is 16 hues at luminance 8 (for code that wants some palette). Palettes `atari` (PAL, default) and
-  `atarintsc`, tables `gtiaPAL`/`gtiaNTSC` made at start by atari800's model (standard preset: gamma 2.35, levels
+  an Atari page is 16 hues at luminance 8 (for code that wants some palette). **Palettes (2026-10-16, r3-emu):**
+  `atari` "Atari PAL (Altirra)" = `gtiaPAL`, the default; `atarintscalt` "Atari NTSC (Altirra)" = `gtiaAltNTSC`;
+  `atari800pal` "Atari PAL (atari800)" = `gtia800PAL`; `atarintsc` "Atari NTSC (atari800)" = `gtiaNTSC`
+  (`gtiaPalettes`, `isGTIAPalette`, `gtiaFor`). The ids are old: `atari` meant atari800's PAL before, so old
+  prefs/autosaves naming it now get Altirra's; `atariFromOld` still converts with `gtia800PAL` (the table of the
+  time). `altirraTable` = Altirra 4.40's palettegenerator.cpp model with presets default_pal/default_ntsc (XL luma
+  ramp, hue start -12 / -57, range 18.3x15 / 27.1x15, saturation 0.29 / 0.20, PAL even/odd phase table; NTSC also
+  brightness -0.04, contrast 1.04, gamma 2.2 + NTSC primaries to sRGB), only constants taken; PAL is pinned by
+  `TestEmuAltirraPalette` (all 256 values; $94 #005F8A, grey 14 #EEEEEE). Its NTSC is *computed, not compared
+  with Altirra* (greys tint slightly: its primaries' white is illuminant C). atari800's tables were made at start by its model (standard preset: gamma 2.35, levels
   16-235, delay 26.8 / 23.2 degrees, PAL's even/odd delay table; *read* from its colours_ntsc.c / colours_pal.c,
   written anew). They come out darker than measured palettes (atari800's act/jakub.act, Real.act: $94 is
   #2D769D there, #034653 here): the model is what atari800 shows by default, not a measurement.
@@ -823,8 +831,8 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   (GTK) on GTK's Broadway backend (`broadwayd`, no screen) recording an uncompressed FMF movie, read by
   `emuFFMF`; MAME `cpc6128 -video none -seconds_to_run` with Caprice32's ROMs (`get-cpc-roms.sh`). All with
   `env -i`, a temporary HOME, `timeout -k 5` and a 4 GB scope.
-- **Colours** (logged by the tests): atari800's default PAL and NTSC palettes are CharEdit's `gtiaPAL`/`gtiaNTSC`
-  exactly (0 difference over all 128 colours each), so "darker than measured" is atari800's own default look.
+- **Colours** (logged by the tests): atari800's default PAL and NTSC palettes are CharEdit's `gtia800PAL`/`gtiaNTSC`
+  (until the switch to Altirra's, `gtiaPAL`) exactly (0 difference over all 128 colours each), so "darker than measured" is atari800's own default look.
   atari800's act/ files are brighter (mean brightness 136-146 against our 99; $94 jakub #2D769D, Real #3E75A4,
   ours #034653); Altirra 4.40's default PAL, computed from its palettegenerator.cpp (not run: Windows), is between
   (mean 120, $94 #005F8A, grey 14 #EEEEEE against our #D3D3D3). VICE's default C64 palette differs from ours
