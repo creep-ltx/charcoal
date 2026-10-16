@@ -73,7 +73,7 @@ against each platform's best editor. Each step says what it wins.
 
 - **Work stages**: export 6-10 stages from the undo history (Revision wants exactly 10, Deadline 6).
 - **Party rule check**: size limits (Revision 80x500), no iCE/blink for PC, ROM font for PETSCII.
-- **Runs on the machine**: C64 .prg (done) and .d64, Atari .xex, Spectrum .tap, a matching screenshot PNG
+- **Runs on the machine**: C64 .prg (done) and .d64 (done 2026-10-16), Atari .xex, Spectrum .tap, a matching screenshot PNG
   with the border.
 
 ## Step 4: PC artists feel at home (the biggest group)
@@ -95,6 +95,11 @@ against each platform's best editor. Each step says what it wins.
   pages (40x24, same characters); Minitel/Videotex (.vdt) reusing the teletext code.
 - **PETSCII**: Plus/4 and C16 (TED, 121 colours); C64 custom charsets, multicolour and ECM; dirart and
   .d64; pages wider than the screen for scrollers; asm/BASIC exports.
+  - [x] **C64 beyond PETSCII** (2026-10-16, c64x*.go): multicolour and ECM pages drawn as the VIC-II shows them
+    (Screen, MC/BG gadgets), custom character sets (.64c/.bin, CharPad .ctm v5-v9 as a font or a page, pixel
+    pairs in the font editor), CharEdit's own .prg (set at $2000, VIC registers) and .d64, the ACME source and
+    BASIC listing with sets and modes. Later: DirArt, a run in VICE (not installed here; checked in a 6502 and
+    by ACME), CharPad .ctm writing, Petmate files with modes.
 - [x] **Amstrad CPC (AMSCII)** (done 2026-10-16, cpc.go): mode 1 40x25 4 inks, mode 0 20x25 16 inks, mode 2
   80x25 2 inks; the 27 colours, inks and border in the Colours panel; the ROM font built in (Amstrad's
   permission, as the Spectrum's); .bin that runs on a CPC, .dsk, Playscii .psci with Logiker's exporter; reads

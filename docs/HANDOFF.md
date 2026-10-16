@@ -48,7 +48,7 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | PC ANSI | + .bin (BIOS colour order!), XBin, PCBoard .pcb, Avatar .avt; iCEDraw .idf, ArtWorx .adf, Tundra .tnd, IcyDraw .icy, REXPaint .xp, Playscii .psci (see Other editors' files) |
 | Atari (ATASCII) | .ata (width 38/40 guessed); AltirraOS font built in |
 | Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL) |
-| PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form); ROMs from VICE on first use |
+| PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form, or CharEdit's for sets/modes) .d64, CharPad .ctm read; multicolour and ECM (C64, C128 40); ROMs from VICE on first use |
 | ZX Spectrum | .scr (6912 bytes); 48K ROM font built in (Amstrad allows passing it on) |
 | Amstrad CPC | modes 0/1/2; .bin (AMSDOS program), .dsk, Playscii .psci (Logiker's exporter); firmware ROM font built in (Amstrad's permission) |
 | Teletext | .tti .ep1, edit.tf links (.url), Mode 7 dumps; Bedstead font (CC0) built in; a .tti carousel opens as frames (one per subpage) and saving rewrites only changed subpages' OL 0-24 rows, every other line kept (teletext.go writeTTIFrames) |
@@ -131,8 +131,8 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Built-in PC fonts: `fonts/IBM_EGA_8x14.f14`, `IBM_VGA_8x8.f08`, `IBM_VGA_8x16_850.f16`, `_866.f16`, made by
   `tools/pcfonts.py` from the pack's **.otb** bitmap fonts (the Px .ttf moves capitals' accents by a row);
   checked byte for byte against DOSBox's ROM tables. `fontBySauce` with aliases (IBM VGA 437, IBM EGA43 ...).
-- Not done: the 4:3 preview (step 4; 9-pixel cells done, 0.1b7), 8x8/8x14 sets of other code pages, a .prg that carries a
-  charset (Petmate's form has none), fonts on ST/teletext pages, more than the first screen's custom font in a
+- Not done: the 4:3 preview (step 4; 9-pixel cells done, 0.1b7), 8x8/8x14 sets of other code pages, fonts on ST/teletext pages (a .prg that carries a charset:
+  done 2026-10-16, c64x_prg.go), more than the first screen's custom font in a
   Petmate file.
 
 ## Animation templates (2026-10-14, merged; 0.1b5-0.1b7)
@@ -451,6 +451,50 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Not done: CharEdit's .bin has not run on a real CPC or an emulator (no CPC emulator here; the stub is checked by
   the Z80 test only); play (m) of the stream;
   BASIC listing; flashing inks shown as their first colour; custom characters (SYMBOL) ignored.
+
+## C64 beyond PETSCII (2026-10-16, branch r2-c64plus)
+
+- `c64x.go` (mode, drawing, gadgets, kept-for-the-file, font editor pairs), `c64x_prg.go` (CharEdit's .prg, ACME
+  and BASIC with sets/modes, `encodeC64x`), `c64x_d64.go`, `c64x_ctm.go` (CharPad). `Tab.vic vicSetup{Mode,
+  Regs}` (0 hi-res, 1 multicolour, 2 ECM; Regs = $D022-$D024; `defaultVIC` = KERNAL's 1,2,3, set in makeTab and
+  by `loadC64x` at the start of every load); `Snap.vic` (undo), `autosaveMeta.VIC`, `prefs.VICModes` (path ->
+  setup for formats that cannot hold it: `keepVICMode` after writeOut, `restoreVICMode` after openPath).
+  `vicII()` = C64 or C128 40 (by `mach().id`: `a.machine` may be "" = C64). `App.c64xOpts.ecmBg`.
+- Drawing: `drawCell` hands any non-hi-res VIC page to `drawVICCell` -> `vicCell` (MCM: colour 8-15 = pairs 00
+  $D021 / 01 $D022 / 10 $D023 / 11 colour&7, 0-7 hi-res in colour&7; ECM: glyph code&63, bg = [$D021,
+  $D022-$D024][code>>6], fg 0-15). From the VIC-II data sheet / PRG ch.3 (*read*); VICE not installed here,
+  so not compared with a VICE screenshot.
+- ECM brush: `ecmChar` gives codes 0-63 the "Paint on" background (`a.cell` and `brushCell`); codes >= 64
+  picked from the table keep theirs; the Colour tool's right button sets bits 6-7 (`paintAt`). Reverse is
+  ignored in ECM (bit 7 is a background bit there).
+- **.prg**: plain ROM screens keep Petmate's form (`writePrg`); a page with its own set or MCM/ECM gets
+  `c64xPrg`: 10 SYS2061, code at $080D (blank, copy 8 pages of set to $2000 when present, copy screen/colours
+  like Petmate, set $D020-$D024, $D018 ($18 own set, $14/$17 ROM), $D016 ($C8/$D8), $D011 ($1B/$5B), JMP *),
+  data at $088C/$0C74/$105C. Fixed template + slots (`c64xSlot`), so `parseC64xPrg` reads only that form
+  (4189 or 2141 bytes). $2000 because bank 0 shows the char ROM at $1000-$1FFF. `readC64Prg`, `isOurC64Prg`.
+- **.d64**: `writeD64` (35 tracks, one PRG $82, 1541 order: tracks 17 down then 19 up, interleave 10, BAM with
+  "2A", disk id "CE", names PETSCII upper, $A0 padded; name = saved file via `cpcTarget`), `d64Dir` (loops
+  guarded, 35/40 tracks with or without error bytes), `d64Art` = first PRG CharEdit can open. srcKind "d64" via
+  `editorOwn`; `c64xAfterLoad` gives prg/d64 pages their mode and set.
+- **ACME / BASIC**: `writeC64Asm` = Marq's source plus the registers after `sta $d021`, `#91` for ECM, and the
+  set at `*=$2000` (ACME fills the gap); data-only (not 40x25) adds a mode comment and `charset:`.
+  `writeC64Bas`: a set goes to VIC bank 3 (screen $C400, set $C800, `poke 56576,...and252`, `poke 53272,20`,
+  `poke 648,196`) since 20 KB of DATA fill BASIC past $2000/$3800. Plain pages give Marq's bytes unchanged.
+- **CharPad .ctm** (v5-v9; formats in c64x_ctm.go's head): `parseCTM` -> `ctmProject`; as a font
+  (`parseFontFile` .ctm, then `ctmFontLoaded` sets mode/regs/bg); as a page (`loadC64x` -> `loadCTM`: srcKind
+  "ctm", saveFmt "prg", path cleared so Ctrl+S asks; `reparseCTM`). v8 prerelease (4-byte colour entries) told
+  by the byte after the colours not being $DA (retro-image's rule). v9's bg4 position and ECM maps are *proposed*.
+  MC colours follow the VIC (8-15 = multicolour); CharPad itself was not run. Writing .ctm is refused.
+- Font editor: `fontEdChar` (ECM: brush&63), `fontEdPairs` (MCM and fg >= 8): `drawPairs`, `penGadgets`,
+  keys 1-3.
+- Tests (`c64x_test.go`): a 6502 interpreter (`c64xF6502`, checked on Petmate's own program) runs every
+  .prg combination (own/ROM x 3 modes x case) and ACME's output of `writeC64Asm` (`CHARCOAL_ACME=path` or acme
+  in PATH; built from github.com/meonwax/acme for this, skipped otherwise); BASIC DATA parsed back; .d64 BAM /
+  chain / directory; CharPad files of every version give version 5's page; editor (undo, ECM painting, .prg/.d64
+  save/open/Ctrl+S, .seq keeps the mode, autosave); `TestC64xMutations` (20000 mutated files; the fuzz engine
+  stalls in this package), `FuzzC64x`, FuzzParsers has prg/d64/ctm.
+- Not done: DirArt (directory art) on the .d64; a run in VICE or on a real C64; Petmate/Marq .c files with modes
+  (neither editor has them); CharPad writing; Petmate JSON with a custom charset.
 
 ## Keys and safety (2026-10-13, evening)
 

@@ -27,6 +27,10 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 		a.drawUniCell(fb, px, py, z, v)
 		return
 	}
+	if a.vicMode() != vicHires { // multicolour and ECM (c64x.go)
+		a.drawVICCell(fb, px, py, z, v)
+		return
+	}
 	f, H := a.font(), a.cellH()
 	skip := 1
 	if H == 8 {
@@ -579,6 +583,7 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			a.start = false
 			a.setMachine(machines[i].id)
 		})
+		a.drawVICGadgets(u, row) // the C64's text modes (c64x.go)
 		var keep []int
 		for i, id := range fontIDs { // only this machine's two sets, and the page's own
 			if strings.HasPrefix(id, a.mach().family) || strings.HasPrefix(id, ownID) {

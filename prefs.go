@@ -36,6 +36,7 @@ type Prefs struct {
 	Refs       map[string]*RefPref `json:"references,omitempty"`        // each art file's reference picture (refimage.go)
 	Shades     map[string][]int    `json:"shades,omitempty"`            // the shade brush's characters per page type, lightest first
 	ArtFonts   map[string]ArtFont  `json:"art_fonts"`                   // art file -> the font CharEdit keeps for it (fontfile.go)
+	VICModes   map[string]vicSetup `json:"c64_screen_modes,omitempty"`  // C64 art file -> the multicolour/ECM set-up CharEdit keeps for it (c64x.go)
 	MyBBS      string              `json:"my_bbs,omitempty"`            // the board whose pause codes animated saves get ("": none; bbspause.go)
 	AnimWarn   int                 `json:"anim_warn_seconds,omitempty"` // Animate warns past this many seconds at the chosen speed (0: 30; animcost.go)
 	AnimLevel  string              `json:"anim_detail,omitempty"`       // Animate's last detail level ("": medium)

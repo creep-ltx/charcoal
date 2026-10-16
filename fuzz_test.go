@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -60,6 +62,18 @@ func FuzzParsers(f *testing.F) {
 		out, _ := writePsciCPC([]*Doc{d}, nil, s)
 		f.Add(out)
 		f.Add([]byte("\x04\x00\x1c\x01\x02\x02\x1f\x05\x05\x01\x01\x19A12345678\x1a\x01\x02\x03\x04\x0b\x0bX"))
+	}
+	{ // C64 beyond PETSCII (c64x*.go)
+		d := newDoc(40, 25)
+		d.cells[3] = makeCell(65, 9, 0, 0)
+		prg := c64xPrg(d, false, vicSetup{Mode: vicECM, Regs: [3]int{1, 2, 3}}, c64xFont(make([]byte, 2048), "f", "bin"))
+		f.Add(prg)
+		f.Add(writeD64("f.d64", prg))
+		for _, n := range []string{"text-mc-per-char-notiles-ctm5.ctm", "text-hi-per-tile-ctm7.ctm", "text-hi-per-char-tiles-ctm82.ctm", "text-mc-per-char-tiles-ctm8.ctm"} {
+			if b, err := os.ReadFile(filepath.Join("testdata", "charpad", n)); err == nil {
+				f.Add(b)
+			}
+		}
 	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		check := func(name string, run func() []*Doc) {
@@ -146,6 +160,21 @@ func FuzzParsers(f *testing.F) {
 			return nil
 		})
 		check("cpc stream", func() []*Doc { c := newCPCScreen(); c.print(b, false); return one(c.d) })
+		check("c64 prg", func() []*Doc { d, _, _, _, _ := parseC64xPrg(b); return one(d) })
+		check("d64", func() []*Doc {
+			if f, _, err := d64Art(b); err == nil {
+				d, _, _ := readC64Prg(f.data)
+				return one(d)
+			}
+			return nil
+		})
+		check("ctm", func() []*Doc {
+			if p, err := parseCTM(b); err == nil {
+				d, _ := p.page()
+				return one(d)
+			}
+			return nil
+		})
 		for _, mode := range []string{"pc", "c64", "atari", "st"} {
 			docs, holds, _ := splitStream(b, mode, 40, false, stResolutions[0], true, 14400)
 			total := 0

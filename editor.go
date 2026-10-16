@@ -121,6 +121,7 @@ type Snap struct {
 	order  *drawOrder
 	mode   string    // the page type: undoing a conversion to or from Unicode changes it back
 	cpc    *cpcSetup // a CPC page's inks and mode as they were (nil on other pages)
+	vic    *vicSetup // a C64 page's text mode and $D022-$D024 as they were (nil on other pages)
 }
 type Play struct {
 	bytes []byte
@@ -193,6 +194,7 @@ type Tab struct {
 	ref                 *RefImage   // the reference picture to trace over (refimage.go), nil: none
 	order               *drawOrder  // the order Save draws a stream file in (transitions.go); nil: row by row
 	cpcSet              cpcSetup    // an Amstrad CPC page's mode, inks and border (cpc.go)
+	vic                 vicSetup    // a C64 page's text mode (multicolour, ECM) and $D022-$D024 (c64x.go)
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -240,6 +242,7 @@ type App struct {
 	startCol      int // the column Up goes back to from the recent files
 	drawOpts          // shapes, shade, mirror, colour / character only (shapes.go)
 	uniOpts           // the Unicode page's colours beyond 16 and character block (uni.go)
+	c64xOpts          // the brush's background in the C64's ECM (c64x.go)
 }
 
 var a *App
@@ -377,6 +380,9 @@ func (a *App) cell(ch int) uint32 {
 		return zxCell(ch, a.fg, a.bg, a.fg > 7 || a.bg > 7, a.flash)
 	}
 	if a.screen() {
+		if a.vicECM() { // the code's top bits are the background (c64x.go)
+			return makeCell(a.ecmChar(ch), a.fg, 0, 0)
+		}
 		if a.rev {
 			ch |= 0x80
 		}
@@ -402,7 +408,7 @@ func (a *App) brushCell() uint32 {
 		return makeCell(a.brush, 0, 0, 0)
 	}
 	if a.c64() {
-		return makeCell(a.brush, a.fg, 0, 0)
+		return makeCell(a.ecmChar(a.brush), a.fg, 0, 0)
 	}
 	return makeCell(a.brush, a.fg, a.bg, a.styleFlags())
 }
@@ -555,7 +561,7 @@ func nextGen() int { genSeq++; return genSeq }
 
 func (a *App) snapshot() Snap {
 	d := a.doc.clone()
-	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap()}
+	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap()}
 }
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
@@ -613,6 +619,9 @@ func (a *App) restore(s Snap) {
 	if s.cpc != nil && a.cpc() {
 		a.cpcSet = *s.cpc
 		a.setPalette()
+	}
+	if s.vic != nil && a.c64() {
+		a.vic = *s.vic
 	}
 	a.showCase()
 	a.dirty = a.gen != a.savedGen
@@ -779,6 +788,10 @@ func (a *App) paintOne(x, y, button int, fx, fy bool) {
 			a.putCell(x, y, a.mirrorCell(a.brushCell(), fx, fy))
 		}
 	case "colour":
+		if button == 3 && a.vicECM() { // ECM: the background is the code's top bits (c64x.go)
+			a.setCell(x, y, old&^0xC0|uint32(a.ecmBg)<<6)
+			return
+		}
 		if (button == 3 && a.c64()) || a.atari() {
 			return // a C64 cell has no background of its own, an Atari cell no colour at all
 		}
@@ -1236,7 +1249,7 @@ func (a *App) reparse() {
 	if a.reparseUni() {
 		return
 	}
-	if a.reparseEditor() || a.reparseCPC() {
+	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() {
 		return
 	}
 	switch a.srcKind {
@@ -1258,7 +1271,7 @@ func (a *App) reparse() {
 		}
 		a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
 		return
-	case "marq", "petmate", "prg":
+	case "marq", "petmate", "prg", "d64":
 		if scr, err := a.screens(a.source, a.srcKind); err == nil {
 			a.frames = make([]Frame, len(scr))
 			for i, s := range scr {
@@ -1338,6 +1351,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	if a.loadCPC(b, name, path, as) { // Amstrad CPC .bin and .dsk (cpc.go)
 		return
 	}
+	if a.loadC64x(b, name, path, as) { // CharPad projects (c64x_ctm.go)
+		return
+	}
 	if what := notArt(b); what != "" && as == "auto" {
 		a.msg("Could not open " + name + ": it is " + what + ", not art")
 		return
@@ -1402,10 +1418,16 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		kind = "petmate"
 	case isMarq(b):
 		kind = "marq"
-	case strings.HasSuffix(strings.ToLower(name), ".prg") && isOurPrg(b):
+	case strings.HasSuffix(strings.ToLower(name), ".prg") && isOurC64Prg(b):
 		kind = "prg"
+	case isD64(name, b): // a disk with a screen's program on it (c64x_d64.go)
+		if _, _, err := d64Art(b); err != nil {
+			a.msg("Could not open " + name + ": " + err.Error())
+			return
+		}
+		kind = "d64"
 	case strings.HasSuffix(strings.ToLower(name), ".prg"):
-		a.msg("Only C64 programs in Petmate's form (Petmate, PETSCII editor, CharEdit) can be opened")
+		a.msg("Only C64 programs in Petmate's form (Petmate, PETSCII editor) or CharEdit's can be opened")
 		return
 	}
 	if kind != "" && (as == "auto" || as == "c64") {
@@ -1431,6 +1453,7 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 				a.useOwnFont(f, nil, false)
 			}
 		}
+		a.c64xAfterLoad(b, kind) // CharEdit's .prg and .d64: mode and character set
 		if len(scr) > 1 {
 			a.msg(fmt.Sprintf("%s: %d screens, opened as frames (%s and %s go through them)", name, len(scr),
 				keyName("frame_previous"), keyName("frame_next")))
@@ -1659,8 +1682,15 @@ func (a *App) readScreens(b []byte, kind string) ([]PetScreen, error) {
 	switch kind {
 	case "petmate":
 		return parsePetmate(b)
-	case "prg":
-		d, lower, err := parsePrg(b)
+	case "prg", "d64":
+		if kind == "d64" { // its first screen's program (c64x_d64.go)
+			f, _, err := d64Art(b)
+			if err != nil {
+				return nil, err
+			}
+			b = f.data
+		}
+		d, lower, err := readC64Prg(b)
 		if err != nil {
 			return nil, err
 		}
@@ -1962,6 +1992,7 @@ func (a *App) makeTab(mode string) *Tab {
 		t.doc = newAtariDoc()
 		t.saveFmt, t.name = "ata", "untitled.ata"
 	}
+	t.vic = defaultVIC
 	if mode == "cpc" {
 		t.cpcSet = newCPCSetup(1)
 		t.doc = newCPCDoc(1)
@@ -2143,6 +2174,7 @@ func (a *App) openPath(path, as string) {
 		a.msg("Opened " + path)
 	}
 	a.restoreArtFont(path)
+	a.restoreVICMode(path) // a C64 page's multicolour or ECM (c64x.go)
 }
 
 func (a *App) anyDirty() int {
@@ -2472,6 +2504,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	if out, ok, err := a.encodeUni(fmtID, d); ok { // uniformats.go
 		return out, err
 	}
+	if out, ok, err := a.encodeC64x(fmtID, d); ok { // C64 .prg and .d64 beyond Petmate's form, asm and BASIC (c64x_prg.go)
+		return out, err
+	}
 	if out, ok, err := a.encodeCPC(fmtID, d); ok { // Amstrad CPC .bin and .dsk (cpc.go)
 		return out, err
 	}
@@ -2706,7 +2741,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
-	note := a.keepArtFont(path, fmtID)
+	note := a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID)
 	if a.animatedSave(fmtID) {
 		note += pacedNote(a.pageBoard(), ps) + a.writeCopies(path, fmtID)
 	}

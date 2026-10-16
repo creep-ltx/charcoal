@@ -203,6 +203,17 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its
   GitHub mirror), checked by SHA-1, into `~/.local/share/charcoal/chargen.bin`; Settings can do it too. bbmp's
   and an installed VICE's copies are used if present.
+- **C64 beyond PETSCII** (C64 and C128 40 columns, for graphics compos that take custom character sets): the
+  page's **Screen** gadget picks the VIC-II's text mode. *Multicolour*: a cell of colour 8-15 is drawn in pixel
+  pairs (00 the screen colour, 01 MC 1 = `$D022`, 10 MC 2 = `$D023`, 11 the cell's colour 0-7), colours 0-7 stay
+  hi-res. *Extended background (ECM)*: characters 0-63, each on one of four backgrounds (BG 0 = the screen colour,
+  BG 1-3 = `$D022`-`$D024`) chosen by the screen code's top two bits; *Paint on* picks the background typing and
+  drawing give, the Colour tool's right button paints it. Drawn as the VIC-II shows them (PNG/GIF too). A
+  **custom character set** is the page's own font: load a `.64c`/`.bin` or a **CharPad project** (`.ctm`,
+  versions 5-9: its character set, mode and colours), edit it in the font editor (in multicolour it draws pixel
+  pairs with three pens, keys 1-3). A CharPad project also opens as a page (its map, tiles laid out; Save as
+  writes a C64 program). Kept in: the `.prg` and `.d64` below, the ACME source and the BASIC listing; other
+  formats say so when saved and CharEdit remembers mode and set for the file.
 - **Tabs and two pages at once**: every file opens in a tab; show one page, two side by side or one over the other
   (Ctrl+L), optionally scrolling together.
 - **Grid** (Ctrl+G, brighter every 10 columns and every 25 rows), **zoom** 1x-8x, fit to width (Ctrl+9),
@@ -217,7 +228,10 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   file keeps the old one as `name.bak` (Settings); the Open requester lists the last 10 files.
 - **Save as**: ANSI, ANSI in UTF-8 (for terminals), plain text, UTF-8, PC `.bin`, **XBin** (`.xb`, font and palette inside, so it looks the same in
   any viewer; opens again too), PETSCII `.seq`, a **C64 program** (`.prg`: LOAD and RUN on a C64 or in VICE, a key
-  in Petmate's form, so Petmate and Marq's PETSCII editor open it too; any .prg in that form opens), the **C array** of Marq's PETSCII editor and Petmate (`.c`), a
+  in Petmate's form, so Petmate and Marq's PETSCII editor open it too; any .prg in that form opens; a page with its
+  own character set, multicolour or ECM gets CharEdit's own program, which sets the VIC-II up and puts the set at
+  `$2000`), a **C64 disk** (`.d64`, a 1541 image with that program on it, named after the file; the first screen
+  program on any `.d64` opens), the **C array** of Marq's PETSCII editor and Petmate (`.c`), a
   **Petmate workspace** (`.petmate`), **PNG**
   (normal or twice the size; C64 pages with their border) and a **web page** (`.html`). A typed file ending picks
   the format, and an **animated GIF or APNG** of the frames. Everything that holds characters opens too.
@@ -238,7 +252,8 @@ open again become the page's file (Save writes the same format again).
 | REXPaint | `.xp` | PC | one layer, 24-bit colours | yes (layers put together) | IcyDraw's reader |
 | Playscii | `.psci` | PC (dos), Amiga (amiga_topaz), PETSCII (c64_real_*, commodore_pet), Atari (atari) | every frame with its hold, one layer; Playscii's own charset and palette by name | yes, also c64_petscii, c64_edscii (Playscii's defaults) and jpetscii; other charsets open as a PC page; layers put together | Playscii's own loader (art.py); its glyph order compared with the ROM fonts |
 | Marq's PETSCII editor | `.pet` | C64 | screen codes, colours, border, background, case | yes | its source (m_c64.pde) |
-| Marq's PETSCII editor | `.bas`, `.s` | C64 | a BASIC listing (for petcat) and an ACME program of a 40x25 screen (data only for other sizes) | no | its source |
+| Marq's PETSCII editor | `.bas`, `.s` | C64 | a BASIC listing (for petcat) and an ACME program of a 40x25 screen (data only for other sizes); with a custom set, multicolour or ECM: the registers and the set (BASIC: VIC bank 3, screen `$C400`, set `$C800`; ACME: the set at `$2000`) | no | its source; the ACME output assembled by ACME 0.97 and run in a 6502 (c64x_test.go) |
+| CharPad | `.ctm` (v5-v9) | C64 | (read only) the character set, mode, colours; the map laid out as characters | yes, as a font or a page | CharPad 2.7's format pages; c64lib's test projects (`testdata/charpad`), every version the same page |
 | Petmate | `.json` | PETSCII | every screen (Petmate's JSON export) | yes | its source (exporters/json.ts) |
 
 Traps: Petmate's `.pet` export says 0 for lower case where Marq's says 1 (CharEdit follows Marq); IcyDraw
@@ -296,10 +311,11 @@ empty cells; Alt+O), **Play** (Ctrl+P, at 1/2x to 4x, looping or once). Undo cov
 - **Your own font** for a page: the Font gadget's *Load a font...* (Ctrl+Shift+L), or drop the file on the window
   (it asks: font or art?). PC raw fonts (`.fnt .f08 .f14 .f16`: 256 characters of 8, 14 or 16 rows), PSF 1 and 2,
   an XBin's font; C64, VIC-20 and PET character sets (`.64c` with its load address, `.bin` of 2048 bytes a set or
-  4096 for both); Atari 8-bit `.fnt` (1024 bytes); ZX Spectrum sets (768 bytes, codes 32-127) and UDGs
+  4096 for both; CharPad `.ctm` projects); Atari 8-bit `.fnt` (1024 bytes); ZX Spectrum sets (768 bytes, codes 32-127) and UDGs
   (168 bytes). The font is named after its file.
-- **Kept with the art**: XBin holds the font inside, a Petmate workspace as its custom font (Petmate reads it).
-  Formats that cannot hold a font (ANSI, `.seq`, `.ata`, `.scr`, `.prg` ...) say so when saved, and CharEdit
+- **Kept with the art**: XBin holds the font inside, a Petmate workspace as its custom font (Petmate reads it),
+  CharEdit's C64 `.prg`/`.d64` and the ACME and BASIC exports in the program. Formats that cannot hold a font
+  (ANSI, `.seq`, `.ata`, `.scr` ...) say so when saved, and CharEdit
   remembers the font for that file: it comes back when the file opens again. Autosaves keep it too.
 - **Font editor** (Ctrl+Shift+E, or *Edit the font...*): the brush character's pixels in a grid. Click or drag
   sets pixels (a set pixel clicked clears), right click clears; Invert, Flip, Move (Shift+arrows), Clear, Copy,
@@ -569,6 +585,7 @@ come back cell for cell after saving in their own format.
 | `fontfile.go`, `fontedit.go` | a page's own font: font files read and written, kept with the art; the font editor (`fontfile_test.go`); `tools/pcfonts.py` makes the built-in EGA/VGA fonts |
 | `viewer.go` | CharView |
 | `export.go` | `.prg`, the `.c` array, XBin, HTML (`export_test.go` runs the `.prg` in a small 6502 emulator) |
+| `c64x.go`, `c64x_prg.go`, `c64x_d64.go`, `c64x_ctm.go` | C64 multicolour and ECM, CharEdit's own `.prg`, `.d64`, the ACME/BASIC exports with modes and sets, CharPad `.ctm` (`c64x_test.go` runs every program in a 6502) |
 | `bbscodes.go` | BBS colour codes: pipe, Synchronet Ctrl-A, WWIV, Wildcat!, Celerity, read in front of the ANSI terminal and written (`bbscodes_test.go`; real files when fetched, see HANDOFF) |
 | `editorformats.go` | other editors' files: iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii, Marq's `.pet`/`.bas`/`.s`, Petmate JSON (`editorformats_test.go`; `editorformats_ext_test.go` checks against ansilove, IcyDraw's engine and Playscii's loader when they are there) |
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
@@ -613,6 +630,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | Test files in `testdata/moebius` | written and read back by Moebius's own save and load code (github.com/blocktronics/moebius, `app/libtextmode`), run from a separate checkout by `tools/moebius/gen.js` and `check.js`; no Moebius code is copied | Moebius is Apache-2.0; the generated files are Charcoal's (MIT) |
 | `testdata/icydraw` | `testdata/alove`'s art as IcyDraw 0.6 saves it | as above |
 | `testdata/playscii/hello1.psci` | Playscii's example art | MIT, `testdata/playscii/LICENSE-playscii.txt` |
+| `testdata/charpad` | c64lib's CharPad test projects (gradle-retro-assembler-plugin) | MIT, `testdata/charpad/SOURCE.txt` |
 | `testdata/durdraw` | durdraw's example art (cmang, indyz) and durdraw's own ANSI exports of it | BSD 3-clause, `testdata/durdraw/NOTICE.txt` |
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE

@@ -51,7 +51,7 @@ func wantViewer() bool {
 	return strings.HasPrefix(strings.ToLower(filepath.Base(os.Args[0])), "charview")
 }
 
-var artExt = regexp.MustCompile(`(?i)\.(ans|ansi|asc|nfo|diz|txt|bin|seq|pet|ice|vt|cia|drk|xb|pcb|avt|idf|adf|tnd|ata|petmate|prg|scr|tti|ep1|m7)$`)
+var artExt = regexp.MustCompile(`(?i)\.(ans|ansi|asc|nfo|diz|txt|bin|seq|pet|ice|vt|cia|drk|xb|pcb|avt|idf|adf|tnd|ata|petmate|prg|d64|ctm|scr|tti|ep1|m7)$`)
 
 // maybeArt: a folder's file that is art. A .c is art only when it is the C array
 // of the PETSCII editor or Petmate (not program source), a .url only when it is

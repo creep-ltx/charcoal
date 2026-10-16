@@ -190,6 +190,15 @@ func parseFontFile(name string, b []byte, mode string, cur *Font) (up, low *Font
 		f.src, f.format = name, format
 		return f, nil, nil
 	case "c64":
+		if ext == ".ctm" { // a CharPad project's character set (c64x_ctm.go)
+			p, err := parseCTM(b)
+			if err != nil {
+				return nil, nil, err
+			}
+			f := p.font(base)
+			f.src = name
+			return f, nil, nil
+		}
 		data := b
 		format := "bin"
 		if ext == ".64c" {
@@ -279,6 +288,8 @@ func fontFileBytes(f, low *Font, ext string) ([]byte, error) {
 			binary.LittleEndian.PutUint32(head[i*4:], v)
 		}
 		return append(head, f.native()...), nil
+	case f.kind == "c64" && ext == ".ctm":
+		return nil, fmt.Errorf("CharEdit reads CharPad's .ctm but does not write it: save the set as .64c or .bin")
 	case f.kind == "c64":
 		data := f.native()
 		if low != nil {
@@ -386,6 +397,10 @@ func (a *App) loadFontFile(path string) {
 		return
 	}
 	a.useOwnFont(up, low, true)
+	if up.format == "ctm" { // with the project's mode and colours (c64x_ctm.go)
+		a.ctmFontLoaded(path, b)
+		return
+	}
 	what := fmt.Sprintf("8x%d", up.rows())
 	if low != nil {
 		what = "upper and lower case sets"
@@ -401,14 +416,14 @@ func (a *App) fontKeptHint() string {
 	case a.pc() || a.amiga():
 		return "an XBin holds it inside; for other formats CharEdit remembers it with the file"
 	case a.c64():
-		return "a Petmate file holds it inside; for other formats CharEdit remembers it with the file"
+		return "a Petmate file, CharEdit's .prg and .d64 hold it inside; for other formats CharEdit remembers it with the file"
 	}
 	return "CharEdit remembers it with the file when saved"
 }
 
 // carriesFont: the format holds the page's font inside.
 func carriesFont(fmtID string) bool {
-	return fmtID == "xbin" || fmtID == "petmate" || editorCarriesFont(fmtID)
+	return fmtID == "xbin" || fmtID == "petmate" || editorCarriesFont(fmtID) || c64xCarriesFont(fmtID)
 }
 
 // ArtFont is a font CharEdit keeps for an art file whose format cannot hold it.
