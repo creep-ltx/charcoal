@@ -94,7 +94,7 @@ func loadPrefs() {
 	a.defSTRes = stResByID(prefs.STRes).id
 	a.fkeys = defaultFkeys()
 	for _, m := range pageModes {
-		if f := prefs.Fkeys[m]; validFkeys(f) || (m == "uni" && validUniFkeys(f)) {
+		if f := prefs.Fkeys[m]; validFkeys(f) || (m == "uni" && validUniFkeys(f)) || (m == "mz" && validMZFkeys(f)) {
 			a.fkeys[m] = f
 		}
 	}

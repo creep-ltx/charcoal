@@ -1393,6 +1393,9 @@ func writePsci(docs []*Doc, holds []int, p psciPage) (out []byte, missed int) {
 	if p.mode == "cpc" {
 		return writePsciCPC(docs, holds, a.cpcSet)
 	}
+	if p.mode == "msx" {
+		return writePsciMSX(docs, holds, a.msxSet), 0
+	}
 	w, h := 1, 1
 	for _, d := range docs {
 		w, h = max(w, d.cols), max(h, d.rows)
@@ -1479,6 +1482,7 @@ type psciArt struct {
 	holds   []int
 	note    string
 	cpc     *cpcSetup // a CPC page's screen (cpc.go)
+	msx     *msxSetup // an MSX page's screen (msx.go)
 }
 
 // parsePsci reads a Playscii file; layers are put together (by z, visible only).
@@ -1495,6 +1499,9 @@ func parsePsci(b []byte) (*psciArt, error) {
 	}
 	if isCPCCharset(f.Charset) { // Logiker's Amstrad ASCII Exporter's charsets (cpc.go)
 		return psciCPC(&f), nil
+	}
+	if f.Charset == "msx" { // msx.go
+		return psciMSX(&f), nil
 	}
 	art := &psciArt{}
 	var glyph func(i int) (ch int, ok bool) // the page's character for a Playscii glyph
@@ -1916,6 +1923,10 @@ func (a *App) reparseEditor() bool {
 		}
 		if art.cpc != nil {
 			a.cpcSet = *art.cpc
+		}
+		if art.msx != nil {
+			a.msxSet = *art.msx
+			a.msxBrushColours()
 		}
 	case "pet", "pmjson":
 		scr, err := a.editorScreens(a.srcKind, a.source)

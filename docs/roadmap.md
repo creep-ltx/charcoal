@@ -130,6 +130,13 @@ against each platform's best editor. Each step says what it wins.
   the exporter's files (all 2024 compo entries, pixel-identical to their Caprice Forever screenshots). [x] CharEdit's .bin run in MAME (2026-10-16).
   Later: a real-CPC run, Caprice's 768x544 screenshot size, play the stream, custom
   characters (SYMBOL, not allowed in the compos).
+- [x] **MSX** (2026-10-16, msx.go): SCREEN 0 (40x24, two colours), SCREEN 1 (32x24, colours per 8 characters, border)
+  and the MSX2's 80 columns; the TMS9918 and V9938 palettes; C-BIOS's fonts (BSD) and an MSX BIOS ROM's when the
+  user has one; own fonts; a cartridge (.rom) and a BLOAD .bin that show the page (run in MAME on C-BIOS: pixel
+  for pixel), Playscii's msx charset. Later: a .dsk/.cas, an MSX BASIC listing, MSX2 blink.
+- [x] **Sharp MZ-700** (2026-10-16, mz.go): 40x25, both character sets, 8 colours per cell; .mzf that shows the
+  page (run in MAME's mz700: pixel for pixel), other .mzf pictures read; a public domain look-alike of the first
+  set, Sharp's ROM when the user has it. Later: the second set's look without the ROM.
 - **Spectrum**: UDG/charset editing; attributes-only painting.
 - [x] **Atari 8-bit** (2026-10-16, gtia.go, atari8.go): the real OS ROM font when present, the 128-colour palette
   (PAL and NTSC, atari800's model) with the machine's colour registers, custom fonts (load, edit, save .fnt; in the .xex).

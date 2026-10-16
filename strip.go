@@ -246,9 +246,9 @@ func (a *App) drawStrip(u *UI, r Rect) {
 // onionBlank: an empty cell, where the frame before shows through. Spectrum
 // and ST cells carry their paper colour even when empty.
 func (a *App) onionBlank(v uint32) bool {
-	if a.zx() || a.st() || a.cpc() {
+	if a.zx() || a.st() || a.cpc() || a.mz() {
 		ch := v & 255
-		return ch == 32 || ch == 0
+		return ch == 32 || ch == 0 && !a.mz()
 	}
 	if a.tt() {
 		return v&0x7F == 0x20
@@ -276,7 +276,7 @@ func (a *App) drawOnion(fb *FB, ox, oy, x0, x1, y0, y1 int) {
 				continue
 			}
 			pv := prev.get(x, y)
-			if a.onionBlank(pv) && (!a.zx() && !a.st() && !a.cpc() || cellBg(pv) == cellBg(v)) {
+			if a.onionBlank(pv) && (!a.zx() && !a.st() && !a.cpc() && !a.mz() || cellBg(pv) == cellBg(v)) {
 				continue
 			}
 			px, py := ox+x*colPx, oy+y*rowPx
@@ -286,8 +286,11 @@ func (a *App) drawOnion(fb *FB, ox, oy, x0, x1, y0, y1 int) {
 				paper = a.atariRGB(a.doc.bg)
 			case a.screen():
 				paper = a.screenRGB(a.doc.bg)
-			case a.zx() || a.st() || a.cpc():
+			case a.zx() || a.st() || a.cpc() || a.mz():
 				paper = a.pal[cellBg(v)&15]
+			case a.msx():
+				_, bg := a.msxSet.colours(cellCh(v))
+				paper = a.msxRGB(bg)
 			}
 			if a.tt() {
 				if row[x].code == 0x20 && row[x].bg == 0 {

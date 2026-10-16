@@ -1,0 +1,33 @@
+msx-cbios.font, msx-cbios-jp.font, msx-cbios-br.font: the character sets of C-BIOS 0.29a
+(cbios.sourceforge.net), a free MSX BIOS. msx-cbios.font is the international set
+(src/font_us.asm, "Font designed by Eric Boon"), msx-cbios-jp.font the Japanese one
+(src/font_jp.asm), msx-cbios-br.font the Brazilian one (src/font_br.asm); made by
+tools/msxmz-fonts.py. They are not the fonts of Microsoft's MSX BIOS (which may not be
+passed on): an MSX shows its own ROM's characters for a page in the C-BIOS font.
+
+Copyright (c) 2004 Eric Boon.  All rights reserved.
+Copyright (c) 2010 Manuel Bilderbeek.  All rights reserved.
+(C-BIOS as a whole: Copyright (c) 2002-2005 BouKiCHi, 2003 Reikan, 2004-2006,2008-2010
+Maarten ter Huurne, 2004-2006,2008-2011 Albert Beevendorp, 2004-2005 Patrick van Arkel,
+2004,2010-2011 Manuel Bilderbeek, 2004-2006 Joost Yervante Damad, 2004-2006 Jussi
+Pitkänen, 2004-2007 Eric Boon.)
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

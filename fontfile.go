@@ -149,8 +149,15 @@ func parseFontFile(name string, b []byte, mode string, cur *Font) (up, low *Font
 			"atari": "Atari font (1024 bytes)", "zx": "Spectrum character set (768 bytes) or UDGs (168 bytes)"}[mode])
 	}
 	switch mode {
-	case "st", "tt", "cpc", "mt", "vd":
+	case "st", "tt", "cpc", "mt", "vd", "mz":
 		return nil, nil, fmt.Errorf("an %s page keeps its own font", modeNames[mode])
+	case "msx": // 256 characters of 8 rows (a BIOS's or a VRAM's pattern table)
+		if len(b) != 2048 {
+			return nil, nil, fmt.Errorf("%s is %d bytes, not an MSX character set (2048 bytes)", filepath.Base(name), len(b))
+		}
+		f := newFont(ownID, base, "msx", b, 8, 256)
+		f.src, f.format = name, "msx"
+		return f, nil, nil
 	case "uni":
 		return nil, nil, fmt.Errorf("a Unicode page draws with Unifont (and VGA)")
 	case "pc", "amiga":

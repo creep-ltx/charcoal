@@ -74,6 +74,9 @@ func (a *App) charLabel(c int) string {
 	if a.uni() {
 		return fmt.Sprintf("U+%04X", uniRune(c))
 	}
+	if a.mz() {
+		return mzCharHint(c)
+	}
 	return fmt.Sprint(c)
 }
 
@@ -81,6 +84,12 @@ func (a *App) charLabel(c int) string {
 func (a *App) previewCell(c int) uint32 {
 	if a.uni() {
 		return uniCell(c, styleOf(7, 0, a.uniFlags()))
+	}
+	if a.mz() { // white on black, either set (mz.go)
+		return mzCell(c, 7, 0)
+	}
+	if a.msx() { // in the screen's colours (msx.go)
+		return makeCell(c, 0, 0, 0)
 	}
 	return makeCell(c, a.previewFg(), 0, a.styleFlags())
 }

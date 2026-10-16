@@ -52,6 +52,9 @@ func (a *App) borderSize(w, h, z int) (int, int, int) {
 	switch {
 	case a.cpc():
 		return w / 10, h * 82 / 400, h * 62 / 400
+	case a.msx(): // openMSX's 320 x 240 (640 x 480 at 80 columns), the screen in the middle
+		k := map[bool]int{true: 2, false: 1}[a.msxSet.mode == 2]
+		return (320*k*z - w) / 2, (240*k*z - h) / 2, (240*k*z - h) / 2
 	case a.ted(): // as VICE's xplus4 shows it: 384 x 288, the screen at 32,40 (ted.go)
 		return 32 * z, 40 * z, 48 * z
 	case a.screen() || a.zx():
@@ -106,7 +109,7 @@ func (a *App) animFrames(z int) (frames []animFrame, w, h int, pal color.Palette
 	for i := range docs {
 		fb := render(i)
 		pad := uint32(0xFF000000)
-		if a.screen() || a.zx() || a.cpc() {
+		if a.screen() || a.zx() || a.cpc() || a.msx() {
 			pad = a.borderPx(docs[i])
 		}
 		cur := make([]uint8, cw*ch)

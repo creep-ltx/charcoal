@@ -48,6 +48,8 @@ func startTiles() []startTile {
 		{"Amstrad CPC", "cpc", "", "", 1, 4},
 		{"Minitel", "mt", "", "", 7, 8},
 		{"Viewdata", "vd", "", "", 7, 8},
+		{"MSX", "msx", "", "", 15, 16},
+		{"Sharp MZ-700", "mz", "", "", 7, 8},
 		{"Unicode", "uni", "", "", 7, 16},
 	}
 }
@@ -126,9 +128,13 @@ func (a *App) pickTile(tl startTile) {
 		a.fg, a.bg = 1, 0
 	case tl.mode == "mt":
 		a.fg, a.bg = 7, 0
+	case tl.mode == "mz":
+		a.fg, a.bg = 7, 1
+	case tl.mode == "msx":
+		a.msxBrushColours()
 	case tl.machine == "plus4": // black on the power-on screen (ted.go)
 		a.fg, a.flash = 0x00, false
-	case old.mode == "st" || old.mode == "zx" || old.mode == "cpc":
+	case old.mode == "st" || old.mode == "zx" || old.mode == "cpc" || old.mode == "mz" || old.mode == "msx":
 		a.fg, a.bg = 7, 0
 	}
 	savePrefs()
@@ -451,6 +457,12 @@ func (a *App) paperIndex() int {
 		return a.doc.bg
 	case a.tt():
 		return 0
+	case a.msx(): // the screen's own (msx.go)
+		_, bg := a.msxSet.colours(32)
+		if bg == 0 {
+			return a.msxSet.backdrop()
+		}
+		return bg
 	}
 	return cellBg(a.doc.cells[0]) & 15
 }

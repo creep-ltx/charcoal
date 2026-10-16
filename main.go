@@ -81,6 +81,8 @@ func main() {
 	a.hasC64 = loadC64Fonts()
 	loadSTFonts()
 	loadAtariROMFonts()
+	loadMSXROMFont()
+	loadMZROMFonts()
 	loadPrefs()
 	loadKeys()
 	useTheme(prefs.Theme)
@@ -88,7 +90,7 @@ func main() {
 	mode := prefs.Mode // the last page type, if it can be had without a download
 	switch {
 	case mode == "c64" && a.hasC64, mode == "st" && hasSTFont():
-	case mode == "pc", mode == "atari", mode == "zx", mode == "tt", mode == "cpc", mode == "mt", mode == "vd":
+	case mode == "pc", mode == "atari", mode == "zx", mode == "tt", mode == "cpc", mode == "mt", mode == "vd", mode == "msx", mode == "mz":
 	case mode == "uni":
 	default:
 		mode = "amiga"

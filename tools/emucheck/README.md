@@ -9,6 +9,8 @@ of the same page (`emu_test.go`, off unless `CHARCOAL_EMU=1`):
 | Atari 8-bit | `.xex`, boot `.atr`; 38/40 columns, ROM/own font, short pages; 800XL and 800 | atari800 7.2.1's core | `a800shot` (this folder): libatari800 runs N frames and writes the screen's colour values and its palette. AltirraOS is built into atari800 (`-xl-rev altirra`, `-800-rev altirra`): no ROM files needed |
 | ZX Spectrum | `.tap` (loader + SCREEN$), ROM and own font | Fuse 1.9.1 (GTK) | GTK's Broadway backend (`broadwayd`, a display server with no screen, from gtk3) and Fuse's movie (`--movie-start x.fmf --movie-compr None`); the test reads the FMF itself |
 | Amstrad CPC | `.dsk` with the `.bin`, modes 0/1/2 | MAME 0.289 `cpc6128` | `-video none -seconds_to_run N -autoboot_command 'run"art\n'`; the snapshot MAME takes when it stops |
+| MSX | `.rom` (SCREEN 0, SCREEN 1, own fonts; WIDTH 80 on an MSX2) | MAME 0.289 `hb10p`, `phc23` with C-BIOS as their BIOS | `-cart1 art.rom -video none -seconds_to_run 6`; the snapshot (`msx_test.go` TestEmuMSX) |
+| Sharp MZ-700 | `.mzf` | MAME 0.289 `mz700` with a stand-in monitor and character ROM the test writes | the monitor copies the `.mzf` to its load address and jumps (Sharp's ROMs may not be passed on); `mz_test.go` TestEmuMZ |
 
 What must match: every pixel of the screen and of a 4-pixel ring of border around it shows the same colour, as a
 one-to-one pairing of CharEdit's colours with the emulator's (the emulators' palettes differ from CharEdit's, so
@@ -22,6 +24,8 @@ RGB is not compared; each test logs its pairs). The screen is found anywhere in 
 - `./get-cpc-roms.sh` puts the CPC 6128 ROMs (Caprice32's copies; Amstrad allows passing them on) in
   `~/.cache/charcoal-emu/roms/cpc6128/` under MAME's names.
 - The C64 ROMs come from VICE's installation (as for CharEdit itself).
+- `./get-msx-roms.sh` puts C-BIOS 0.29a (free, BSD) in `~/.cache/charcoal-emu/roms/hb10p/` and `phc23/` under the
+  names of those machines' BIOS ROMs (MAME warns "WRONG CHECKSUMS" and runs them). The MZ-700 needs nothing.
 
 ## Run
 
