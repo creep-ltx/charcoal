@@ -695,6 +695,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## Plus/4 and C16 pages (2026-10-16, branch r3-ted)
 
+- **The user's decisions (2026-10-16):** a new Plus/4 page starts in the power-on colours (black on white,
+  border $6E); a .seq opened on a Plus/4 page starts in white; Petmate9's 0x16 full-colour code is read, never
+  written; a .scrn save writes NAME.proj beside it; YAPE/Colodore colour values from VICE's .vpl files are fine;
+  flash stays in the BASIC and ACME exports.
+
 - **Model**: machine "plus4" in `machines` (mode "c64", `a.ted()`), so every PETSCII path (typing, F-keys,
   shapes, frames, Animate, Play, Split) works. A cell's bits 8-15 are the **TED attribute byte**: cellFg = hue,
   cellBg = luminance | flash<<3 (`tedAttr`, `tedCell`); `Doc.bg`/`Doc.border` are whole TED colours (0-127), so
