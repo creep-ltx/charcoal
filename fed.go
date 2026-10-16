@@ -274,6 +274,7 @@ func (a *App) fedOpenHere(ff *fedFont, path, name string) {
 	a.start = false
 	t := a.Tab
 	a.mode, a.ice = "pc", false // a colour font's bit 7 blinks, as in TheDraw
+	a.zoom = max(a.zoom, 4)     // a letter is small
 	a.applyMode()
 	fedTabs[t] = ff
 	s := &ff.slots[ff.cur]
@@ -530,9 +531,9 @@ func (a *App) drawFedStrip(u *UI, r Rect) {
 	for i := 0; i < tdfChars; i++ {
 		br := Rect{x0 + (i%per)*boxW, r.y + 3 + (i/per)*(h+3), boxW - 1, h}
 		s := ff.slots[i]
-		bg, col := uint32(cGrey), uint32(cDim)
+		bg, col := uint32(cDark), uint32(cDim) // not in the font: no box
 		if s.defined || i == ff.cur && !docBlank(a.doc) {
-			col = cText
+			bg, col = cGrey, cText
 		}
 		if i == ff.cur {
 			bg, col = cBlue, cHi
@@ -698,6 +699,8 @@ func (d *FedNewReq) key(k string, ctrl, shift bool) bool {
 func openFedEdit() {
 	openTDFPicker(nil)
 	if d, ok := a.dialog.(*TDFReq); ok {
-		d.editing = true
+		d.editing, d.all = true, true // any font can be edited, whatever page is open
+		d.listFor = "\x00"
+		d.filter()
 	}
 }

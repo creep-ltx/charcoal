@@ -742,3 +742,44 @@ func TestFedStripAndPicker(t *testing.T) {
 	_ = boxW
 	a.drawFedStrip(ui, Rect{0, 600, 300, fedStripH()}) // narrow
 }
+
+// TheDraw's SHADING.TD opened in CharEdit, saved with Ctrl+S as a .td again: the
+// same three page layers, read back as frames.
+func TestFedTDOpenSave(t *testing.T) {
+	dir := os.Getenv("CHARCOAL_THEDRAW")
+	if dir == "" {
+		h, _ := os.UserHomeDir()
+		dir = filepath.Join(h, ".cache/charcoal-others/thedraw/td463")
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "SHADING.TD"))
+	if err != nil {
+		t.Skip("no TheDraw files in", dir)
+	}
+	testApp(t, "pc")
+	path := filepath.Join(t.TempDir(), "SHADING.TD")
+	os.WriteFile(path, b, 0o644)
+	a.openPath(path, "auto")
+	if a.nFrames() != 3 || a.saveFmt != "td" || a.path != path {
+		t.Fatalf("%d frames, %s, %q", a.nFrames(), a.saveFmt, a.path)
+	}
+	want, _ := parseTD(b)
+	a.goFrame(1)
+	a.pushUndo()
+	a.doc.set(0, 0, attrCell('X', 0x1F))
+	want[1].set(0, 0, attrCell('X', 0x1F))
+	a.save(false)
+	if a.dirty || !strings.Contains(a.message, "80x25 TheDraw page") {
+		t.Fatalf("save: %s", a.message)
+	}
+	out, _ := os.ReadFile(path)
+	got, err := parseTD(out)
+	if err != nil || len(got) != 3 {
+		t.Fatal(err)
+	}
+	for i := range want {
+		fedFSame(t, "SHADING.TD", got[i], want[i])
+	}
+	if out[31] != 2 { // the page layer shown: the one being worked on
+		t.Errorf("page %d", out[31])
+	}
+}

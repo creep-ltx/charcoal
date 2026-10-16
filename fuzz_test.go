@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"slices"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -219,6 +220,35 @@ func FuzzParsers(f *testing.F) {
 			return nil
 		})
 		check("td", func() []*Doc { pages, _ := parseTD(b); return pages })
+		if pages, err := parseTD(b); err == nil && len(pages) <= tdMaxPages && pages[0].cols <= 160 { // written back (fed.go's round)
+			if out, err := writeTD(pages, 0); err == nil {
+				back, err := parseTD(out)
+				w, h := tdSize(pages)
+				if err != nil || len(back) != len(pages) || back[0].cols != w || back[0].rows != h {
+					t.Fatalf("td written back: %v, %d pages of %d", err, len(back), len(pages))
+				}
+				for i := range pages {
+					if pages[i].cols == w && !slices.Equal(back[i].cells, pages[i].cells[:w*h]) {
+						t.Fatalf("td page %d written back differently", i+1)
+					}
+				}
+			}
+		}
+		// The font editor (fed.go): each letter of the first font written anew draws the same.
+		if fonts, _ := parseTDF(b, ""); len(fonts) > 0 {
+			f := fonts[0]
+			ff := newFedFont(f, "", 0, 0)
+			if nf := ff.tdf(nil); nf != nil {
+				for i := range ff.slots {
+					if c := rune(tdfFirst + i); ff.slots[i].defined {
+						p, q := f.render(c, 0), nf.render(c, 0)
+						if p == nil || q == nil || p.w != q.w || p.h != q.h || !slices.Equal(p.cells, q.cells) {
+							t.Fatalf("tdf %q drawn differently after the font editor wrote it", c)
+						}
+					}
+				}
+			}
+		}
 		check("skypix", func() []*Doc { isSkyPix(b); return one(readSkyPix(b).cells) }) // skypix.go
 		// TheDraw fonts (tdf.go): every glyph of the first fonts, a line in each.
 		check("tdf", func() []*Doc {
