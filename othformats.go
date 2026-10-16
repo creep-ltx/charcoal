@@ -609,6 +609,7 @@ func (a *App) othReparse() bool {
 		if d, err := parseBSV(a.source); err == nil {
 			a.doc = d
 		}
+	case "tdf": // a font tab (fed.go): the letter on the page stays
 	case "td":
 		pages, err := parseTD(a.source)
 		if err != nil {
@@ -661,6 +662,13 @@ func (a *App) othEncode(fmtID string, d *Doc) (out []byte, ok bool) {
 		saveNote = fmt.Sprintf(" as a %dx%d TheDraw page", w, h)
 		if len(why) > 0 {
 			saveNote += ", " + strings.Join(why, " and ")
+		}
+		return out, true
+	case "tdf": // the font editor (fed.go)
+		out, err := a.fedEncode()
+		if err != nil {
+			a.msg("Could not save: " + err.Error())
+			return nil, true
 		}
 		return out, true
 	case "bsv":

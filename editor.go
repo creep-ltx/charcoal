@@ -2296,7 +2296,11 @@ func (a *App) setRows(n int) {
 
 func (a *App) setCols(n int) {
 	a.endPlay()
-	n = max(8, min(1000, n))
+	if a.fed() != nil { // a TheDraw font's letter: 1 to 255 columns (fed.go)
+		n = max(1, min(tdfMaxCols, n))
+	} else {
+		n = max(8, min(1000, n))
+	}
 	if n == a.doc.cols || a.c64() || a.st() || a.zx() || a.tt() || a.cpc() || a.mt() || a.msx() || a.mz() || (a.atari() && n != 38 && n != 40) {
 		return // a machine's screen has the width it has
 	}
@@ -2845,6 +2849,9 @@ var formats = []Format{
 
 // modeFormats are the formats the current page can be saved in.
 func (a *App) modeFormats() []Format {
+	if a.fed() != nil { // a TheDraw font's tab saves the font (fed.go)
+		return a.fedFormats()
+	}
 	var out []Format
 	for _, f := range formats {
 		if f.modes == "c64 (C64)" && (!a.c64() || a.machine != "c64") {

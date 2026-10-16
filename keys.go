@@ -251,6 +251,8 @@ func init() {
 		{"tool_logo", "Alt+G", "Logo tool: type in a TheDraw font (PC, Amiga and Unicode pages)", func() { a.toolKey("logo") }},
 		{"logo_font", "Alt+Shift+G", "TheDraw fonts: the list, with a preview of each (add folders, download a collection)", func() { openTDFPicker(nil) }},
 		{"logo_line", "Ctrl+Shift+G", "Type a line in the TheDraw font and stamp it", openTDFLine},
+		{"font_tdf_new", "", "New TheDraw font: its letters drawn as small pages, saved as a .tdf", openFedNew},
+		{"font_tdf_edit", "", "Edit a TheDraw font: pick it in the list of fonts, then Edit", openFedEdit},
 
 		// Shapes and brushes (shapes.go).
 		{"shape_line", "Alt+Shift+L", "Shape tool: line (drag; the shape tool's choices are under the brush)", func() { a.shapeKey(shapeLine) }},

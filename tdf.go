@@ -7,7 +7,8 @@ package main
 //
 //	file:  19, "TheDraw FONTS file", 0x1A, then fonts until a 0 byte (or the end)
 //	font:  55 AA 00 FF, name length, name (12 bytes, 0-padded), 4 bytes (0),
-//	       type (0 outline, 1 block, 2 colour), spacing (0-40), u16 size of the
+//	       type (0 outline, 1 block, 2 colour), spacing (1-41: the columns
+//	       between letters + 1, tdfFont.gap), u16 size of the
 //	       glyph block, 94 u16 offsets into it for '!'..'~' (FFFF: none), the block
 //	glyph: width, height (the lines not marked as descenders), then the cells to
 //	       a 0 byte: 13 ends a line, '&' at the end of a line marks it as a
@@ -84,7 +85,7 @@ var tdfOutlines = [19][16]byte{
 type tdfFont struct {
 	name    string
 	kind    int // tdfOutline, tdfBlock, tdfColour
-	spacing int // columns TheDraw puts between letters
+	spacing int // the file's spacing byte: TheDraw puts one column less between letters (gap)
 	file    string
 	index   int    // the font's place in its file
 	sum     string // what the font holds (SHA-1): the same font in two files is listed once
@@ -297,6 +298,12 @@ func (f *tdfFont) lineHeight() int {
 	return f.lineH
 }
 
+// gap is the columns TheDraw puts between letters: the file's spacing byte less
+// one (TheDraw's TDFONTS shows the Outline font's 2 as "Font spacing is 1
+// character", and TheDraw types its letters one column apart; *verified* in
+// TheDraw 4.63 under QEMU). The manual's "legal values are 0 to 40" are gaps.
+func (f *tdfFont) gap() int { return max(0, f.spacing-1) }
+
 // spaceWidth is how far a space moves on: half the letters' usual width.
 func (f *tdfFont) spaceWidth() int {
 	total, n := 0, 0
@@ -307,7 +314,7 @@ func (f *tdfFont) spaceWidth() int {
 		}
 	}
 	if n == 0 {
-		return max(1, f.spacing)
+		return max(1, f.gap())
 	}
 	return max(1, (total/n+1)/2)
 }
@@ -399,7 +406,7 @@ type tdfLine struct {
 // the font's own); a space moves on by spaceWidth.
 func (f *tdfFont) layout(text string, style, spacing int) tdfLine {
 	if spacing < 0 {
-		spacing = f.spacing
+		spacing = f.gap()
 	}
 	var pics []*tdfPic
 	var xs []int
@@ -436,6 +443,171 @@ func (f *tdfFont) layout(text string, style, spacing int) tdfLine {
 				}
 			}
 		}
+	}
+	return out
+}
+
+// ---------------------------------------------------------------- writing fonts (the font editor, fed.go)
+
+// rawGlyph is glyph i as the file holds it: width, height, the cells and the 0
+// that ends them (nil when the font has none or it is cut short).
+func (f *tdfFont) rawGlyph(i int) []byte {
+	p := int(f.tab[i])
+	if p+2 > len(f.blk) {
+		return nil
+	}
+	for q := p + 2; q < len(f.blk); q++ {
+		c := f.blk[q]
+		if c == 0 {
+			return f.blk[p : q+1 : q+1]
+		}
+		if f.kind == tdfColour && c != 13 && !(c == '&' && (q+1 >= len(f.blk) || f.blk[q+1] == 0 || f.blk[q+1] == 13)) {
+			q++ // the attribute (which may be 0)
+		}
+	}
+	return nil
+}
+
+// tdfLoss counts what a glyph's page holds that a TheDraw font cannot.
+type tdfLoss struct {
+	cr   int // character 13 (the font's line end): written as a space
+	amp  int // an '&' TheDraw would read as a line's end (in light magenta on black in a colour font, at a block letter's right edge): a space
+	nul  int // character 0 (the glyph's end): written as TheDraw's solid space, 0xFF, which looks the same
+	flag int // italic or underline: not kept
+}
+
+func (l tdfLoss) any() bool { return l.cr+l.amp > 0 }
+
+func (l *tdfLoss) add(m tdfLoss) {
+	l.cr, l.amp, l.nul, l.flag = l.cr+m.cr, l.amp+m.amp, l.nul+m.nul, l.flag+m.flag
+}
+
+// encodeTDFGlyph writes a glyph from its page: the page's width, the lines that
+// are not descenders as its height, then each row's cells (a block or outline
+// font's characters; a colour font's character and DOS attribute), 13 between
+// rows, '&' at the end of each descender row, a 0 at the end. A row's blank end
+// is left out (a space in a block font, a space on black in a colour font: both
+// leave the page as it is, as no cell does); a last row with nothing left keeps
+// one space, as the reader drops a last empty line.
+func encodeTDFGlyph(kind int, d *Doc, desc []bool) ([]byte, tdfLoss, error) {
+	var loss tdfLoss
+	if d.cols > tdfMaxCols || d.rows > 255 {
+		return nil, loss, fmt.Errorf("a letter of %dx%d: TheDraw's are at most 255x255", d.cols, d.rows)
+	}
+	isDesc := func(y int) bool { return y < len(desc) && desc[y] }
+	h := 0
+	for y := 0; y < d.rows; y++ {
+		if !isDesc(y) {
+			h++
+		}
+	}
+	out := []byte{byte(d.cols), byte(h)}
+	transparent := func(v uint32) bool {
+		return cellCh(v) == ' ' && (kind != tdfColour || cellAttr(v)&0xF0 == 0)
+	}
+	for y := 0; y < d.rows; y++ {
+		if y > 0 {
+			out = append(out, 13)
+		}
+		end := d.cols
+		for end > 0 && transparent(d.get(end-1, y)) {
+			end--
+		}
+		if end == 0 && y == d.rows-1 && !isDesc(y) {
+			end = 1 // the last line kept
+		}
+		for x := 0; x < end; x++ {
+			v := d.get(x, y)
+			c, at := byte(cellCh(v)), cellAttr(v)
+			if v&(italic|underline) != 0 {
+				loss.flag++
+			}
+			switch {
+			case c == 0:
+				c = 0xFF
+				loss.nul++
+			case c == 13:
+				c = ' '
+				if kind == tdfColour {
+					c = 0xFF // keeps its colours
+				}
+				loss.cr++
+			case c == '&' && kind == tdfColour && (at == 0 || at == 13):
+				if at == 0 {
+					c = 0xFF // black on black: a solid space looks the same
+				} else {
+					c = 0xFF
+					loss.amp++
+				}
+			}
+			out = append(out, c)
+			if kind == tdfColour {
+				out = append(out, at)
+			}
+		}
+		if kind != tdfColour && end > 0 && cellCh(d.get(end-1, y)) == '&' && !isDesc(y) {
+			// An '&' at a line's end would mark a descender: a space after it
+			// (one that leaves the page as it is), or none at the right edge.
+			if end < d.cols {
+				out = append(out, ' ')
+			} else {
+				out[len(out)-1] = ' '
+				loss.amp++
+			}
+		}
+		if isDesc(y) {
+			out = append(out, '&')
+		}
+	}
+	return append(out, 0), loss, nil
+}
+
+// encodeTDFFont writes one font: name (12 bytes, CP437), kind, spacing (the byte: gap + 1) and the
+// glyphs ('!' to '~'; nil: not in the font), as TheDraw's TDFONTS writes them.
+func encodeTDFFont(name string, kind, spacing int, glyphs *[tdfChars][]byte) ([]byte, error) {
+	var nb []byte
+	for _, r := range name {
+		if r >= 32 && r < 127 {
+			nb = append(nb, byte(r))
+		} else if c, ok := cp437Rev[r]; ok && c >= 32 {
+			nb = append(nb, c)
+		} else {
+			nb = append(nb, '?')
+		}
+	}
+	nb = nb[:min(len(nb), 12)]
+	out := []byte{0x55, 0xAA, 0x00, 0xFF, byte(len(nb))}
+	out = append(out, nb...)
+	out = append(out, make([]byte, 12-len(nb)+4)...)
+	out = append(out, byte(kind), byte(max(0, min(spacing, 41)))) // the gap + 1
+	var blk, tab []byte
+	for _, g := range glyphs {
+		if g == nil {
+			tab = binary.LittleEndian.AppendUint16(tab, 0xFFFF)
+			continue
+		}
+		if len(blk) >= 0xFFFF {
+			return nil, errors.New("the font is too big for a TheDraw file (64 KB of letters at most)")
+		}
+		tab = binary.LittleEndian.AppendUint16(tab, uint16(len(blk)))
+		blk = append(blk, g...)
+	}
+	if len(blk) > 0xFFFF {
+		return nil, errors.New("the font is too big for a TheDraw file (64 KB of letters at most)")
+	}
+	out = binary.LittleEndian.AppendUint16(out, uint16(len(blk)))
+	out = append(out, tab...)
+	return append(out, blk...), nil
+}
+
+// tdfFileBytes is a .tdf file of fonts (each from encodeTDFFont): the header and
+// the fonts, nothing after them. TheDraw's TDFONTS writes no 0 at the end and
+// refuses a file with one ("Header read fault": it reads another font's header;
+// *verified* with TDFONTS 4.63 under QEMU), though IcyDraw writes one.
+func tdfFileBytes(fonts ...[]byte) []byte {
+	out := []byte("\x13TheDraw FONTS file\x1a")
+	for _, f := range fonts {
+		out = append(out, f...)
 	}
 	return out
 }
