@@ -282,7 +282,7 @@ func (a *App) drawRef(fb *FB, ox, oy, x0, x1, y0, y1 int) {
 	colPx, rowPx := a.cellW()*a.zoom, a.cellH()*a.zoom
 	for y := y0; y < y1; y++ {
 		for x := x0; x < x1; x++ {
-			if !r.over && !a.onionBlank(a.doc.get(x, y)) {
+			if !r.over && !a.onionBlank(a.shownCell(x, y)) {
 				continue
 			}
 			c := Rect{ox + x*colPx, oy + y*rowPx, colPx, rowPx}.and(cl)

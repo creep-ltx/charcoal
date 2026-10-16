@@ -54,6 +54,8 @@ type autosaveMeta struct {
 	SrcKind      string          `json:"source_kind,omitempty"` // the kind of the page's file ("tti", "marq", "petmate" ...), read again from Path
 	Cur          int             `json:"frame,omitempty"`       // the frame being worked on
 	Frames       []autosaveFrame `json:"frames,omitempty"`      // a page of several frames: their cells follow one another in .cells
+	Lay          int             `json:"layer,omitempty"`       // the layer being worked on
+	Layers       []autosaveLayer `json:"layers,omitempty"`      // a page of several layers, bottom first: their cells follow one another in .cells (layers_keep.go)
 	Restructured bool            `json:"restructured,omitempty"`
 	Ref          *RefPref        `json:"reference,omitempty"`  // the page's reference picture
 	OwnFont      *ArtFont        `json:"own_font,omitempty"`   // the page's own font, in id.font (fontfile.go)
@@ -103,6 +105,16 @@ func writeAutosave(t *Tab) error {
 		docs[t.cur] = t.playing.saved.doc
 	}
 	d := docs[0]
+	if t.layers != nil { // every layer (layers_keep.go); the page's fields are the current one's
+		docs = make([]*Doc, len(t.layers))
+		for i := range docs {
+			docs[i] = t.layerDoc(i)
+		}
+		if t.playing != nil {
+			docs[t.lay] = t.playing.saved.doc
+		}
+		d = docs[t.lay]
+	}
 	var cells []byte
 	for _, fd := range docs {
 		for _, v := range fd.cells[:fd.cols*fd.rows] {
@@ -141,6 +153,12 @@ func writeAutosave(t *Tab) error {
 		}
 		if t.mode == "c64" {
 			m.Frames[t.cur].Lower = map[bool]int{true: 1}[strings.HasSuffix(t.fontFor["c64"], "lower")]
+		}
+	}
+	if t.layers != nil {
+		m.Lay = t.lay
+		for i, l := range t.layers {
+			m.Layers = append(m.Layers, autosaveLayer{Cols: docs[i].cols, Rows: docs[i].rows, Name: l.name, Hidden: l.hidden, Clear: l.clear, Keep: l.keep})
 		}
 	}
 	base := filepath.Join(dir, t.autoID)
@@ -254,6 +272,15 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	if len(frames) == 0 { // one picture (as autosaves before frames)
 		frames = []autosaveFrame{{Cols: m.Cols, Rows: m.Rows, Bg: m.Bg, Border: m.Border, Ink: m.Ink, Glyph0: m.Glyph0, Lower: -1, Src: -1}}
 	}
+	if len(m.Layers) > 0 { // layers (layers_keep.go): the page's fields are the top level's
+		if len(m.Frames) > 0 || len(m.Layers) < 2 || len(m.Layers) > maxLayers || m.Lay < 0 || m.Lay >= len(m.Layers) {
+			return fmt.Errorf("%s: the autosave is damaged", m.Name)
+		}
+		frames = nil
+		for _, l := range m.Layers {
+			frames = append(frames, autosaveFrame{Cols: l.Cols, Rows: l.Rows, Bg: m.Bg, Border: m.Border, Ink: m.Ink, Glyph0: m.Glyph0, Lower: -1, Src: -1})
+		}
+	}
 	total := 0
 	for _, f := range frames {
 		if f.Cols < 1 || f.Rows < 1 || f.Cols > 1000 || f.Rows > maxRowsFor(f.Cols) {
@@ -296,6 +323,15 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 		uniRemapPairs(docs, m.UniPairs) // this run's table numbers them differently
 	}
 	a.mode, a.doc = mode, docs[m.Cur]
+	if len(m.Layers) > 0 {
+		a.doc = docs[m.Lay]
+		for i := range docs {
+			if docs[i].cols != a.doc.cols {
+				docs[i] = docs[i].withCols(a.doc.cols)
+			}
+			layerFields(docs[i], a.doc)
+		}
+	}
 	if m.Machine != "" {
 		a.machine = machineByID(m.Machine).id
 	}
@@ -347,6 +383,20 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 		}
 	}
 	switch {
+	case len(m.Layers) > 0 && layerMode(mode):
+		a.layers, a.lay = make([]Layer, len(docs)), m.Lay
+		for i, l := range m.Layers {
+			a.layers[i] = Layer{doc: docs[i], name: l.Name, hidden: l.Hidden, clear: min(max(l.Clear, 0), layerBlack), keep: l.Keep}
+		}
+		a.doc = docs[m.Lay].clone()
+	case len(m.Layers) > 0: // a page type without layers (an unknown mode read as PC is one): what was seen
+		a.doc = flatten(func() []Layer {
+			ls := make([]Layer, len(docs))
+			for i, l := range m.Layers {
+				ls[i] = Layer{doc: docs[i], hidden: l.Hidden, clear: min(max(l.Clear, 0), layerBlack)}
+			}
+			return ls
+		}(), m.Lay, docs[m.Lay])
 	case len(m.Frames) > 0:
 		a.frames, a.cur, a.restructured = make([]Frame, len(frames)), m.Cur, m.Restructured
 		for i, f := range frames {

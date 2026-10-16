@@ -36,6 +36,12 @@ func FuzzParsers(f *testing.F) {
 		pal := paletteByID("vga").colors
 		f.Add(writeIcy(d, pal, fontByID("vga"), true, nil))
 		f.Add(writeXP(d, pal, true))
+		lf := layFPage() // pages of two layers (layers_test.go)
+		for _, id := range []string{"icy", "xp", "psci"} {
+			if out, err := lf.encode(id); err == nil {
+				f.Add(out)
+			}
+		}
 		out, _ := writePsci([]*Doc{d}, nil, psciPage{mode: "c64", machine: "c64"})
 		f.Add(out)
 		f.Add(writeMarqPet(d, false))
@@ -237,6 +243,30 @@ func FuzzParsers(f *testing.F) {
 			return nil
 		})
 		check("xp", func() []*Doc { return own(parseXP(b)) })
+		check("layers", func() []*Doc { // the layers of IcyDraw, REXPaint and Playscii files (layers_formats.go)
+			var out []*Doc
+			keep := func(ls []Layer, flat *Doc) {
+				if ls == nil {
+					return
+				}
+				p := flatten(ls, len(ls)-1, ls[len(ls)-1].doc)
+				if !sameLook(p, flat) {
+					t.Fatal("kept layers that do not look as the page")
+				}
+				out = append(out, p)
+			}
+			if doc, err := parseIcyDraw(b); err == nil {
+				flat, _, _ := icyPage(doc)
+				keep(icyFileLayers(doc, flat), flat)
+			}
+			if flat, _, err := parseXP(b); err == nil {
+				keep(xpFileLayers(b, flat), flat)
+			}
+			if art, err := parsePsci(b); err == nil && len(art.docs) == 1 {
+				keep(psciFileLayers(b, art.docs[0]), art.docs[0])
+			}
+			return out
+		})
 		check("psci", func() []*Doc {
 			art, err := parsePsci(b)
 			if err != nil {

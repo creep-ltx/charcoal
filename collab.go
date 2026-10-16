@@ -655,6 +655,8 @@ func (a *App) collabHost(port int, all bool, nick, pass string) error {
 		return errors.New("only a PC page can be shared: Moebius and IcyDraw draw PC pages")
 	case a.frames != nil:
 		return errors.New("a page with frames cannot be shared: Moebius pages are one picture")
+	case a.layers != nil:
+		return errors.New("a page of layers cannot be shared: Moebius pages are one picture (merge the layers first)")
 	case !collabSizeOK(a.doc.cols, a.doc.rows):
 		return fmt.Errorf("the page is too large to share (%dx%d)", a.doc.cols, a.doc.rows)
 	case port < 1 || port > 65535:
@@ -764,6 +766,10 @@ func (a *App) collabTick() bool {
 	}
 	if s.tab.frames != nil {
 		a.collabEnd("Frames cannot be shared (Moebius pages are one picture): the drawing session ended")
+		return true
+	}
+	if s.tab.layers != nil {
+		a.collabEnd("Layers cannot be shared (Moebius pages are one picture): the drawing session ended")
 		return true
 	}
 	if s.tab.mode != "pc" {

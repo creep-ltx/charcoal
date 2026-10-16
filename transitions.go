@@ -1182,7 +1182,7 @@ func (a *App) orderedPlayBytes() []byte {
 	if a.order == nil || a.order.pat() < 0 || a.nFrames() > 1 || f == "" {
 		return nil
 	}
-	d := a.doc
+	d := a.seen()
 	if limit := map[string]int{"seq": a.mach().cols, "ata": 40}[f]; limit > 0 && d.cols > limit {
 		d = d.withCols(limit)
 	}
@@ -1443,6 +1443,10 @@ func (a *App) applyFrames(s animSpec) {
 			a.msg(why)
 			return
 		}
+	}
+	if a.layers != nil {
+		a.msg(layersNoFrames)
+		return
 	}
 	a.keepCase()
 	other := a.frameCells() - a.doc.cols*a.doc.rows

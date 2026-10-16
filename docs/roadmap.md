@@ -99,7 +99,11 @@ against each platform's best editor. Each step says what it wins.
 - [x] TheDraw fonts (logo typing) (done 2026-10-16, tdf.go tdf_ui.go): the Logo tool, the font list with previews,
   a line to stamp, Roy/SAC's collection downloaded on request; PC, Amiga (Latin-1 fonts only) and Unicode pages.
 - Select by character or colour, fill limited to a colour.
-- Layers (later: they touch everything, so after frames).
+- [x] Layers (done 2026-10-16, layers*.go, docs/layers-design.md): PC, Amiga, Unicode, PETSCII, Atari and ST pages;
+  empty cells show the layers below, "black shows below" per layer; new/copy/delete/move/merge/show/hide, the
+  others dim or hidden; the Layers panel, Page > Layers, keys; undo; autosave; IcyDraw/REXPaint/Playscii files keep
+  them, other formats save what is seen and keep the layers beside the file. Later: layers with frames (a still
+  background under moving letters), lock, groups, layers on Spectrum/CPC/MSX/MZ pages.
 
 ## Step 5: platform by platform
 

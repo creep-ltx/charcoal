@@ -113,6 +113,12 @@ func (a *App) drawPanel(u *UI, r Rect) {
 	y += cm.h
 	rule()
 
+	if a.layered() { // layers_ui.go
+		heading("Layers")
+		y = a.drawLayers(u, x, y, w)
+		rule()
+	}
+
 	what := "The tool"
 	for _, t := range tools {
 		if t.id == a.tool {

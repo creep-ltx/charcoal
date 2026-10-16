@@ -216,7 +216,7 @@ func (d *AnimReq) speedPreview() *speedPreview {
 	if d.sp != nil && d.sp.key == key {
 		return d.sp
 	}
-	src := a.doc
+	src := a.seen() // the layers put together (layers.go)
 	rows := min(src.rows, 50)
 	c := newDoc(src.cols, rows)
 	c.bg, c.border, c.ink, c.glyph0 = src.bg, src.border, src.ink, src.glyph0

@@ -137,6 +137,10 @@ func (a *App) streamSplit() splitInfo {
 // home), as one undo step.
 func (a *App) splitFrames(atHome bool) {
 	a.endPlay()
+	if a.layers != nil {
+		a.msg(layersNoFrames)
+		return
+	}
 	docs, holds, _ := splitStream(a.source, a.tedMode(), a.doc.cols, a.amiga(), a.res(), atHome, lineBps(a.baud), a.codes)
 	if len(docs) < 2 {
 		a.msg("The file shows only one picture")

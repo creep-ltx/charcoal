@@ -220,7 +220,7 @@ func (a *App) compoCheck(r *compoRule) []string {
 	}
 	var out []string
 	add := func(f string, v ...any) { out = append(out, fmt.Sprintf(f, v...)) }
-	d := a.doc
+	d := a.seen() // the layers put together (layers.go)
 	if a.playing != nil {
 		d = a.playing.saved.doc
 	}
@@ -540,7 +540,7 @@ func (a *App) saveForParty(r *compoRule) {
 	for _, f := range p.deliver {
 		path := filepath.Join(dir, name+formatExt(f))
 		cpcTarget = filepath.Join(dir, name+".bin")
-		out, err := a.encodeStage(a.doc, f)
+		out, err := a.encodeStage(a.seen(), f)
 		cpcTarget = ""
 		if err == nil {
 			err = writeAtomic(path, out)

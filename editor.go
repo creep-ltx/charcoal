@@ -130,6 +130,9 @@ type Snap struct {
 	vic    *vicSetup // a C64 page's text mode and $D022-$D024 as they were (nil on other pages)
 	step   int       // the page's depth in this state (work stages: stages.go)
 	msx    *msxSetup // an MSX page's screen mode and colours as they were (nil on other pages)
+	lay    int       // the layer it belongs to (layers.go)
+	lwhole bool      // a step of the layer list (new, delete, merge, show ...): layers is the list
+	layers []Layer   // with lwhole: the list as it was (nil: a page of one layer)
 }
 type Play struct {
 	bytes []byte
@@ -208,6 +211,11 @@ type Tab struct {
 	sky                 *skyLayer   // a SkyPix file's picture under the cells (skypix.go)
 	steps               int         // the page's depth: the steps that led to it (work stages: stages.go)
 	stages              *stageLog   // the work's history, thinned, for the work stages (stages.go)
+	layers              []Layer     // the page's layers, bottom first, when it has several (nil: one, the doc); see layers.go
+	lay                 int         // the layer being worked on: doc is it
+	others              int         // how the other layers are shown: 0 as they are, 1 dim, 2 hidden (view only)
+	seeing              bool        // doc is the layers put together for a while (asSeen); the live layer is in layers[lay]
+	layering            bool        // an edit runs on every layer (everyLayerDo): its own undo steps are not kept
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -655,14 +663,19 @@ func nextGen() int { genSeq++; return genSeq }
 
 func (a *App) snapshot() Snap {
 	d := a.doc.clone()
-	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine, step: a.steps, msx: a.msxSnap()}
+	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine, step: a.steps, msx: a.msxSnap(), lay: a.lay}
 }
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
 // keeps fewer steps instead of eating the memory.
 const undoBudget = 16 << 20
 
-func (a *App) pushUndo() { a.pushSnap(a.snapshot()) }
+func (a *App) pushUndo() {
+	if a.layering { // one step for every layer is kept already (layers.go)
+		return
+	}
+	a.pushSnap(a.snapshot())
+}
 
 // pushSnap puts an undo step on the stack, letting go of the oldest ones past
 // 300 steps or undoBudget cells.
@@ -703,6 +716,14 @@ func (a *App) restore(s Snap) {
 	case s.whole:
 		a.frames, a.cur = slices.Clone(s.frames), s.cur
 		a.sel, a.float = nil, nil
+	case s.lwhole: // the layer list as it was (layers.go)
+		a.layers, a.lay = slices.Clone(s.layers), s.lay
+		a.float = nil
+	case a.layers != nil && s.lay != a.lay && s.lay < len(a.layers):
+		// An edit of another layer: undoing it goes there, to show what was undone.
+		a.leaveLayer()
+		a.lay = s.lay
+		a.float = nil
 	case a.frames != nil && s.cur != a.cur && s.cur < len(a.frames):
 		// An edit of another frame: undoing it goes there, to show what was undone.
 		a.keepCase()
@@ -767,6 +788,8 @@ func (a *App) maxRows() int {
 		return 24
 	case a.tt(), a.cpc(), a.mt(), a.mz():
 		return 25
+	case a.layers != nil: // all layers together under the largest page (layers.go)
+		return min(maxRowsFor(a.doc.cols), a.layersMaxRows())
 	}
 	return maxRowsFor(a.doc.cols)
 }
@@ -1013,7 +1036,7 @@ func (a *App) floodFill(x, y int) {
 }
 
 func (a *App) pick(x, y int) {
-	v := a.doc.get(x, y)
+	v := a.shownCell(x, y) // what is seen, on a page of layers too (layers.go)
 	if a.uni() {
 		a.uniPick(v)
 		return
@@ -1441,6 +1464,7 @@ func (a *App) textBlock(text string) *Block {
 
 func (a *App) reparse() {
 	a.frames, a.cur, a.restructured = nil, 0, false
+	a.layers, a.lay = nil, 0
 	if a.reparseUni() {
 		return
 	}
@@ -1992,6 +2016,10 @@ func (a *App) setMode(m string) {
 		return
 	}
 	a.endPlay()
+	if a.layers != nil && !layerMode(m) {
+		a.msg("Merge the layers first (Page > Merge all layers): a " + modeNames[m] + " page has one layer")
+		return
+	}
 	if (m == "uni" || a.mode == "uni") && a.setModeUni(m) { // cells are converted (uni.go)
 		return
 	}
@@ -2186,7 +2214,15 @@ func (a *App) setRows(n int) {
 	if n == a.doc.rows || a.zx() || a.tt() || a.cpc() || a.mt() || a.msx() || a.mz() { // a Spectrum screen is 24 rows, a teletext page and a CPC screen 25
 		return
 	}
-	a.pushUndo()
+	if a.layers != nil { // every layer is cut; the shorter ones stay as they are (layers.go)
+		a.withEveryLayer(func(d *Doc) *Doc {
+			c := d.clone()
+			c.rows = min(c.rows, n)
+			return c
+		})
+	} else {
+		a.pushUndo()
+	}
 	if n > a.doc.rows {
 		a.doc.ensureRows(n)
 	} else {
@@ -2484,6 +2520,7 @@ func (a *App) openPath(path, as string) {
 	a.restoreVICMode(path) // a C64 page's multicolour or ECM (c64x.go)
 	// The work's history, for its work stages (stages.go).
 	a.restoreStages(path, b)
+	a.restoreLayersFile(path, b) // the layers kept beside a file of one picture (layers_keep.go)
 }
 
 func (a *App) anyDirty() int {
@@ -2767,6 +2804,7 @@ func (a *App) encode(fmtID string) ([]byte, error) {
 // encodeFor writes the page as fmtID; an animated stream gets board's pause
 // codes (bbspause.go; "" none), and *ps (when not nil) is where it pauses.
 func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
+	defer a.asSeen()() // the layers put together (layers.go)
 	d, am, info := a.doc, a.amiga(), a.info
 	paced := func(out []byte, p []pause) []byte {
 		if b := boardByID(board); b != nil && b.shows(fmtID) {
@@ -3098,7 +3136,8 @@ func (a *App) writeOut(path, fmtID string) bool {
 		}
 		a.codes = map[bool]string{true: fmtID}[isBBSCodes(fmtID) || fmtID == "imageseq"] // the source is now in these codes (or none)
 		a.markSaved()
-		writeStages(a.Tab, path, data) // the work's history goes with the file (stages.go); losing it loses no art
+		writeStages(a.Tab, path, data)            // the work's history goes with the file (stages.go); losing it loses no art
+		writeLayersFile(a.Tab, path, data, fmtID) // the layers, beside a file of one picture (layers_keep.go)
 		dropAutosave(a.Tab)
 		a.rememberRef() // the reference goes with the file's new name
 		addRecent(path)
@@ -3108,7 +3147,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
-	note := a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID) + a.tedSaved(path, fmtID) + a.dirartSaved(fmtID)
+	note := a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID) + a.tedSaved(path, fmtID) + a.dirartSaved(fmtID) + a.layersSaveNote(fmtID, own)
 	if a.animatedSave(fmtID) {
 		note += pacedNote(a.pageBoard(), ps) + a.writeCopies(path, fmtID)
 	}
@@ -3117,7 +3156,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		return true
 	}
 	if fmtID == "vt52" {
-		if n := stUnprintable(a.doc); n > 0 {
+		if n := stUnprintable(a.seen()); n > 0 {
 			a.msg(fmt.Sprintf("Saved %s; %d characters below 32 became spaces (an ST cannot print them)", path, n) + note)
 			return true
 		}
@@ -3161,6 +3200,7 @@ type emulator interface {
 // playBytes is what Play sends: the file as read, or the page written out
 // (a changed page, or a file whose format is not a stream of codes).
 func (a *App) playBytes() []byte {
+	defer a.asSeen()() // the layers put together (layers.go)
 	if b := a.orderedPlayBytes(); b != nil {
 		return b
 	}
