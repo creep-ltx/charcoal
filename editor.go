@@ -1676,7 +1676,8 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 				a.useOwnFont(f, nil, false)
 			}
 		}
-		a.c64xAfterLoad(b, kind) // CharEdit's .prg and .d64: mode and character set
+		a.c64xAfterLoad(b, kind)     // CharEdit's .prg and .d64: mode and character set
+		a.tedCharsAfterLoad(b, kind) // the Plus/4's with a character set (tedchars.go)
 		if len(scr) > 1 {
 			a.msg(fmt.Sprintf("%s: %d screens, opened as frames (%s and %s go through them)", name, len(scr),
 				keyName("frame_previous"), keyName("frame_next")))

@@ -208,15 +208,15 @@ func parseFontFile(name string, b []byte, mode string, cur *Font) (up, low *Font
 		}
 		data := b
 		format := "bin"
-		if ext == ".64c" {
+		if ext == ".64c" || ext == ".chrs" { // .chrs: TED Screen Editor's, a PRG of 128 characters (tedchars.go)
 			if len(b) < 2+8 {
 				return nil, nil, size()
 			}
-			data, format = b[2:], "64c"
+			data, format = b[2:], strings.TrimPrefix(ext, ".")
 		}
 		n := len(data) / 8
 		switch {
-		case format == "64c" && n > 0 && n <= 512:
+		case (format == "64c" || format == "chrs") && n > 0 && n <= 512:
 		case len(data) == 1024 || len(data) == 2048 || len(data) == 4096:
 		default:
 			return nil, nil, size()
@@ -305,6 +305,9 @@ func fontFileBytes(f, low *Font, ext string) ([]byte, error) {
 		if ext == ".64c" {
 			return append([]byte{0x00, 0x30}, data...), nil // loaded at $3000
 		}
+		if ext == ".chrs" { // TED Screen Editor's: 128 characters from $B800 (tedchars.go)
+			return writeTEDSEChrs(f), nil
+		}
 		return data, nil
 	case f.kind == "atari":
 		out := make([]byte, 1024)
@@ -342,6 +345,8 @@ func fontExt(f *Font) string {
 	switch {
 	case f.format == "psf1" || f.format == "psf2":
 		return ".psf"
+	case f.kind == "c64" && f.format == "chrs":
+		return ".chrs"
 	case f.kind == "c64":
 		return ".64c"
 	case f.kind == "atari":
@@ -430,7 +435,7 @@ func (a *App) fontKeptHint() string {
 
 // carriesFont: the format holds the page's font inside.
 func carriesFont(fmtID string) bool {
-	return fmtID == "xbin" || fmtID == "petmate" || editorCarriesFont(fmtID) || c64xCarriesFont(fmtID)
+	return fmtID == "xbin" || fmtID == "petmate" || editorCarriesFont(fmtID) || c64xCarriesFont(fmtID) || fmtID == "tedse" // TEDSE: NAME.chrs (tedchars.go)
 }
 
 // ArtFont is a font CharEdit keeps for an art file whose format cannot hold it.

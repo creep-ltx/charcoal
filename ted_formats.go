@@ -121,6 +121,9 @@ var errTEDPrg = errors.New("not a Plus/4 program in the PETSCII editor's form")
 // character set is the one $FF13 picks.
 func parseTEDPrg(b []byte) (*Doc, int, error) {
 	if len(b) != tedPrgSize {
+		if d, _, err := parseTEDxPrg(b); err == nil { // CharEdit's, with a character set (tedchars.go)
+			return d, 0, nil
+		}
 		return nil, -1, errTEDPrg
 	}
 	for i, c := range tedPrgHead {
@@ -297,6 +300,9 @@ func (a *App) loadTED(b []byte, name, path, as string) bool {
 	if _, _, _, _, lower, ok := tedseProj(proj); ok {
 		a.setCase(lower)
 	}
+	if f := tedseChrs(path, proj); f != nil { // the project's character set (tedchars.go)
+		a.useOwnFont(f, nil, false)
+	}
 	return true
 }
 
@@ -346,6 +352,9 @@ func (a *App) encodeTED(fmtID string, d *Doc) ([]byte, bool, error) {
 			a.msg("Only the first 40x25 cells fit a Plus/4 screen")
 		}
 		prg := writeTEDPrg(d, a.lower())
+		if f := a.ownInUse(); f != nil { // CharEdit's program with the set (tedchars.go)
+			prg = tedxPrg(d, f)
+		}
 		if fmtID == "prg" {
 			return prg, true, nil
 		}
@@ -361,8 +370,14 @@ func (a *App) encodeTED(fmtID string, d *Doc) ([]byte, bool, error) {
 		if d.cols != 40 || d.usedRows() > 25 {
 			a.msg("Only the first 40x25 cells fit the BASIC listing")
 		}
+		if f := a.ownInUse(); f != nil {
+			return writeTEDBasSet(d, f), true, nil
+		}
 		return writeTEDBas(d, a.lower()), true, nil
 	case "marqasm":
+		if f := a.ownInUse(); f != nil {
+			return writeTEDAsmSet(d, f), true, nil
+		}
 		return writeTEDAsm(d, a.lower()), true, nil
 	}
 	return nil, false, nil
@@ -377,13 +392,18 @@ func (a *App) tedSaved(path, fmtID string) string {
 	switch fmtID {
 	case "tedse":
 		p := writeTEDSEProj(a.doc, a.lower(), a.brush, a.tedBrush())
+		chrs := ""
+		if a.ownInUse() != nil { // the set beside it, as TEDSE's project keeps it (tedchars.go)
+			p[2] = 1
+			chrs = a.tedseSaveChrs(path)
+		}
 		if old, err := os.ReadFile(tedseProjPath(path)); err == nil && bytes.Equal(old, p) {
-			return ""
+			return chrs
 		}
 		if err := writeAtomic(tedseProjPath(path), p); err != nil {
 			return "; its .proj (size and colours) could not be written: " + err.Error()
 		}
-		return "; size and colours in " + filepath.Base(tedseProjPath(path)) + " (TEDSE's project)"
+		return "; size and colours in " + filepath.Base(tedseProjPath(path)) + " (TEDSE's project)" + chrs
 	case "seq":
 		if n := tedSeqLoss(a.allDocs()); n > 0 {
 			return fmt.Sprintf("; %d cells show the KERNAL's luminance of their colour (a .seq has 16 colours)", n)

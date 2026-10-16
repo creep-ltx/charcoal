@@ -79,6 +79,7 @@ func (d *FontEd) change(fn func(f *Font)) {
 	}
 	d.redo = nil
 	fn(f)
+	a.tedFollow(f, d.undo[len(d.undo)-1].bits) // a Plus/4's reversed half follows (tedchars.go)
 	f.edited()
 	a.fontChanged()
 }
@@ -282,6 +283,7 @@ func (d *FontEd) drawPixels(u *UI, f *Font, c int, g Rect, cs, H int) {
 		px, py := at(u.mx, u.my)
 		if of := a.ownInUse(); of != nil && glyphPixel(of, c, px, py) != d.paint {
 			glyphSetPixel(of, c, px, py, d.paint) // the same undo step as the click
+			a.tedFollowGlyph(of, c)
 			of.edited()
 			a.fontChanged()
 		}
@@ -448,6 +450,9 @@ func (d *FontEd) key(k string, ctrl, shift bool) bool {
 func (a *App) fontFilesNote() string {
 	switch a.mode {
 	case "c64":
+		if a.ted() {
+			return "Plus/4 character sets: .chrs (TED Screen Editor's), .64c, .bin (1024 bytes: 128 characters, the TED reverses the rest; 2048: 256)"
+		}
 		return "C64 character sets: .64c, .bin (2048 bytes a set, 4096 both)"
 	case "atari":
 		return "Atari fonts: .fnt (1024 bytes)"
