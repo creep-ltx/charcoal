@@ -40,6 +40,9 @@ func FuzzParsers(f *testing.F) {
 		f.Add(out)
 		f.Add(writeMarqPet(d, false))
 		f.Add(writePetmateJSON([]PetScreen{{doc: d}}))
+		pd, _ := writePD(d, pal, fontByID("vga"), true)
+		f.Add(pd)
+		f.Add(writeBSV(d))
 		for _, buf := range []int{icyPETSCII, icyATASCII, icyAtariST} { // other machines' pages (icymach.go)
 			o := &icyOut{buffer: buf, fontMod: 1, w: 3, h: 2, fontH: 8, pal: []uint32{0, 0xFFFFFF},
 				screen: icyScreenRecord(map[int]int{icyPETSCII: 5, icyATASCII: 9, icyAtariST: 8}[buf], 1, 3, 113),
@@ -177,6 +180,14 @@ func FuzzParsers(f *testing.F) {
 		}
 		check("xbin", func() []*Doc { return own(parseXBin(b)) })
 		check("icy", func() []*Doc { return own(parseIcy(b)) })
+		check("pd", func() []*Doc { // PabloDraw, TheDraw, BSAVE (othformats.go)
+			if p, err := parsePD(b); err == nil {
+				return one(p.doc)
+			}
+			return nil
+		})
+		check("td", func() []*Doc { pages, _ := parseTD(b); return pages })
+		check("bsv", func() []*Doc { d, _ := parseBSV(b); return one(d) })
 		check("icy machine", func() []*Doc { // IcyDraw's pages of other machines (icymach.go)
 			if doc, err := parseIcyDraw(b); err == nil {
 				if m := icyMachinePage(doc, &gtiaPAL); m != nil {

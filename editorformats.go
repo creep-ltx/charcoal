@@ -1784,7 +1784,9 @@ func psciCols(p []uint32) [16]uint32 {
 var editorOwn = map[string]bool{"idf": true, "adf": true, "tnd": true, "icy": true, "xp": true, "psci": true, "pet": true, "pmjson": true}
 
 // editorCarriesFont: the format holds the page's font.
-func editorCarriesFont(fmtID string) bool { return fmtID == "idf" || fmtID == "adf" || fmtID == "icy" }
+func editorCarriesFont(fmtID string) bool {
+	return fmtID == "idf" || fmtID == "adf" || fmtID == "icy" || fmtID == "pd"
+}
 
 func init() {
 	framesFormats["psci"], framesFormats["pmjson"] = true, true
@@ -1809,6 +1811,12 @@ func editorKind(name string, b []byte) string {
 		return "pet"
 	case isPetmateJSON(b):
 		return "pmjson"
+	case isTD(b): // PabloDraw, TheDraw, BSAVE (othformats.go)
+		return "td"
+	case isPD(name):
+		return "pd"
+	case isBSV(name, b):
+		return "bsv"
 	}
 	return ""
 }
@@ -1902,6 +1910,15 @@ func (a *App) loadEditor(b []byte, name, path, as string) bool {
 			a.screenMachine(art.machine)
 		}
 		a.psciOwnSetup(art.own)
+	case "pd", "td", "bsv": // othformats.go
+		state, n := a.othLoad(kind, b, name, as)
+		switch state {
+		case icyStop:
+			return true
+		case icyNotThis:
+			return false
+		}
+		a.srcKind, note = "", n
 	case "pet", "pmjson":
 		if as != "auto" && as != "c64" {
 			return false
@@ -1928,6 +1945,7 @@ func (a *App) loadEditor(b []byte, name, path, as string) bool {
 	if kind == "icy" {
 		a.icyAfterLoad() // a PETSCII page's own character set (icymach.go)
 	}
+	a.othAfterLoad(kind)
 	// The SAUCE record: after an iCEDraw, ArtWorx or TundraDraw file, in an IcyDraw
 	// file's SAUCE record. Saving again keeps it (without comment lines in the first three).
 	sauceOf := b
@@ -1937,7 +1955,7 @@ func (a *App) loadEditor(b []byte, name, path, as string) bool {
 			sauceOf = doc.sauce
 		}
 	}
-	if s, _ := readSauce(sauceOf); s != nil && (kind == "idf" || kind == "adf" || kind == "tnd" || kind == "icy") {
+	if s, _ := readSauce(sauceOf); s != nil && (kind == "idf" || kind == "adf" || kind == "tnd" || kind == "icy" || kind == "pd") {
 		a.sauce = s
 		a.info = Info{writeSauce: true, title: s.title, author: s.author, group: s.group, notes: s.notes}
 	}
@@ -1991,6 +2009,8 @@ func (a *App) reparseEditor() bool {
 		if art.cpc != nil {
 			a.cpcSet = *art.cpc
 		}
+	case "pd", "td", "bsv":
+		a.othReparse() // othformats.go
 	case "pet", "pmjson":
 		scr, err := a.editorScreens(a.srcKind, a.source)
 		if err != nil {
@@ -2091,6 +2111,8 @@ func (a *App) encodeEditor(fmtID string, d *Doc) (out []byte, ok bool, err error
 		}
 	case "pmjson":
 		out = writePetmateJSON(a.petScreens())
+	case "pd", "bsv":
+		out, _ = a.othEncode(fmtID, d) // othformats.go
 	default:
 		ok = false
 	}

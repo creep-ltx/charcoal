@@ -835,3 +835,143 @@ func TestOthPsciAtariSTSave(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------- PabloDraw, TheDraw, BSAVE
+
+// A PC page saved as PabloDraw's .pd (a font of its own, other widths through SAUCE) and as
+// a BSAVE screen opens again the same; Ctrl+S writes the format again.
+func TestOthPDAndBSV(t *testing.T) {
+	r := rand.New(rand.NewSource(46))
+	dir := t.TempDir()
+	for _, c := range []struct {
+		fmtID   string
+		cols    int
+		ownFont bool
+	}{{"pd", 80, false}, {"pd", 132, true}, {"pd", 40, false}, {"bsv", 80, false}} {
+		a := testApp(t, "pc")
+		a.ice = true
+		d := newDoc(c.cols, 30)
+		for i := range d.cells {
+			ch := 7 + r.Intn(249)
+			if i%7 == 0 {
+				ch = 32
+			}
+			d.cells[i] = makeCell(ch, r.Intn(16), r.Intn(16), 0)
+		}
+		a.doc = d
+		if c.ownFont {
+			f := fontByID("vga").clone()
+			f.id, f.name = ownID, "mine"
+			f.setRow(65, 3, 0x81)
+			a.useOwnFont(f, nil, true)
+		}
+		a.setPalette()
+		p := filepath.Join(dir, fmt.Sprintf("page%d.%s", c.cols, c.fmtID))
+		if !a.writeOut(p, c.fmtID) {
+			t.Fatalf("%s: not saved: %s", c.fmtID, a.message)
+		}
+		want, pal := a.doc.clone(), a.pal
+		b, _ := os.ReadFile(p)
+		a.focusTab(a.newTab("pc"))
+		a.loadBytes(b, filepath.Base(p), p, "auto")
+		if a.mode != "pc" || a.srcKind != c.fmtID || a.saveFmt != c.fmtID {
+			t.Fatalf("%s: opened as %s (%s, saves %s): %s", c.fmtID, a.mode, a.srcKind, a.saveFmt, a.message)
+		}
+		a.setPalette()
+		if a.doc.cols != want.cols {
+			t.Fatalf("%s: %d columns came back %d", c.fmtID, want.cols, a.doc.cols)
+		}
+		for i, v := range want.cells {
+			w := a.doc.cells[i]
+			if cellCh(w) != cellCh(v) || cellCh(v) != 32 && a.pal[cellFg(w)] != pal[cellFg(v)] || a.pal[cellBg(w)] != pal[cellBg(v)] {
+				t.Fatalf("%s %d: cell %d %08x came back %08x", c.fmtID, c.cols, i, v, w)
+			}
+		}
+		if c.ownFont && (a.ownInUse() == nil || a.font().row(65, 3) != 0x81) {
+			t.Fatalf("pd: the own font did not come back")
+		}
+		a.doc.set(0, 0, makeCell('Z', 1, 2, 0))
+		a.dirty = true
+		a.save(false)
+		if b2, _ := os.ReadFile(p); editorKind(p, b2) != c.fmtID {
+			t.Fatalf("%s: Ctrl+S wrote another format", c.fmtID)
+		}
+	}
+}
+
+// PabloDraw's .NET strings: lengths in 7-bit groups.
+func TestOthNetString(t *testing.T) {
+	for _, s := range []string{"", "CP 437 8x16", strings.Repeat("x", 300)} {
+		b := appendNetString(nil, s)
+		got, rest, err := netString(append(b, 9))
+		if err != nil || got != s || len(rest) != 1 {
+			t.Fatalf("%d: %q %v", len(s), got, err)
+		}
+	}
+	if _, _, err := netString([]byte{0x85}); err == nil {
+		t.Fatal("cut short taken")
+	}
+}
+
+// TheDraw's crunched pages: colours, next line, runs, blink (UNCRUNCH.PAS's codes).
+func TestOthUncrunch(t *testing.T) {
+	d, ok := uncrunchTD([]byte{0x0E, 0x11, 'A', 25, 2, 26, 1, 0xDB, 24, 27, 0x04, 'B', 26, 0, 5}, 10, 3)
+	if !ok {
+		t.Fatal("not read")
+	}
+	want := []struct {
+		x, y int
+		ch   int
+		attr byte
+	}{{0, 0, 'A', 0x1E}, {1, 0, ' ', 0x1E}, {3, 0, ' ', 0x1E}, {4, 0, 0xDB, 0x1E}, {5, 0, 0xDB, 0x1E}, {6, 0, ' ', 0x07},
+		{0, 1, 'B', 0x94}, {1, 1, 5, 0x94}}
+	for _, w := range want {
+		v := d.get(w.x, w.y)
+		if cellCh(v) != w.ch || cellAttr(v) != w.attr {
+			t.Fatalf("%d,%d: %02x %02x, want %02x %02x", w.x, w.y, cellCh(v), cellAttr(v), w.ch, w.attr)
+		}
+	}
+	if _, ok := uncrunchTD([]byte{'A', 28}, 10, 3); ok {
+		t.Fatal("code 28 taken")
+	}
+}
+
+// TheDraw 4.63's own example files (CHARCOAL_THEDRAW: a folder with DEMO.TD and SHADING.TD,
+// by default ~/.cache/charcoal-others/thedraw/td463): the page layers open as frames.
+func TestOthTheDrawFiles(t *testing.T) {
+	dir := os.Getenv("CHARCOAL_THEDRAW")
+	if dir == "" {
+		h, _ := os.UserHomeDir()
+		dir = filepath.Join(h, ".cache/charcoal-others/thedraw/td463")
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "DEMO.TD"))
+	if err != nil {
+		t.Skip("no TheDraw files in", dir)
+	}
+	pages, err := parseTD(b)
+	if err != nil || len(pages) != 2 || pages[0].cols != 80 || pages[0].rows != 25 {
+		t.Fatalf("DEMO.TD: %v, %d pages", err, len(pages))
+	}
+	line := func(d *Doc, y int) string {
+		var s []byte
+		for x := 0; x < d.cols; x++ {
+			s = append(s, byte(cellCh(d.get(x, y))))
+		}
+		return strings.TrimSpace(strings.ReplaceAll(string(s), "\xff", " ")) // TheDraw's blank 255 between words
+	}
+	if got := line(pages[0], 0); got != "Here's something fun to try out (and show off)." {
+		t.Fatalf("DEMO.TD page 1 line 1: %q", got)
+	}
+	if got := line(pages[1], 4); got != "Welcome to page layer 2!" {
+		t.Fatalf("DEMO.TD page 2 line 5: %q", got)
+	}
+	b, _ = os.ReadFile(filepath.Join(dir, "SHADING.TD"))
+	if pages, err := parseTD(b); err != nil || len(pages) != 3 { // "Three pages are occupied" (THEDRAW.DOC)
+		t.Fatalf("SHADING.TD: %v, %d pages", err, len(pages))
+	}
+	a := testApp(t, "pc")
+	a.loadBytes(b, "SHADING.TD", filepath.Join(dir, "SHADING.TD"), "auto")
+	if a.mode != "pc" || a.nFrames() != 3 || a.path != "" || a.saveFmt != "ansi" {
+		t.Fatalf("opened as %s, %d frames, path %q, saves %s", a.mode, a.nFrames(), a.path, a.saveFmt)
+	}
+}
