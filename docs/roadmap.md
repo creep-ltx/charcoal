@@ -160,8 +160,8 @@ against each platform's best editor. Each step says what it wins.
 - [x] **Terminals** (2026-10-16, docs/unicode-design.md): a Unicode page (blocks, sextants and octants, Braille,
   box drawing, any Unifont character; 16, 256 and 24-bit colours) for terminal artists (durdraw's crowd): UTF-8
   ANSI and durdraw `.dur` (frames) read and written, mIRC colour codes read and written (also from a PC page),
-  HTML; PC/Amiga pages convert exactly in one undoable step. Later: wide (CJK, emoji) characters as two cells,
-  durdraw's own 16-colour iCE backgrounds checked in durdraw's screen (its export cannot write them).
+  HTML; PC/Amiga pages convert exactly in one undoable step. [x] Wide (CJK, kana, Hangul, emoji) characters as
+  two cells (done 2026-10-16, wide.go, docs/wide-design.md). Later: durdraw's own 16-colour iCE backgrounds checked in durdraw's screen (its export cannot write them).
 
 - [x] **BBS boards** (2026-10-16, boardcolours.go): "Save for board X" (bbspause.go) writes the board's own colour
   codes as well as its pauses: Mystic pipe codes, Synchronet Ctrl-A, PCBoard @X (the user said yes, 2026-10-16);

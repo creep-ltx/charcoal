@@ -115,7 +115,8 @@ phase 2 checks it with a pty test.) One helper `wideNormal(cells, x0, x1)` appli
     characters, so 63 columns wide in a terminal. The tool that made it counted a kanji as one column. Rule:
     blanks (spaces on the default background) that run past the last column and are followed only by the
     line end are dropped, not wrapped; anything else past the column wraps as a terminal does. That file
-    then opens 59 wide with the kanji where a terminal shows them.
+    then opens (as Unicode) with the kanji where a terminal shows them. (By default it still opens as a PC
+    page: needsUni counts four kanji as a few letters.)
 - **UTF-8 ANSI, mIRC, plain text write**: the lead's character, nothing for the continuation (the terminal
   advances 2). mIRC reads like ANSI (width 2), its line measure counts bytes as now.
 - **HTML**: each wide character in `<span class=w>` with `display:inline-block;width:2ch`, because a
@@ -124,11 +125,13 @@ phase 2 checks it with a pty test.) One helper `wideNormal(cells, x0, x1)` appli
 - **durdraw `.dur`**: durdraw has no width model at all: a line is a list of one character per cell, its
   ANSI reader advances 1 per character, its export writes cell by cell (*read*, durdraw 0.31.0 main
   2026-10-15, durdraw_ansiparse.py and durdraw_ui_curses.py; none of its 18 example files holds a wide
-  character, *verified*). The colour map is per cell, so the grid must stay: a wide character in cell x
-  takes x+1 as its continuation (whatever durdraw had there is hidden, as on a terminal), a wide character in
-  the last column becomes a space. Writing, the continuation is a space (durdraw needs a character per cell).
-  Round trips are exact; durdraw itself shows such a line one column longer in a terminal. Phase 2 runs
-  durdraw on a Charcoal `.dur` with kanji (`CHARCOAL_DURDRAW_SRC`, uni_ext_test.go) to see what it shows.
+  character, *verified*). **Built (phase 2), after running durdraw**: durdraw requires every line to hold as
+  many characters as the page has columns (a shorter line or colour map crashes it, *verified*), and its
+  `--export-ansi` writes the characters one after another, so a terminal moves on by two after a wide one.
+  Writing: a wide character once, its right half left out, the line padded with blanks at its end; durdraw
+  reads it and its export is the page (*verified*, `TestWideExternalDurdraw`). Reading: the same stream, colour
+  i with character i; what is pushed past the page is dropped. (The grid reading planned above, the right half
+  written as a space, was tried first: durdraw's export then showed every such row one column longer.)
 - Detection is unchanged: a few Japanese words in a long text still do not make it Unicode art (needsUni's
   letter rule; its test of an English text with a few Japanese words keeps passing).
 
@@ -178,3 +181,11 @@ Steps 1-5 are the feature.
 4. The 76 wide characters the art subset already had become two cells (as terminals show them).
 5. Turn is refused for a block with wide characters, with a message.
 6. The 767-code table beyond the BMP is enough; when full, `?` and a note in the status line.
+
+## Phase 2: what was checked (2026-10-16)
+
+- durdraw: *verified* as above.
+- The terminal rule (writing over half a wide character) and the last-column wrap against a real terminal:
+  **not checked**. No xterm, VTE, tmux or screen here; foot and alacritty need a display. They stay *proposed*.
+- The input method's window: `SDL_SetTextInputRect` at the cursor on Unicode pages; **not checked** (no input
+  method installed here).

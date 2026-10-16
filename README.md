@@ -227,6 +227,15 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   looks the same, pixel for pixel ("VGA + Unifont" draws CP437's characters in the VGA font). A PC page also
   saves as mIRC text directly. Checked: every durdraw example opens cell for cell as durdraw's own ANSI export
   shows it, and durdraw itself reads CharEdit's `.dur` files back as the page (`uni_ext_test.go`).
+  **Wide characters** (CJK ideographs, kana, Hangul, fullwidth forms, emoji: the characters a terminal shows two
+  columns wide, by Unicode 17's East Asian Width) take two cells, as in a terminal: type them (an input method
+  works), paste them, or pick them in the character table's kana, CJK, Hangul and fullwidth blocks. The cursor
+  moves over them whole, Delete and Backspace take both cells, writing over either half leaves a space in the
+  other (as a terminal does), lines and fills with one come out side by side, a selection always holds whole
+  ones, Mirror keeps them readable and Turn refuses them. Files: UTF-8 ANSI, mIRC, text and HTML write them once
+  (the terminal moves on by two); one that does not fit at the end of a row goes to the next, as a terminal
+  wraps it. Unifont draws them 16 pixels wide, emoji in one colour (the cell's). Ambiguous-width characters (box
+  drawing, blocks) stay narrow, and so do emoji sequences like ❤️ (as glibc and xterm count them).
 - **Amstrad CPC page** (AMSCII): the CPC's text screen in its three modes (the **Mode** gadget): mode 1, 40x25
   with 4 inks (the AMSCII compos' main category), mode 0, 20x25 with 16 inks (wide pixels), mode 2, 80x25 with 2
   inks (narrow pixels: cells 8x16). Each cell has a character of the ROM's 256 (codes 0-31 are glyphs too) with a

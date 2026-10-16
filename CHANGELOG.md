@@ -2,6 +2,19 @@
 
 Each version's section is also its release page on GitHub. Newest first.
 
+## Unreleased
+
+- **Wide characters on Unicode pages:** Chinese, Japanese and Korean characters, fullwidth forms and emoji take
+  two cells, as in a terminal. Type them (an input method works too), paste them, or pick them from the new kana,
+  CJK, Hangul and fullwidth blocks of the character table. The cursor, Delete, Backspace, fills, lines, selections,
+  Mirror and the page width all keep them whole; writing over half of one leaves a space, as a terminal does.
+- UTF-8 ANSI, durdraw, mIRC, text and web page files read and write them as terminals show them. durdraw
+  itself shows CharEdit's files with them as they are.
+- **Changed:** the 76 wide symbols a Unicode page could already type (⌚ ☕ ✅ ⭐ ☰ and the like) take two cells
+  now, so files with them line up in a terminal. Files that count a kanji as one column, padding the line
+  with blanks, open on a Unicode page as a terminal shows them.
+- The program is about 1 MB larger: every wide character's picture is built in (GNU Unifont).
+
 ## 0.1b12 (2026-10-16)
 
 - **Layers** on PC, Amiga, Unicode, PETSCII, Atari and Atari ST pages. Every tool draws on the current layer;

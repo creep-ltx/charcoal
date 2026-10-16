@@ -355,9 +355,57 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Tests: `uni_test.go` (cell, styles, conversions, all three formats round trip, real files, detection, editing,
   flips, paste, autosave, style table compaction/full, HTML, drawing, Animate, own files), FuzzParsers has the
   three readers. TestStartKeys now works for any number of tiles.
-- Not done: wide characters as two cells (CJK, emoji: not typable), Animate's draw orders in UTF-8 ANSI (frames
+- Not done: Animate's draw orders in UTF-8 ANSI (frames
   work), a Unicode page's own fonts (Load a font... loads a 256-glyph font), PC fonts other than VGA for
   "VGA + Unifont", 9-pixel cells, CharView playing .dur frames.
+
+## Wide characters on the Unicode page (2026-10-16, branch r6-wide; design: docs/wide-design.md)
+
+- **For the changelog / users**: CJK, kana, Hangul, fullwidth forms and emoji take two cells, as in a terminal.
+  **Behaviour change**: the 76 wide symbols the art subset already had (U+231A ⌚ ... U+2B55 ⭕, incl. Unicode
+  16's ☰-☷ and ⚊-⚏) were one squeezed cell in 0.1b12 (and shifted rows in a terminal); now they are two cells.
+- **Which**: East Asian Width W/F of Unicode 17.0.0, our own table `widetab.go` (`tools/widetab.sh`; never Go's
+  tables, CI's Go 1.24 is older). Ambiguous narrow. One code point per cell (VS16, ZWJ dropped as before), so ❤️
+  stays narrow, 👨‍👩‍👧 is three wide characters: glibc/xterm counting (the user's choice).
+- **Cell**: a lead (the character) + a right half, code `uniCont` = 0xDFFF in the lead's style. Codes 0xDD00-0xDFFE:
+  wide characters beyond the BMP from `uniExtras`, one process-wide append-only table of 767 (like the styles);
+  autosaves (`uni_extra`), work-stage pictures (`extra`) and prefs F-keys (as characters) keep them. Full: `?` and
+  `uniExtraNote` in the load message. `wideOK` checks the rule (a lead always followed by its half), the fuzz
+  target checks it after every reader.
+- **Editing** (`wide.go`): `setCell` goes through `wideSet` on Unicode pages when a wide character or half is
+  involved: the terminal rule (writing over half leaves a space in the other half), writing a wide character
+  where it already stands does nothing (so lines/fills in any direction come out side by side), a wide character
+  at the last column is refused (status line). Explicit: typing (+2, wraps at the last column, Insert makes room
+  for 2: `wideInsert`), Delete/Backspace (`wideDelete`), cursor never on a half (`moved`, Right skips), Pick,
+  Paint "colour/char only" on a half acts on the character, fills only where both cells are inside, `selRect`
+  grows to whole characters (`wideGrow`), Mirror re-pairs (`wideFlipPairs`), Turn refused, column ops and
+  `withCols` normalise the cut (`wideNormal*`), pasted text (`textBlock`) makes pairs. Layers: the drawn row and
+  `flatten`/merge down normalise (a half covered by an upper layer: a space), transitions normalise every frame.
+  `wideMendOld`: an 0.1b12 autosave's squeezed wide character gets the blank cell after it.
+- **Drawing**: `drawUniAt(v, prev, next)` draws each half of the 16x16 glyph in its own cell's colours (italic
+  leans the 16-pixel row); main page loop, `paintCellsAt` and `drawLayersRow` pass neighbours; a lone lead is
+  squeezed, a lone half blank. `fonts/unifont-wide.hex.gz` (52,701 glyphs, 1.02 MB; `tools/unifont.sh` builds both
+  Unifont files) parsed on first use; `uniGlyph` squeezes them for the character table. Cursor 2 wide.
+- **Files**: UTF-8 ANSI: `putCode` advances 2, wraps one that does not fit; the reader ends with `wideNormal`
+  (cursor moves); `uniLongestLine` counts columns for lines with wide characters (trailing blanks out); blanks
+  past the last column followed only by the line end are dropped (only in texts with wide characters: other
+  files read as before). Writers (ANSI, mIRC, docText, HTML) skip a right half; HTML puts each wide character
+  in `span.w` 2ch wide (the CSS only when the page has one). **durdraw**: it keeps a character per cell, no
+  widths, and requires every line as long as the page (*verified*: shorter lines crash it). Writing: a wide
+  character once, the line padded at its end; reading: characters move on by two after a wide one, colours go
+  with the characters. *Verified*: durdraw 0.31.0 reads such a file and its `--export-ansi` is the page
+  (`TestWideExternalDurdraw`, `CHARCOAL_DURDRAW_SRC`). PC conversion: a wide character `?` + space.
+- **Real file**: MC_FRESHER-RX-78.ANS (Mistigris 2025-08, in the big check) pads a kanji line to 59 characters
+  (63 columns). It still opens as a PC page (needsUni: four kanji in ANSI art are "a few letters"), the kanji as
+  `?`, as before. Opened as Unicode it shows 機 動 戦 士 at columns 23, 27, 31, 35 as a terminal does (before:
+  squeezed into one cell each, the spacing wrong); the page stays 80 wide (readers take 80 at least).
+- **Not checked**: the terminal rule against a real xterm/VTE (none here, foot/alacritty need a display); an input
+  method's window (`imeAt` = SDL_SetTextInputRect at the cursor; no IME installed here). Collab: PC pages only, so
+  no wide character reaches Moebius.
+- Tests: `wide_test.go` (table, normalise, drawing pixels, ANSI/mIRC/text/HTML/.dur round trips, the padded line,
+  typing, cursor, Delete/Backspace, fills and lines both ways, blocks/flip/turn/stamp/pick, columns/W, layers,
+  PC conversion, old autosaves, transitions, beyond-BMP table/autosave/stages/F-keys, character table).
+  Changed premises: uni_test.go's "no glyph" box now uses Thai (kanji have glyphs), "no cell holds it" uses 𝔸.
 
 ## UTF-8 files on PC and Amiga pages are saved in UTF-8 (2026-10-16, on next)
 
