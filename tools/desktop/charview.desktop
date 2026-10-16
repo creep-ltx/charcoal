@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=CharView
+GenericName=Text Art Viewer
+Comment=Show ANSI, PETSCII, ATASCII, ZX Spectrum and teletext art
+Exec=charview %F
+Icon=charcoal
+Terminal=false
+NoDisplay=true
+Categories=Graphics;Viewer;

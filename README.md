@@ -87,10 +87,16 @@ lists every key.
 Working on Charcoal: start with [docs/HANDOFF.md](docs/HANDOFF.md) (state, wishes, testing) and
 [docs/roadmap.md](docs/roadmap.md).
 
-    go build -o charedit .     # needs Go and the SDL2 development files
-    go test ./...             # the core: parser, writer, SAUCE
+    make                      # builds charedit; needs Go and the SDL2 development files
+    sudo make install         # charedit, charview, menu entries and icon under /usr/local
+    make test                 # the core: parser, writer, SAUCE
 
-`~/.local/bin/charedit` and `~/.local/bin/charview` link to the binary here.
+The SDL2 development files are `libsdl2-dev` (Debian, Ubuntu), `sdl2` (Arch) or `SDL2-devel` (Fedora).
+`make install PREFIX=$HOME/.local` installs for one user without root (`~/.local/bin` must be on `PATH`);
+`make uninstall` with the same `PREFIX` removes it again, and `DESTDIR` is for packagers. Install puts
+`charedit` in `bin` with `charview` as a link to it, CharEdit in the desktop's application menu, and CharView
+as an "Open with" choice for art files (it is not in the menu, since it needs a file to show). Plain
+`go build -o charedit .` still works and leaves the program here.
 
 Windows and Mac programs are built by GitHub Actions (`.github/workflows/build.yml`) on every push, with SDL2
 linked in so each is one file: Windows with the official SDL2 MinGW build, the Mac from SDL2's source as one
