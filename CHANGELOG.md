@@ -13,6 +13,8 @@ Each version's section is also its release page on GitHub. Newest first.
 - **Layers on ZX Spectrum, Amstrad CPC, MSX and Sharp MZ-700 pages.** A space on black (on the CPC: on paper 0)
   is an empty cell that shows the layers below; the machine's white paper covers, as on the screen.
 - IcyDraw `.icy` files of PETSCII, Atari and Atari ST pages keep their layers (before, they were put together).
+- Drawing on a **hidden layer** is refused with a short message, as in IcyDraw (you would not see what you draw);
+  Select and Pick still work.
 
 ## 0.1b13 (2026-10-16)
 

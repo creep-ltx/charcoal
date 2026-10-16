@@ -1389,6 +1389,14 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   would have been (a screen colour, a VIC mode: the page's, not the layer's). Tests that edit then check must call
   `a.lockCheck()` themselves. Structure (W, H, rows/cols, crop, conversions) changes a locked layer too, as in
   IcyDraw; delete and merge down refuse it. Saved in the autosave and the side file (`Locked`).
+- **Hidden layers take no edits either** (user, 2026-10-16, as IcyDraw): `layerBlocked` = locked or hidden is what
+  the tools' refusal and the `pushUndo` net check; Select and Pick still work. `TestLay2HiddenRefused`.
+- **Decided (user, 2026-10-16):** the layer list is shared by every frame (a shared still layer: later, on the
+  roadmap); frames of layers saved in a flat frames format leave the page unsaved; page settings and structure
+  still change a locked layer; black space is the empty cell on Spectrum/MZ; an ST "black shows below" layer
+  saved to .icy is written with the colours as seen and **reads back as a normal layer that looks the same**
+  (the setting itself is lost; accepted). `setMode` on an unchanged page of one layer still reads the file again
+  exactly as 0.1b13 did (`TestLay2SetModeRereads` holds 0.1b13's pages as hashes); only pages of layers skip it.
 - **Layers with frames** (`layers_frames.go`), Playscii's model (art.py keeps `layers_z/visibility/names` once,
   tiles per frame): `Tab.layers` is the layer list (meta, the same for every frame) with the current frame's
   pictures; `Frame.layers []*Doc` a frame's layer pictures (stale while current). **`Frame.doc` of a frame that

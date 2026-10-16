@@ -103,7 +103,7 @@ against each platform's best editor. Each step says what it wins.
   empty cells show the layers below, "black shows below" per layer; new/copy/delete/move/merge/show/hide, the
   others dim or hidden; the Layers panel, Page > Layers, keys; undo; autosave; IcyDraw/REXPaint/Playscii files keep
   them, other formats save what is seen and keep the layers beside the file. Later: groups, offsets, text layers,
-  a layer shared by every frame (a still background under moving letters).
+  a shared still layer across frames (a background under moving letters, edited once).
 - [x] Layers, the rest (done 2026-10-16, layers_lock.go layers_frames.go, docs/layers-design.md §9): lock (IcyDraw's
   edit lock read and written); layers with frames (Playscii's model: every frame has every layer; .psci keeps both);
   layers on Spectrum, CPC, MSX and MZ-700 pages; .icy keeps the layers of PETSCII, Atari and ST pages.

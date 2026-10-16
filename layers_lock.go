@@ -1,6 +1,6 @@
 package main
 
-// Locked layers: no tool changes a locked layer (IcyDraw's edit lock, read from
+// Locked layers: no tool changes a locked layer (nor a hidden one, as in IcyDraw) (IcyDraw's edit lock, read from
 // and written to .icy files). The tools refuse at their start where that is easy
 // (a press on the page, typing); every other change is caught by pushUndo, which
 // every edit of the page's cells calls first: on a locked layer it keeps the page
@@ -19,8 +19,17 @@ func (t *Tab) layerLocked() bool {
 	return t.layers != nil && t.lay < len(t.layers) && t.layers[t.lay].locked
 }
 
+// layerBlocked: the layer being worked on takes no edits: locked, or hidden (as
+// in IcyDraw: what is drawn on a hidden layer would not be seen).
+func (t *Tab) layerBlocked() bool {
+	return t.layerLocked() || t.layers != nil && t.lay < len(t.layers) && t.layers[t.lay].hidden
+}
+
 // lockedMsg is what a refused tool says.
 func (a *App) lockedMsg() string {
+	if !a.layerLocked() {
+		return fmt.Sprintf("%s is hidden: show it to draw on it (%s)", a.layerName(a.lay), keyOrMenu("layer_show", "Page > Show the layer"))
+	}
 	return fmt.Sprintf("%s is locked (%s unlocks it)", a.layerName(a.lay), keyOrMenu("layer_lock", "Page > Lock the layer"))
 }
 
@@ -32,9 +41,9 @@ func keyOrMenu(id, menu string) string {
 	return menu
 }
 
-// lockRefused: the current layer is locked, said on the status line.
+// lockRefused: the current layer is locked or hidden, said on the status line.
 func (a *App) lockRefused() bool {
-	if !a.layerLocked() {
+	if !a.layerBlocked() {
 		return false
 	}
 	a.msg(a.lockedMsg())
@@ -58,7 +67,7 @@ func (a *App) toggleLock(i int) {
 // lockGuard is called by pushUndo: on a locked layer the page as it was is kept
 // (the first time in an event) instead of an undo step, for lockCheck.
 func (a *App) lockGuard() bool {
-	if a.layering || !a.layerLocked() {
+	if a.layering || !a.layerBlocked() {
 		return false
 	}
 	if a.lockSnap == nil {

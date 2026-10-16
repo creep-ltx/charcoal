@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha1"
+	"encoding/binary"
+	"fmt"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -697,5 +700,89 @@ func TestLay2IcyExternal(t *testing.T) {
 			}
 		}
 		t.Logf("%v: IcyDraw reads %d layers as seen", p, len(doc.layers))
+	}
+}
+
+// A hidden layer takes no edits (as in IcyDraw); Select and Pick only look and still work.
+func TestLay2HiddenRefused(t *testing.T) {
+	a := lay2FTwo(t)
+	a.toggleLayer(1)
+	steps := len(a.undo)
+	a.setTool("draw")
+	lay2FPress(a, 3, 2)
+	if a.doc.get(3, 2) != blank || len(a.undo) != steps || !strings.Contains(a.message, "hidden") {
+		t.Fatalf("draw on a hidden layer: %08x, %q", a.doc.get(3, 2), a.message)
+	}
+	a.cx, a.cy = 0, 1
+	a.typeByte('x')
+	a.sel = &Sel{0, 0, 4, 4}
+	a.fillSel()
+	a.lockCheck()
+	if a.doc.get(0, 1) != blank || a.doc.get(1, 1) != blank || len(a.undo) != steps {
+		t.Fatal("typed or filled on a hidden layer")
+	}
+	// Pick and Select still work
+	a.sel = nil
+	a.setTool("pick")
+	lay2FPress(a, 0, 0)
+	if cellCh(a.brushCell()) != 'a' {
+		t.Fatalf("pick on a hidden layer's page: %08x", a.brushCell())
+	}
+	a.setTool("select")
+	lay2FPress(a, 2, 2)
+	if a.sel == nil {
+		t.Fatal("select on a hidden layer")
+	}
+	// shown again: it takes edits
+	a.sel = nil
+	a.toggleLayer(1)
+	a.setTool("draw")
+	lay2FPress(a, 3, 2)
+	if a.doc.get(3, 2) == blank {
+		t.Fatal("a shown layer took no edit")
+	}
+}
+
+// Changing the page type of an unchanged page of one layer reads its file again,
+// exactly as before layers: the pages below are what CharEdit at ff108b2 (0.1b13,
+// before this round) made, recorded with the same code. A page of layers keeps
+// its layers (only shown anew).
+func TestLay2SetModeRereads(t *testing.T) {
+	for _, c := range []struct{ file, mode, want string }{
+		{"bs-alove.bin", "amiga", "amiga 80x59 false 403dd1fc8392"}, {"bs-alove.bin", "c64", "c64 40x230 false 0687385feb26"},
+		{"bs-alove.bin", "atari", "atari 38x194 false 0557cc3c656f"}, {"bs-alove.bin", "uni", "uni 80x59 true 0b617e56d5ed"},
+		{"bs-alove.xb", "amiga", "amiga 80x59 false 4500d3800282"}, {"bs-alove.xb", "c64", "c64 80x59 false 4500d3800282"},
+		{"bs-alove.adf", "atari", "atari 80x59 false 403dd1fc8392"}, {"bs-alove.adf", "uni", "uni 80x59 true 0b617e56d5ed"},
+	} {
+		a := testApp(t, "pc") // (temp data folders: restart keeps the ones it finds)
+		a.openPath(filepath.Join("testdata", "alove", c.file), "auto")
+		a.hasC64 = true
+		a.setMode(c.mode)
+		h := sha1.New()
+		for _, v := range a.doc.cells[:a.doc.cols*a.doc.rows] {
+			binary.Write(h, binary.LittleEndian, v)
+		}
+		if got := fmt.Sprintf("%s %dx%d %v %x", a.mode, a.doc.cols, a.doc.rows, a.dirty, h.Sum(nil)[:6]); got != c.want {
+			t.Errorf("%s as %s: %s, before layers %s", c.file, c.mode, got, c.want)
+		}
+	}
+	p := filepath.Join("testdata", "alove", "bs-alove.bin")
+	// a page of layers, unchanged (its layers came back from the side file)
+	c := testApp(t, "pc")
+	c.openPath(p, "auto")
+	c.newLayer(false)
+	c.doc.set(1, 1, makeCell('L', 3, 0, 0))
+	q := filepath.Join(t.TempDir(), "art.ans")
+	if !c.writeOut(q, "ansi") {
+		t.Fatal(c.message)
+	}
+	d := restart(t, "pc")
+	d.openPath(q, "auto")
+	if d.nLayers() != 2 || d.dirty {
+		t.Fatalf("side file: %d layers, dirty %v", d.nLayers(), d.dirty)
+	}
+	d.setMode("amiga")
+	if d.mode != "amiga" || d.nLayers() != 2 || cellCh(d.seen().get(1, 1)) != 'L' {
+		t.Fatalf("layers: %s, %d layers", d.mode, d.nLayers())
 	}
 }

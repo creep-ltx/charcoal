@@ -441,7 +441,8 @@ below**: its letters keep their colour and the background below shows under them
   one (on the current one: rename it), buttons for New, Copy, Up, Down, Merge, Delete, Black, and the other
   layers shown, dim or hidden. The status line says which layer you are on.
 - **Lock** a layer (the panel's Lock button, Page > Lock the layer) and no tool changes it: drawing, typing, fills,
-  pasting and Delete say it is locked. Width, height and rows still change every layer. IcyDraw's lock is read
+  pasting and Delete say it is locked. A hidden layer takes no drawing either (as in IcyDraw); Select and Pick
+  still work. Width, height and rows still change every layer. IcyDraw's lock is read
   and written.
 - Pick takes the colours you see; Copy copies the current layer, **Edit > Copy what is seen** the picture.
 - Width, height, rows and columns change every layer; undo covers all of it (undoing an edit of another layer
