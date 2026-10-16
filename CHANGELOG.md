@@ -2,7 +2,7 @@
 
 Each version's section is also its release page on GitHub. Newest first.
 
-## Unreleased
+## 0.1b13 (2026-10-16)
 
 - **Wide characters on Unicode pages:** Chinese, Japanese and Korean characters, fullwidth forms and emoji take
   two cells, as in a terminal. Type them (an input method works too), paste them, or pick them from the new kana,
