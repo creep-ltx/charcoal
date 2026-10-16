@@ -9,7 +9,7 @@ Thousands of real art files, opened, checked, saved and opened again (`bigcheck_
      .seq from `github.com/sblendorio/petscii-bbs`; ATASCII from breakintochat.com/collections/atascii.
    - Unzip only the art (`unzip -j '*.ans' '*.asc' '*.bin' '*.xb' '*.nfo' '*.diz' '*.txt' ...`).
    - `fetch-asciiarena.sh`: 600 releases from asciiarena.se (its sitemap; files are at
-     `/collections/<name>/<file>`). `copy-local.sh`: ~/Amiga/BBS/BBS Style and the PETSCII on the NAS.
+     `/collections/<name>/<file>`). `copy-local.sh BBS_STYLE_DIR PETSCII_DIR`: a local folder of BBS art and the PETSCII on the NAS.
    - **Not csdb.dk**: its robots.txt forbids Claude's agents (ClaudeBot, Claude-User, anthropic-ai).
 2. `BIGCHECK_DIR=/tmp/bigcheck/files go test -tags bigcheck -run BigCheck -timeout 25m -v`
 3. Read `/tmp/bigcheck/report.txt`; `/tmp/bigcheck/samples/` has a PNG of every 25th file for a contact sheet.

@@ -321,10 +321,10 @@ Each step is one commit and shippable on its own. Tests use `testApp`, with XDG 
 After each step, update HANDOFF.md and tick roadmap Step 2.1.
 
 ### Critical files for implementation
-- /home/creep/Projects/Charcoal/editor.go (`Tab`, `Snap`, `pushUndo`/`restore`/`doUndo`, `reparse`, `loadBytes`, `openTTISubpages`, `encode`, `writeOut`, `Play`/`playStep`)
-- /home/creep/Projects/Charcoal/view.go (`drawWindow` layout for the strip, `drawPage` onion, `drawStatus`)
-- /home/creep/Projects/Charcoal/export.go (`writeMarq`/`parseMarq`, `writePetmate`/`parsePetmate`, the PNG render to factor out)
-- /home/creep/Projects/Charcoal/teletext.go (`ttiSubpages`, `ttiReplaceSubpage`, `writeTTISubpage`, new `ttiHead`/`writeTTIFrames`)
-- /home/creep/Projects/Charcoal/autosave.go (`autosaveMeta`, `writeAutosave`, `restoreAutosave`)
-- Also: /home/creep/Projects/Charcoal/keys.go (the Frames action block), /home/creep/Projects/Charcoal/core.go (`Term` `beforeClear`, a new `beforeHome`), /home/creep/Projects/Charcoal/pet.go, /home/creep/Projects/Charcoal/atari.go, /home/creep/Projects/Charcoal/st.go (split hooks), /home/creep/Projects/Charcoal/tti_subpages_test.go (to rewrite)
+- editor.go (`Tab`, `Snap`, `pushUndo`/`restore`/`doUndo`, `reparse`, `loadBytes`, `openTTISubpages`, `encode`, `writeOut`, `Play`/`playStep`)
+- view.go (`drawWindow` layout for the strip, `drawPage` onion, `drawStatus`)
+- export.go (`writeMarq`/`parseMarq`, `writePetmate`/`parsePetmate`, the PNG render to factor out)
+- teletext.go (`ttiSubpages`, `ttiReplaceSubpage`, `writeTTISubpage`, new `ttiHead`/`writeTTIFrames`)
+- autosave.go (`autosaveMeta`, `writeAutosave`, `restoreAutosave`)
+- Also: keys.go (the Frames action block), core.go (`Term` `beforeClear`, a new `beforeHome`), pet.go, atari.go, st.go (split hooks), tti_subpages_test.go (to rewrite)
 - New files: frames.go, anim.go (GIF), apng.go, frames_test.go

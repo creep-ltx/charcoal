@@ -142,7 +142,7 @@ type randomScreen struct {
 	how  string
 }
 
-// randomScreens: what each board does (~/Projects/Knowledge/bbs/screens-variants-utf8-wide.md).
+// randomScreens: what each board does (the knowledge base, bbs/screens-variants-utf8-wide.md).
 var randomScreens = map[string]*randomScreen{
 	// Ami-Express 5 (express.e processMciCmd "SR_"): "~<n>SR_<path>NAME|" in a
 	// screen shows <path>NNN.NAME (+ .TXT or the caller's screen ending,

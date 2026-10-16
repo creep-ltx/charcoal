@@ -2,7 +2,7 @@
 
 The goal (the user, 2026-10-13): Charcoal is what a text artist picks, whatever machine they draw for.
 
-Based on two surveys made 2026-10-13: ~/Projects/Knowledge/bbs/text-art-platforms-and-tools.md (which
+Based on two surveys made 2026-10-13: the knowledge base (bbs/text-art-platforms-and-tools.md) (which
 scenes are alive, which tools they use, what artists ask for in issue trackers) and a review of Charcoal
 against each platform's best editor. Each step says what it wins.
 

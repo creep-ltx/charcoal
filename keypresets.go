@@ -5,7 +5,7 @@ package main
 // Keys like writes it); the file's own lines still win over it.
 //
 // Each preset gives some actions that editor's keys (read from its source or
-// manual: ~/Projects/Knowledge/bbs/text-art-editor-keys.md). An action it does not
+// manual: the knowledge base, bbs/text-art-editor-keys.md). An action it does not
 // name keeps CharEdit's key, unless the preset gave that key to another action:
 // then it has no key (the keys file can give it one). What cannot be matched:
 // plain letters (Moebius's and PabloDraw's block keys M C F E S R X Y T U O while a

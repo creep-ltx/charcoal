@@ -22,7 +22,7 @@ the real ones:
   `run_server`). `icydraw-collabsrv.rs` is an example program for it: copy it to
   `crates/icy_engine_edit/examples/collabsrv.rs` in an icy_tools checkout, then
   `cargo fetch` and `cargo build --offline --release -p icy_engine_edit --example
-  collabsrv` (in a sandbox: ~/Projects/Knowledge/amiga/text-art-editor-formats.md).
+  collabsrv` (in a sandbox: the knowledge base, amiga/text-art-editor-formats.md).
   `TestCollabIcyDrawServer` joins it.
 
 Everything listens on 127.0.0.1 only. Run under a memory cap:

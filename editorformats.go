@@ -7,7 +7,7 @@ package main
 //
 // Each writer was checked against the reader of the program it is for (or the
 // readers that show its files: ansilove, IcyDraw); the traps are in the comments
-// and in ~/Projects/Knowledge/amiga/ansi-art-real-world-traps.md.
+// and in the knowledge base (amiga/ansi-art-real-world-traps.md).
 
 import (
 	"bytes"

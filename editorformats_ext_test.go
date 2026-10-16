@@ -10,7 +10,7 @@ package main
 //
 // ccdump is a small program on IcyDraw's engine (icy_tools, crates/icy_engine)
 // that prints the cells of a file as IcyDraw reads them; see the knowledge note
-// ~/Projects/Knowledge/amiga/text-art-editor-formats.md for how it was built (in a
+// the knowledge base (amiga/text-art-editor-formats.md) for how it was built (in a
 // sandbox without network).
 
 import (

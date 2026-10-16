@@ -21,10 +21,10 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
   0.1b8's first tag failed in CI on exactly that), after merges touching readers the big check (tools/bigcheck)
   compared with the previous report, and for machine programs `CHARCOAL_EMU=1 go test -run TestEmu .`.
 - **How the user wants work done:** showy new features are built on a local branch (git worktrees, never pushed),
-  shown first (a video on the NAS /mnt/nas/home/*.mp4 and screenshots opened with Read: they show on the user's
+  shown first (a video on the NAS and screenshots opened with Read: they show on the user's
   phone), released only after the user says yes. Several helpers in parallel worktrees, then one local integration
   branch, then the full test run and the big check on the combination (it caught a real clash twice: see
-  ~/Projects/Knowledge/claude-code/parallel-helpers-in-worktrees.md).
+  the knowledge base, claude-code/parallel-helpers-in-worktrees.md).
 - **Who uses it:** the user posts Charcoal in the Ami-Express Sysops Facebook group. Smolly Danders (a sysop, not an
   artist, colours art in Moebius) asked for the animation templates ("exactly that"). Sysops want: effects that
   play on the board (BBS pauses), small files, whole folders at once.
@@ -194,7 +194,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   BBS, Copies (ids, comma separated), Hold, Every, Pause (autosave/undo with the order). `writeOut` writes the
   copies (`copyPath`: name-<id>.ext) and a status note. Animate: `drawPauses`. Tests: `bbspause_test.go`, a
   model of each board's display code (from its source) gives the plain stream's bytes and the asked time.
-  Codes per board and how they were established: ~/Projects/Knowledge/bbs/ansi-draw-order-animation.md.
+  Codes per board and how they were established: the knowledge base (bbs/ansi-draw-order-animation.md).
   Not tried on a real board yet (the user's Ami-Express next).
 - Not done: reading a draw order back from a file (it opens as the picture; the order is not recognised), Amiga
   real-terminal check, TheDraw's own animation editing (limiting, markers, include files, pauses).
@@ -224,7 +224,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Verified: `editorformats_test.go` (round trips, models of ansilove's and IcyDraw's idf/tnd readers, files
   IcyDraw 0.6 wrote in `testdata/icydraw`, Playscii's hello1.psci, CharEdit save/open/Ctrl+S); external
   `editorformats_ext_test.go`: ansilove renders .idf/.adf pixel-identical to CharEdit (+ SAUCE), .tnd colours;
-  IcyDraw's engine (ccdump, built in a bwrap sandbox: ~/Projects/Knowledge/amiga/text-art-editor-formats.md)
+  IcyDraw's engine (ccdump, built in a bwrap sandbox: the knowledge base, amiga/text-art-editor-formats.md)
   reads all five PC formats cell for cell; Playscii's own art.py loader reads the .psci tiles/frames/delays.
   `FuzzEditorFormats` (2.8M execs) and FuzzParsers (60 s; it stalls at 0/sec for long stretches on main too).
 - Not done: IcyDraw Viewdata pages (PETSCII/ATASCII/ST: done 2026-10-16, see "The rest of other editors' files"), sixel layers, layer effects, tags; Playscii xform
@@ -249,7 +249,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   Reverse/Flip (Toggles), the effect's seed. So the same seed and the same folder give the same bytes (test).
 - Versions (`variantNames`, `randomScreens`): Ami-Express `001.NAME.ext` ... + `NAME.ext` = `~<n>SR_<AEPath>NAME|`;
   Mystic `name.ans`, `name.an1`..`.an8` (9 at most); Synchronet `name.ans`, `name1.ans` ...; others `NAME-2.ext`.
-  How each was established: ~/Projects/Knowledge/bbs/screens-variants-utf8-wide.md. Copies for other boards are
+  How each was established: the knowledge base (bbs/screens-variants-utf8-wide.md). Copies for other boards are
   named their board's way + `-<id>` (copyPath).
 - Skipped with a reason: not art (`batchNotArt`: notArt's magics, Amiga icons, .bak, C source, no art ending and
   no ESC[), unreadable, ROMs missing for PETSCII, teletext/Spectrum, several screens, already an animation
@@ -415,7 +415,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   `CHARCOAL_BBS_FILES`, default /tmp/charcoal-bbs): IcyDraw's benches/data Members01 in .pcb/.avt/.an1/.msg give
   one page (`TestBBSCodesIcyDrawMembers`; IcyDraw writes @ as @@ in Ctrl-A, let off), Synchronet's text/menu
   (85 Ctrl-A files, every board's look) and WWIV's install/gfiles round-trip (`TestBBSCodesRealFiles`). Fuzz:
-  every kind in FuzzParsers. How to fetch them and the board facts: the knowledge note on BBS colour codes in ~/Projects/Knowledge/bbs/.
+  every kind in FuzzParsers. How to fetch them and the board facts: the knowledge note on BBS colour codes in the knowledge base (bbs/).
 - Not done: PCBoard's @X00/@XFF save/restore (pcformats.go reads them as colours);
   Telegard's backtick codes; Renegade's ^0-^9 user colours and Mystic's |T0-|T9 theme colours (shown as text);
   Animate a folder counts a codes file as "other" (written as .ans with ANSI colours).
@@ -1228,7 +1228,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   passed on rebuilt from the checked values with the guest's real id (never the id it sent); CURSOR/SELECTION/
   OPERATION/HIDE/ROTATE/FLIP/STATUS passed on; PASTE_AS_SELECTION checked cell by cell; CHAT cleaned, kept 32.
   Web viewers (no nick) are refused when there is a password (Moebius lets them watch) and never draw.
-- Untrusted input (~/Projects/Knowledge/go/untrusted-input-traps.md): read limits 48 MB (the page on joining,
+- Untrusted input (the knowledge base, go/untrusted-input-traps.md): read limits 48 MB (the page on joining,
   2M cells of runs that never repeat) and 16 MB per guest message; `collabMaxCells` 2M, 1000 columns; strings
   through `clean` (no control characters, nicks 32 runes, chat 1000, SAUCE fields 35/20/20 trimmed of the record's
   space padding: `sauceField`); 32 guests; a guest that does not log in within 30 s is closed; a connection that
@@ -1263,7 +1263,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   KEYS list (`keysHelp`) and the keys file (`~/.config/charcoal/keys` on Linux) (written with the defaults the first time; bad lines are
   skipped with a status-line message; a key the file gives an action is taken from the others' defaults). Status
   hints name keys with `keyName(id)` so they follow the file. Only the left Alt is Alt (AltGr types).
-- Defaults follow Moebius/PabloDraw/TheDraw (survey: ~/Projects/Knowledge/bbs/text-art-editor-keys.md): Ctrl+arrows
+- Defaults follow Moebius/PabloDraw/TheDraw (survey: the knowledge base, bbs/text-art-editor-keys.md): Ctrl+arrows
   colours, Ctrl/Alt+0-7, Ctrl+F1-F10 sets, Alt+arrows rows/columns, Alt+U, Ctrl+D, Ctrl+Shift+X, Ctrl+K, Ctrl+I;
   tools Alt+T/D/K/L/P/S/B. Fit width moved to Ctrl+9. Alt+F fills the selection (no selection: Fill tool).
 - Autosave (`autosave.go`): every 2 minutes, dirty tabs to `<data dir>/autosave/<id>.cells` (appDataDir) (raw cells,
@@ -1307,7 +1307,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   repeat a CharEdit default do not override a preset, since the first-run file lists every default);
   `setKeyPreset` (Settings > Keys like, `drawKeysLike`) rewrites the line, keeps the rest, old file in keys.bak.
   Tests: `TestDefaultKeysHaveNoClashes` runs every preset, `TestKeyPresets`.
-- Moebius facts (verified by running its code): ~/Projects/Knowledge/bbs/moebius-file-format.md.
+- Moebius facts (verified by running its code): the knowledge base (bbs/moebius-file-format.md).
 
 ## Start screen (2026-10-14)
 
@@ -1395,7 +1395,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   charcoal/prefs.json holding `"c64asked": true` (no first-run requester), `width`/`height`, `theme`, `ui_layout`.
   An 80-column page at 2x needs about 1720 pixels of window in the Studio layout.
 - Sources: 16colo.rs packs and tags, asciiarena.se (sitemap; files at /collections/<name>/<file>),
-  ~/Amiga/BBS/BBS Style (412 files), NAS /mnt/nas/home/Unsorted/Junk/Latex/Petscii* (with the PETSCII editor's
+  a folder of real BBS art (412 files), the PETSCII folders on the NAS (with the PETSCII editor's
   own PNGs: rendering is pixel-identical). **Not csdb.dk and not zxart.ee files: their robots.txt forbid it.**
 
 ## Windows and Mac (built 2026-10-14)
@@ -1434,9 +1434,9 @@ The goal and the plan: docs/roadmap.md (the go-to editor for text artists on eve
 
 ## Where the knowledge is
 
-- ~/Projects/Knowledge/amiga/ansi-art-real-world-traps.md: sources, robots rules, all the format traps
+- The knowledge base, amiga/ansi-art-real-world-traps.md: sources, robots rules, all the format traps
   (0x1A in art, .bin width, BIOS colour order, page height, Amiga vs PC, ATASCII, teletext, Petmate .prg).
-- ~/Projects/Knowledge/bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
-- ~/Projects/Knowledge/go/sdl2-desktop-gui.md: the GUI approach and headless testing.
+- The knowledge base, bbs/petscii-seq.md: PETSCII/.seq, C64 screens, ATASCII and ST notes.
+- The knowledge base, go/sdl2-desktop-gui.md: the GUI approach and headless testing.
 
 Last updated 2026-10-14 (0.1b7 released; "Now" section at the top).
