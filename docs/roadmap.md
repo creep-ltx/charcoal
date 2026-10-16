@@ -76,9 +76,11 @@ against each platform's best editor. Each step says what it wins.
 - **Runs on the machine**: C64 .prg (done) and .d64 (done 2026-10-16), Atari .xex, Spectrum .tap, a matching screenshot PNG
   with the border.
   - [x] Atari .xex and a boot .atr (2026-10-16, atari8.go): the page in its colour registers and font on any
-    400/800/XL/XE, checked in a 6502 + ANTIC model against the PNG pixel for pixel; not yet run in an emulator.
+    400/800/XL/XE, checked in a 6502 + ANTIC model against the PNG pixel for pixel.
   - [x] Spectrum .tap (2026-10-16, zxtap.go): BASIC loader + SCREEN$, blocks checked byte for byte; any tape's
-    SCREEN$ opens. Not yet run in an emulator (no fuse here).
+    SCREEN$ opens.
+  - [x] Run in real emulators (2026-10-16, emu_test.go, tools/emucheck): C64 .prg/.d64 in VICE, Atari .xex/.atr in
+    atari800, Spectrum .tap in Fuse, CPC .dsk in MAME; every screen pixel for pixel as the PNG export. No writer bug found.
 
 ## Step 4: PC artists feel at home (the biggest group)
 
@@ -109,13 +111,12 @@ against each platform's best editor. Each step says what it wins.
   - [x] **C64 beyond PETSCII** (2026-10-16, c64x*.go): multicolour and ECM pages drawn as the VIC-II shows them
     (Screen, MC/BG gadgets), custom character sets (.64c/.bin, CharPad .ctm v5-v9 as a font or a page, pixel
     pairs in the font editor), CharEdit's own .prg (set at $2000, VIC registers) and .d64, the ACME source and
-    BASIC listing with sets and modes. Later: DirArt, a run in VICE (not installed here; checked in a 6502 and
-    by ACME), CharPad .ctm writing, Petmate files with modes.
+    BASIC listing with sets and modes; [x] run in VICE (2026-10-16). Later: DirArt, CharPad .ctm writing, Petmate files with modes.
 - [x] **Amstrad CPC (AMSCII)** (done 2026-10-16, cpc.go): mode 1 40x25 4 inks, mode 0 20x25 16 inks, mode 2
   80x25 2 inks; the 27 colours, inks and border in the Colours panel; the ROM font built in (Amstrad's
   permission, as the Spectrum's); .bin that runs on a CPC, .dsk, Playscii .psci with Logiker's exporter; reads
-  the exporter's files (all 2024 compo entries, pixel-identical to their Caprice Forever screenshots). Later: a
-  real-CPC/emulator run of CharEdit's .bin, Caprice's 768x544 screenshot size, play the stream, custom
+  the exporter's files (all 2024 compo entries, pixel-identical to their Caprice Forever screenshots). [x] CharEdit's .bin run in MAME (2026-10-16).
+  Later: a real-CPC run, Caprice's 768x544 screenshot size, play the stream, custom
   characters (SYMBOL, not allowed in the compos).
 - **Spectrum**: UDG/charset editing; attributes-only painting.
 - [x] **Atari 8-bit** (2026-10-16, gtia.go, atari8.go): the real OS ROM font when present, the 128-colour palette

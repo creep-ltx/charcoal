@@ -617,6 +617,12 @@ opens it as tall as it is.
 GitHub and the Break Into Chat ATASCII collection. All open, all with a known type get the right page type, all
 come back cell for cell after saving in their own format.
 
+The files that run on a machine were run in emulators (`emu_test.go`, `tools/emucheck/`, 2026-10-16): C64
+`.prg`/`.d64` (every mode, own sets, both cases) in VICE, Atari `.xex`/`.atr` (38/40 columns, ROM and own font,
+800XL and 800) in atari800, Spectrum `.tap` in Fuse, Amstrad CPC `.bin` on a `.dsk` (modes 0-2) in MAME. Each
+emulator's screen is CharEdit's PNG export pixel for pixel, border included (the colours as each emulator's
+palette has them).
+
 ## Files
 
 | Path | What |
