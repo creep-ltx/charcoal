@@ -72,6 +72,9 @@ func loadPrefs() {
 	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper", "atari": "atari", "st": "st8x8", "zx": "zx", "tt": "zx"}
 	a.defFont["uni"] = "univga"
 	a.defFont["mt"], a.defFont["vd"] = "minitel", "zx"
+	if fontByID("atarirom") != nil {
+		a.defFont["atari"] = "atarirom" // the machine's own ROM font when there is a ROM (the user's choice, 2026-10-16)
+	}
 	for k, v := range prefs.Font {
 		a.defFont[k] = v
 	}

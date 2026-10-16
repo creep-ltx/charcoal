@@ -453,6 +453,10 @@ func TestMachAtariROMFont(t *testing.T) {
 		t.Fatalf("ROM fonts not found (%q)", p)
 	}
 	a := testApp(t, "atari")
+	loadPrefs() // as at start: the defaults, after loadAtariROMFonts (main.go)
+	if a.defFont["atari"] != "atarirom" {
+		t.Fatalf("with a ROM the Atari page's default font is %q, want the ROM's", a.defFont["atari"])
+	}
 	a.fontFor["atari"] = "atarirom"
 	if a.atariProgramFont() != nil {
 		t.Fatal("the ROM's own font must not go in the file")
