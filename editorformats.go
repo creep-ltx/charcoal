@@ -291,13 +291,65 @@ func isXP(name string, b []byte) bool {
 // above shows unless its background is REXPaint's transparent pink).
 func parseXP(b []byte) (*Doc, XBinInfo, error) {
 	var info XBinInfo
+	layers, w, h, err := xpRaw(b)
+	if err != nil {
+		return nil, info, err
+	}
+	cells := xpMerge(layers, w, h)
+	d, pal := rgbDoc(w, h, cells)
+	info.pal, info.ice, info.cellH = pal, true, 16
+	return d, info, nil
+}
+
+// xpLayer is a REXPaint layer as stored: its size and cells column by column.
+type xpLayer struct {
+	w, h int
+	data []byte
+}
+
+// cell is cell i (in the file's order) of a layer: where it is, and whether it is REXPaint's transparent.
+func (l xpLayer) cell(i int) (x, y int, c rgbCell, clear bool) {
+	x, y = i/l.h, i%l.h
+	d := l.data[i*10:]
+	fg := uint32(d[4])<<16 | uint32(d[5])<<8 | uint32(d[6])
+	bg := uint32(d[7])<<16 | uint32(d[8])<<8 | uint32(d[9])
+	return x, y, rgbCell{byte(min(255, binary.LittleEndian.Uint32(d))), fg, bg}, bg == xpTransparent
+}
+
+// xpMerge puts a REXPaint image's layers together (a cell of a layer above shows
+// unless its background is REXPaint's transparent pink).
+func xpMerge(layers []xpLayer, w, h int) []rgbCell {
+	cells := make([]rgbCell, w*h)
+	for i := range cells {
+		cells[i] = rgbCell{' ', 0xAAAAAA, 0}
+	}
+	for k, l := range layers {
+		for i := 0; (i+1)*10 <= len(l.data); i++ {
+			x, y, c, clear := l.cell(i)
+			if y >= h {
+				continue
+			}
+			if clear {
+				if k > 0 {
+					continue
+				}
+				c.bg = 0
+			}
+			cells[y*w+x] = c
+		}
+	}
+	return cells
+}
+
+// xpRaw reads a REXPaint image's layers and the size of the page they make.
+func xpRaw(b []byte) ([]xpLayer, int, int, error) {
 	zr, err := gzip.NewReader(bytes.NewReader(b))
 	if err != nil {
-		return nil, info, fmt.Errorf("not a REXPaint image: %v", err)
+		return nil, 0, 0, fmt.Errorf("not a REXPaint image: %v", err)
 	}
 	raw, err := io.ReadAll(io.LimitReader(zr, 64<<20)) // 6.7M cells at most
 	if err != nil && len(raw) == 0 {
-		return nil, info, fmt.Errorf("the REXPaint image is damaged: %v", err)
+		return nil, 0, 0, fmt.Errorf("the REXPaint image is damaged: %v", err)
 	}
 	i32 := func(o int) int {
 		if o+4 > len(raw) {
@@ -307,54 +359,26 @@ func parseXP(b []byte) (*Doc, XBinInfo, error) {
 	}
 	n := i32(4)
 	if n < 1 || n > 16 {
-		return nil, info, fmt.Errorf("not a REXPaint image (%d layers)", n)
+		return nil, 0, 0, fmt.Errorf("not a REXPaint image (%d layers)", n)
 	}
-	type layer struct {
-		w, h int
-		data []byte
-	}
-	var layers []layer
+	var layers []xpLayer
 	o, w, h := 8, 0, 0
 	for k := 0; k < n; k++ {
 		lw, lh := i32(o), i32(o+4)
 		if lw < 1 || lh < 1 || lw > 4096 || lh > 4096 || lw*lh > maxPageCells {
-			return nil, info, fmt.Errorf("a REXPaint layer of %dx%d", lw, lh)
+			return nil, 0, 0, fmt.Errorf("a REXPaint layer of %dx%d", lw, lh)
 		}
 		o += 8
 		size := lw * lh * 10
 		if o+size > len(raw) {
-			return nil, info, fmt.Errorf("the REXPaint image is cut short")
+			return nil, 0, 0, fmt.Errorf("the REXPaint image is cut short")
 		}
-		layers = append(layers, layer{lw, lh, raw[o : o+size]})
+		layers = append(layers, xpLayer{lw, lh, raw[o : o+size]})
 		o += size
 		w, h = max(w, lw), max(h, lh)
 	}
 	h = min(h, maxRowsFor(w))
-	cells := make([]rgbCell, w*h)
-	for i := range cells {
-		cells[i] = rgbCell{' ', 0xAAAAAA, 0}
-	}
-	for k, l := range layers {
-		for i := 0; i+10 <= len(l.data); i += 10 {
-			x, y := i/10/l.h, i/10%l.h
-			if y >= h {
-				continue
-			}
-			c := l.data[i:]
-			fg := uint32(c[4])<<16 | uint32(c[5])<<8 | uint32(c[6])
-			bg := uint32(c[7])<<16 | uint32(c[8])<<8 | uint32(c[9])
-			if bg == xpTransparent {
-				if k > 0 {
-					continue
-				}
-				bg = 0
-			}
-			cells[y*w+x] = rgbCell{byte(min(255, binary.LittleEndian.Uint32(c))), fg, bg}
-		}
-	}
-	d, pal := rgbDoc(w, h, cells)
-	info.pal, info.ice, info.cellH = pal, true, 16
-	return d, info, nil
+	return layers, w, h, nil
 }
 
 // ---------------------------------------------------------------- IcyDraw
@@ -460,7 +484,10 @@ type icyCell struct {
 }
 
 type icyLayer struct {
-	mode       byte // 0 normal, 1 characters only, 2 colours only
+	title      string  // version 1: the layer's title (layers.go keeps it as the name)
+	colour     [4]byte // version 1: its colour (RGBA), written back
+	flags      uint32  // version 1: its flags as they were, written back
+	mode       byte    // 0 normal, 1 characters only, 2 colours only
 	visible    bool
 	alpha      bool
 	group      bool
@@ -782,12 +809,14 @@ func parseIcyDraw(b []byte) (*icyDoc, error) {
 }
 
 func icyLayerV1(b []byte, room int) (*icyLayer, error) {
-	_, b, err := icyStr(b)
+	title, b, err := icyStr(b)
 	if err != nil || len(b) < 25 {
 		return nil, fmt.Errorf("an IcyDraw layer is cut short")
 	}
-	l := &icyLayer{mode: b[0]}
+	l := &icyLayer{mode: b[0], title: title}
+	copy(l.colour[:], b[1:5])
 	flags := binary.LittleEndian.Uint32(b[5:])
+	l.flags = flags
 	l.visible, l.alpha = flags&1 != 0, flags&8 != 0
 	l.x, l.y = int(int32(binary.LittleEndian.Uint32(b[9:]))), int(int32(binary.LittleEndian.Uint32(b[13:])))
 	l.w, l.h = int(int32(binary.LittleEndian.Uint32(b[17:]))), int(int32(binary.LittleEndian.Uint32(b[21:])))
@@ -1367,6 +1396,7 @@ type psciPage struct {
 	ice           bool
 	own           *psciOwn // a PC page's own Playscii charset and palette (psciown.go)
 	stPal         string   // an ST page's Playscii palette (its file's; psciown.go)
+	lays          []Layer  // a page of layers (one frame): every layer, docs[0] being the page (layers_formats.go)
 }
 
 // psciNearest is the Playscii colour (1..) nearest to c.
@@ -1469,6 +1499,10 @@ func writePsci(docs []*Doc, holds []int, p psciPage) (out []byte, missed int) {
 		hold := 100
 		if i < len(holds) && holds[i] > 0 {
 			hold = holds[i]
+		}
+		if p.lays != nil { // every layer (layers_formats.go)
+			f.Frames = append(f.Frames, psciFrame{Delay: float64(hold) / 1000, Layers: psciLayersOut(p.lays, d, w, h, tile)})
+			continue
 		}
 		l := psciLayer{Name: "Layer 1", Tiles: make([]psciTile, 0, w*h)}
 		one := 1.0
@@ -1952,6 +1986,9 @@ func (a *App) loadEditor(b []byte, name, path, as string) bool {
 	}
 	a.srcKind = kind
 	a.finishLoad(b, name, path, nil, kind)
+	if a.layers != nil { // its layers kept (layers_formats.go)
+		note = fmt.Sprintf("%d layers (%s / %s go through them)", len(a.layers), keyName("layer_above"), keyName("layer_below"))
+	}
 	if kind == "icy" {
 		a.icyAfterLoad() // a PETSCII page's own character set (icymach.go)
 	}
@@ -1998,6 +2035,7 @@ func (a *App) reparseEditor() bool {
 		}
 		if d, _, _, err := parseEditorPC(a.srcKind, a.source); err == nil {
 			a.doc = d
+			a.fileLayers() // its layers, when CharEdit's layers show them as they are (layers_formats.go)
 		}
 	case "psci":
 		art, err := parsePsci(a.source)
@@ -2022,6 +2060,9 @@ func (a *App) reparseEditor() bool {
 		if art.msx != nil {
 			a.msxSet = *art.msx
 			a.msxBrushColours()
+		}
+		if len(art.docs) == 1 {
+			a.fileLayers() // its layers, when CharEdit's layers show them as they are (layers_formats.go)
 		}
 	case "pd", "td", "bsv":
 		a.othReparse() // othformats.go
@@ -2091,8 +2132,16 @@ func (a *App) encodeEditor(fmtID string, d *Doc) (out []byte, ok bool, err error
 			out = mach
 			break
 		}
+		if a.layers != nil && (a.pc() || a.amiga()) { // every layer (layers_formats.go)
+			out = writeIcyLayers(a.Tab, d, a.pal, a.font(), a.ice, img)
+			break
+		}
 		out = writeIcy(d, a.pal, a.font(), a.ice, img)
 	case "xp":
+		if a.layers != nil { // every visible layer (layers_formats.go)
+			out = a.writeXPLayers(d)
+			break
+		}
 		out = writeXP(d, a.pal, a.ice)
 	case "psci":
 		a.keepCase()
@@ -2105,7 +2154,7 @@ func (a *App) encodeEditor(fmtID string, d *Doc) (out []byte, ok bool, err error
 			}
 		}
 		var missed int
-		out, missed = writePsci(docs, holds, psciPage{mode: a.mode, machine: a.machine, lower: a.lower(), pal: a.pal, ice: a.ice, own: a.psciOwnOf(), stPal: a.psciSTPalette()})
+		out, missed = writePsci(docs, holds, psciPage{mode: a.mode, machine: a.machine, lower: a.lower(), pal: a.pal, ice: a.ice, own: a.psciOwnOf(), stPal: a.psciSTPalette(), lays: a.psciLayersOf(d)})
 		if missed > 0 {
 			a.msg(fmt.Sprintf("%d cells have characters Playscii's charset has not: written as spaces", missed))
 		}

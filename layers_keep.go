@@ -4,8 +4,7 @@ package main
 // saved from a page of layers). The side file is the work stages' idea
 // (stages.go): <data dir>/layers/<sha1 of the path>.json holds the layers with
 // the SHA-1 of the bytes written; opening the file takes them back only if it
-// still has those bytes, reads as the same page type and size, and looks as
-// the layers put together do.
+// still has those bytes and reads as the same page type and width.
 
 import (
 	"encoding/json"
@@ -48,7 +47,7 @@ func layersSideFile(path string) string {
 // written as fmtID); a page of one layer, or a format that keeps layers itself,
 // removes an old side file instead.
 func writeLayersFile(t *Tab, path string, data []byte, fmtID string) error {
-	if t.layers == nil || layersFormats[fmtID] {
+	if t.layers == nil || layersKeptBy(fmtID, t.mode) {
 		os.Remove(layersSideFile(path))
 		return nil
 	}
@@ -94,14 +93,17 @@ func readLayersFile(p string) (*layersFile, []Layer, error) {
 	return &f, ls, nil
 }
 
-// sameLook: two pages look the same (cell for cell, or both empty there).
+// sameLook: two pages of one width look the same (cell for cell, or both
+// empty there; a row past the end of one is empty).
 func sameLook(x, y *Doc) bool {
-	if x.cols != y.cols || x.rows != y.rows {
+	if x.cols != y.cols {
 		return false
 	}
-	for i, v := range x.cells[:x.cols*x.rows] {
-		if w := y.cells[i]; v != w && !(x.blankAt(v) && y.blankAt(w)) {
-			return false
+	for r := range max(x.rows, y.rows) {
+		for c := range x.cols {
+			if v, w := x.get(c, r), y.get(c, r); v != w && !(x.blankAt(v) && y.blankAt(w)) {
+				return false
+			}
 		}
 	}
 	return true
@@ -118,9 +120,12 @@ func (a *App) restoreLayersFile(path string, b []byte) {
 		return
 	}
 	cur := ls[f.Lay].doc
-	cur.ensureRows(a.doc.rows)
+	cur.ensureRows(max(a.doc.rows, f.Layers[0].Pic.Rows))
 	layerFields(cur, a.doc)
-	if cur.cols != a.doc.cols || !sameLook(flatten(ls, f.Lay, cur), a.doc) {
+	// The bytes are the ones written from these layers, read as the same page
+	// type and width: the page is them put together (as far as the format keeps
+	// cells: an ATASCII file has no colours in them, so cells are not compared).
+	if cur.cols != a.doc.cols {
 		return
 	}
 	a.layers, a.lay, a.doc = ls, f.Lay, cur.clone()
@@ -128,12 +133,9 @@ func (a *App) restoreLayersFile(path string, b []byte) {
 	a.msg(fmt.Sprintf("Opened %s with its %d layers", filepath.Base(path), len(ls)))
 }
 
-// layersFormats are the formats that keep a page's layers themselves (layers_formats.go).
-var layersFormats = map[string]bool{}
-
 // layersSaveNote is what saving a page of layers in a format of one picture adds to the message.
 func (t *Tab) layersSaveNote(fmtID string, own bool) string {
-	if t.layers == nil || layersFormats[fmtID] {
+	if t.layers == nil || layersKeptBy(fmtID, t.mode) {
 		return ""
 	}
 	hidden := 0

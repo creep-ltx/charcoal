@@ -26,6 +26,7 @@ type checkResult struct {
 	problem          string
 	rows, cols       int
 	frames           int
+	layers           int // the layers the file opened with (layers_formats.go)
 	split            int // pictures a stream file shows, cut at its clears
 	took             time.Duration
 }
@@ -82,7 +83,8 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 	a.tabs, a.Tab, a.message = nil, nil, ""
 	a.focusTab(a.newTab("amiga"))
 	a.loadBytes(b, filepath.Base(path), path, "auto")
-	res.mode, res.rows, res.cols = a.mode, a.doc.usedRows(), a.doc.cols
+	res.mode, res.rows, res.cols = a.mode, a.seen().usedRows(), a.doc.cols // a page of layers: as seen (layers.go)
+	res.layers = a.nLayers()
 	if strings.Contains(a.message, ", not art") {
 		res.mode = "not art"
 		return // an archive or a program: rightly not opened
@@ -106,7 +108,7 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 		res.problem = strings.TrimSpace(res.problem + " empty page")
 	}
 	// Save in the page's own format and open again.
-	orig := a.doc.clone()
+	orig := a.seen().clone()
 	var origFrames []*Doc
 	for _, d := range a.allDocs() {
 		origFrames = append(origFrames, d.clone())
@@ -138,10 +140,13 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 		a.forceCols = orig.cols
 		a.reparse()
 	}
-	if fmtID != "prg" && a.doc.rows != orig.rows {
-		res.problem = strings.TrimSpace(res.problem + fmt.Sprintf(" height %d became %d", orig.rows, a.doc.rows))
+	if res.layers > 1 && a.nLayers() != res.layers {
+		res.problem = strings.TrimSpace(res.problem + fmt.Sprintf(" %d layers became %d", res.layers, a.nLayers()))
 	}
-	if ok, why := cellsMatch(fmtID, orig, a.doc); !ok {
+	if fmtID != "prg" && a.seen().rows != orig.rows {
+		res.problem = strings.TrimSpace(res.problem + fmt.Sprintf(" height %d became %d", orig.rows, a.seen().rows))
+	}
+	if ok, why := cellsMatch(fmtID, orig, a.seen()); !ok {
 		res.problem = strings.TrimSpace(res.problem + " round trip (" + fmtID + "): " + why)
 	}
 	if framesFormats[fmtID] && len(origFrames) > 1 {
@@ -169,7 +174,7 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 	// A picture of it.
 	a.focusTab(a.newTab(mode))
 	a.loadBytes(b, filepath.Base(path), path, "auto")
-	a.doc = orig
+	a.doc, a.layers, a.lay = orig, nil, 0
 	png, err := a.encode("png")
 	if err != nil || len(png) < 50 {
 		res.problem = strings.TrimSpace(res.problem + " picture failed")
@@ -268,7 +273,12 @@ func TestBigCheck(t *testing.T) {
 		fmt.Fprintf(&sb, "%-12s %6d %6d %5d of %4d %10s  %v\n", g, s.n, s.bad, s.rightMode, s.known, s.slow.Round(time.Millisecond), s.modes)
 	}
 	multi, frames, splits, splitFr := 0, 0, 0, 0
+	layered, layerN := 0, 0
 	for _, r := range results {
+		if r.layers > 1 {
+			layered++
+			layerN += r.layers
+		}
 		if r.frames > 1 {
 			multi++
 			frames += r.frames
@@ -280,6 +290,7 @@ func TestBigCheck(t *testing.T) {
 	}
 	fmt.Fprintf(&sb, "\nfiles with several frames: %d (%d frames)\n", multi, frames)
 	fmt.Fprintf(&sb, "stream files that split at their clears: %d (%d frames)\n", splits, splitFr)
+	fmt.Fprintf(&sb, "files that keep their layers: %d (%d layers)\n", layered, layerN)
 	sb.WriteString("\n")
 	for _, p := range problems {
 		sb.WriteString(p + "\n")

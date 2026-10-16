@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -160,11 +162,14 @@ func TestLayFlattenUni(t *testing.T) {
 func layFArt(a *App, seed int) {
 	d := a.doc
 	for y := range min(d.rows, 6) {
-		for x := range min(d.cols, 20) {
+		for x := range min(d.cols, 40) {
 			if (x*7+y*3+seed)%4 == 0 {
 				continue
 			}
 			ch, fg, bg := 'A'+(x+y+seed)%26, 1+(x+seed)%7, (y+seed)%3
+			if a.c64() || a.atari() {
+				ch, bg = 1+(x+y+seed)%26, 0 // the letters' screen codes; one background for the screen
+			}
 			if a.uni() {
 				d.set(x, y, uniCell(int(ch), styleOf(fg, bg, 0)))
 			} else {
@@ -204,6 +209,9 @@ func TestLaySavesAsSeen(t *testing.T) {
 			t.Fatalf("%s: the two layers do not look like the page", mode)
 		}
 		for _, f := range a.modeFormats() {
+			if layersKeptBy(f.id, mode) {
+				continue // they keep the layers (TestLayFormatsKeepLayers)
+			}
 			got, err1 := a.encode(f.id)
 			live := a.doc
 			ls, lay := a.layers, a.lay
@@ -445,14 +453,14 @@ func layFDraw(a *App) []uint32 {
 	u := &UI{fb: &FB{}}
 	u.fb.resize(500, 300)
 	a.page = Rect{0, 0, 480, 280}
-	a.blink = false
+	a.blink, a.start = false, false
 	a.drawPage(u, "0")
 	return slices.Clone(u.fb.px)
 }
 
 // A page of layers is drawn as its flattened page of one layer is; dim and hidden others differ.
 func TestLayDrawn(t *testing.T) {
-	for _, mode := range []string{"pc", "c64", "uni", "atari", "st"} {
+	for _, mode := range []string{"pc", "amiga", "uni", "atari", "st"} { // (PETSCII needs the ROMs, which CI has not)
 		a := testApp(t, mode)
 		layFArt(a, 3)
 		flat := layFDraw(a)
@@ -613,5 +621,207 @@ func TestLaySideFile(t *testing.T) {
 	e.openPath(p, "auto")
 	if e.layers != nil {
 		t.Fatal("a page saved as one layer got layers back")
+	}
+}
+
+// layFFormat saves the app's page of layers as fmtID and opens it again in a new app; it gives the new app.
+func layFFormat(t *testing.T, a *App, fmtID, ext string) *App {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "art"+ext)
+	if !a.writeOut(p, fmtID) {
+		t.Fatalf("%s: %q", fmtID, a.message)
+	}
+	b := restart(t, a.mode)
+	os.RemoveAll(layersDir()) // the format itself must keep them
+	b.openPath(p, "auto")
+	return b
+}
+
+func TestLayFormatsKeepLayers(t *testing.T) {
+	for _, c := range []struct{ mode, fmtID, ext string }{{"pc", "icy", ".icy"}, {"pc", "xp", ".xp"}, {"pc", "psci", ".psci"}, {"amiga", "psci", ".psci"}} { // (IcyDraw files open as PC pages)
+		a := testApp(t, c.mode)
+		layFArt(a, 5)
+		a.newLayer(false)
+		a.doc.set(3, 0, makeCell('M', 14, 0, 0))
+		a.doc.set(4, 0, makeCell('N', 14, 5, 0))
+		a.renameLayer(1, "Letters")
+		if c.fmtID != "xp" {
+			a.newLayer(false)
+			a.doc.set(5, 1, makeCell('H', 9, 0, 0))
+			a.toggleBlackClear()
+			a.newLayer(false)
+			a.doc.set(6, 2, makeCell('Q', 9, 0, 0))
+			a.toggleLayer(3)
+		}
+		a.goLayer(1)
+		want := a.Tab
+		b := layFFormat(t, a, c.fmtID, c.ext)
+		if b.mode != c.mode {
+			t.Fatalf("%s %s: opened as %s", c.mode, c.fmtID, b.mode)
+		}
+		if b.nLayers() != want.nLayers() {
+			t.Fatalf("%s %s: %d layers, want %d (%q)", c.mode, c.fmtID, b.nLayers(), want.nLayers(), b.message)
+		}
+		for i := range want.layers {
+			g, w := b.layers[i], want.layers[i]
+			if g.hidden != w.hidden || g.clear != w.clear || (c.fmtID != "xp" && b.layerName(i) != want.layerName(i)) {
+				t.Errorf("%s %s layer %d: hidden %v clear %d name %q, want %v %d %q", c.mode, c.fmtID, i, g.hidden, g.clear, b.layerName(i), w.hidden, w.clear, want.layerName(i))
+			}
+		}
+		if !sameLook(b.seen(), want.seen()) {
+			t.Errorf("%s %s: the page does not look the same", c.mode, c.fmtID)
+		}
+	}
+}
+
+// REXPaint keeps no hidden layers and no see-through backgrounds: left out, and the colour below.
+func TestLayXPLeavesOut(t *testing.T) {
+	a := testApp(t, "pc")
+	a.doc.set(0, 0, makeCell('a', 1, 4, 0))
+	a.newLayer(false)
+	a.doc.set(0, 0, makeCell('b', 2, 0, 0))
+	a.toggleBlackClear()
+	a.newLayer(false)
+	a.doc.set(1, 0, makeCell('c', 3, 0, 0))
+	a.toggleLayer(2)
+	seen := a.seen()
+	b := layFFormat(t, a, "xp", ".xp")
+	if b.nLayers() != 2 || b.seen().get(0, 0) != makeCell('b', 2, 4, 0) || !sameLook(b.seen(), seen) {
+		t.Fatalf("%d layers, %08x", b.nLayers(), b.seen().get(0, 0))
+	}
+}
+
+// A file whose layers CharEdit cannot show as they are opens as one layer, looking as before.
+func TestLayFileFallsBack(t *testing.T) {
+	a := testApp(t, "pc")
+	a.doc.set(0, 0, makeCell('a', 1, 4, 0))
+	a.newLayer(false)
+	a.doc.set(0, 0, makeCell('b', 2, 0, 0))
+	data, _ := a.encode("icy")
+	doc, err := parseIcyDraw(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a visible black space on the top layer covers what is below in IcyDraw
+	doc.layers[1].cells[0] = icyCell{ch: ' ', fg: icyColour{'p', 7}, bg: icyColour{'p', 0}, visible: true}
+	flat, _, _ := icyPage(doc)
+	if icyFileLayers(doc, flat) != nil {
+		t.Fatal("kept layers that do not look the same")
+	}
+	// the real IcyDraw file of one layer: one layer
+	b := testApp(t, "pc")
+	b.openPath("testdata/icydraw/icydraw-alove.icy", "auto")
+	if b.layers != nil || b.mode != "pc" {
+		t.Fatal("a file of one layer")
+	}
+	// CharView never keeps layers
+	p := filepath.Join(t.TempDir(), "two.icy")
+	os.WriteFile(p, data, 0o644)
+	viewer = &Viewer{}
+	defer func() { viewer = nil }()
+	c := testApp(t, "pc")
+	c.openPath(p, "auto")
+	if c.layers != nil {
+		t.Fatal("CharView kept layers")
+	}
+}
+
+// An Atari page saved as ATASCII: put together, the layers kept beside the file.
+func TestLayAtariSideFile(t *testing.T) {
+	if layersKeptBy("psci", "c64") || !layersKeptBy("psci", "pc") {
+		t.Fatal("Playscii keeps the layers of PC pages, not of PETSCII pages")
+	}
+	a := testApp(t, "atari")
+	layFArt(a, 6)
+	a.newLayer(false)
+	a.doc.set(3, 0, makeCell(13, 0, 0, 0))
+	want := a.Tab
+	p := filepath.Join(t.TempDir(), "art.ata")
+	if !a.writeOut(p, "ata") {
+		t.Fatal(a.message)
+	}
+	b := restart(t, "atari")
+	b.openPath(p, "auto")
+	layFSame(t, b.Tab, want)
+}
+
+// layFPage is an app (no test's: the fuzz target's seeds) with a PC page of two layers.
+func layFPage() *App {
+	keep := a
+	defer func() { a = keep }()
+	a = &App{tool: "draw", fg: 7, brush: 0x2F, charHover: -1, layout: "one", defZoom: 2,
+		defFont: map[string]string{}, defPalette: map[string]string{}, fkeys: defaultFkeys(), baud: 14400}
+	a.focusTab(a.newTab("pc"))
+	a.doc.set(0, 0, makeCell('a', 1, 4, 0))
+	a.newLayer(false)
+	a.doc.set(1, 0, makeCell('b', 2, 0, 0))
+	a.doc.set(2, 0, makeCell('c', 3, 0, 0))
+	a.toggleBlackClear()
+	return a
+}
+
+// CHARCOAL_LAYER_FILES=f1,f2,...: real files' layers (kept or not) and their look.
+func TestLayRealFiles(t *testing.T) {
+	list := os.Getenv("CHARCOAL_LAYER_FILES")
+	if list == "" {
+		t.Skip("CHARCOAL_LAYER_FILES not set")
+	}
+	for _, p := range strings.Split(list, ",") {
+		a := testApp(t, "pc")
+		a.openPath(p, "auto")
+		t.Logf("%s: %s page, %d layers, %q", filepath.Base(p), a.mode, a.nLayers(), a.message)
+	}
+}
+
+// IcyDraw's engine reads CharEdit's layered .icy as the page is seen (ccicy dump: the cells as IcyDraw
+// puts its layers together). CHARCOAL_ICYMACH / CHARCOAL_ICYDIR as for TestOthIcyExternal.
+func TestLayIcyDrawReads(t *testing.T) {
+	cmd, dir := os.Getenv("CHARCOAL_ICYMACH"), os.Getenv("CHARCOAL_ICYDIR")
+	if cmd == "" || dir == "" {
+		t.Skip("CHARCOAL_ICYMACH / CHARCOAL_ICYDIR not set")
+	}
+	os.MkdirAll(dir, 0o755)
+	a := testApp(t, "pc")
+	layFArt(a, 7)
+	a.newLayer(false)
+	for x := range 30 {
+		a.doc.set(x, 2, makeCell('A'+x%26, 14, 0, 0)) // letters on black over the art: black covers
+	}
+	a.newLayer(false)
+	for x := range 30 {
+		a.doc.set(x, 3, makeCell('a'+x%26, 11, 0, 0)) // black shows below
+		a.doc.set(x, 4, makeCell('#', 12, 1, 0))
+	}
+	a.toggleBlackClear()
+	a.newLayer(false)
+	a.doc.set(0, 0, makeCell('Z', 15, 4, 0)) // hidden
+	a.toggleLayer(3)
+	path := filepath.Join(dir, "lay-stack.icy")
+	if !a.writeOut(path, "icy") {
+		t.Fatal(a.message)
+	}
+	args := append(strings.Fields(cmd), path)
+	out, err := exec.Command(args[0], args[1:]...).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dump := othFReadDump(t, string(out))
+	p := a.seen()
+	if dump.w != p.cols || dump.h != p.rows {
+		t.Fatalf("IcyDraw reads %dx%d", dump.w, dump.h)
+	}
+	bad := 0
+	for i, c := range dump.cells {
+		v := p.cells[i]
+		at := cellAttr(v)
+		want := [3]string{fmt.Sprintf("%x", cellCh(v)), fmt.Sprintf("p%d", at&15), fmt.Sprintf("p%d", at>>4)}
+		if c[0] != want[0] || c[1] != want[1] || c[2] != want[2] {
+			if bad++; bad < 5 {
+				t.Errorf("cell %d,%d: IcyDraw %v, CharEdit %v", i%p.cols, i/p.cols, c[:3], want)
+			}
+		}
+	}
+	if bad > 0 {
+		t.Fatalf("%d cells differ", bad)
 	}
 }

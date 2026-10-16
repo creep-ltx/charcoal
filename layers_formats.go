@@ -1,0 +1,432 @@
+package main
+
+// The files that keep a page's layers: IcyDraw .icy, REXPaint .xp and Playscii
+// .psci (one frame). Reading keeps the layers only when CharEdit's layers show
+// them exactly as the file's own editor does (the page put together from them
+// looks as the format's reader gives it); otherwise the page opens as one
+// layer, as before. Opening a file never changes what it looks like.
+
+import (
+	"bytes"
+	"compress/gzip"
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"image"
+)
+
+// layersKeptBy: format fmtID keeps the layers of a page of type mode. Playscii's
+// PETSCII and Atari pages have one background for the screen, so a layer of
+// theirs does not read back on its own: they are put together (and kept beside
+// the file).
+func layersKeptBy(fmtID, mode string) bool {
+	switch fmtID {
+	case "icy":
+		return mode == "pc" || mode == "amiga"
+	case "xp":
+		return mode == "pc"
+	case "psci":
+		return mode == "pc" || mode == "amiga" || mode == "st"
+	}
+	return false
+}
+
+// fileLayers gives the page its file's layers (a.doc is the file's page as read),
+// when they can be kept: not in CharView, on a page type with layers.
+func (a *App) fileLayers() {
+	if viewer != nil || !a.layered() || a.frames != nil || a.source == nil {
+		return
+	}
+	var ls []Layer
+	switch a.srcKind {
+	case "icy":
+		if doc, err := parseIcyDraw(a.source); err == nil {
+			ls = icyFileLayers(doc, a.doc)
+		}
+	case "xp":
+		ls = xpFileLayers(a.source, a.doc)
+	case "psci":
+		if layersKeptBy("psci", a.mode) {
+			ls = psciFileLayers(a.source, a.doc)
+		}
+	}
+	if ls == nil {
+		return
+	}
+	top := len(ls) - 1
+	a.layers, a.lay = ls, top
+	a.doc = ls[top].doc.clone()
+	a.doc.ensureRows(ls[0].doc.rows)
+}
+
+// layersKept checks layers read from a file: as many as CharEdit has, one width,
+// and put together they look as the file's page (flat) does. The page fields
+// come from flat.
+func layersKept(ls []Layer, flat *Doc) []Layer {
+	if len(ls) < 2 || len(ls) > maxLayers {
+		return nil
+	}
+	cells := 0
+	for _, l := range ls {
+		if l.doc == nil || l.doc.cols != flat.cols {
+			return nil
+		}
+		layerFields(l.doc, flat)
+		cells += l.doc.cols * l.doc.rows
+	}
+	if cells > maxPageCells {
+		return nil
+	}
+	top := len(ls) - 1
+	cur := ls[top].doc.clone()
+	cur.ensureRows(flat.rows)
+	if cur.rows != flat.rows || !sameLook(flatten(ls, top, cur), flat) {
+		return nil
+	}
+	return ls
+}
+
+// layersOut are the page's layers to write, each with the page's fields (page
+// is the page put together), nil for a page of one layer. Called while the page
+// is seen (asSeen): every layer is in the list.
+func (t *Tab) layersOut(page *Doc) []Layer {
+	if t.layers == nil {
+		return nil
+	}
+	ls := make([]Layer, len(t.layers))
+	for i, l := range t.layers {
+		d := *t.layerDoc(i) // the cells are only read
+		layerFields(&d, page)
+		l.doc = &d
+		ls[i] = l
+	}
+	return ls
+}
+
+// ---------------------------------------------------------------- IcyDraw
+
+// icyFileLayers are an IcyDraw file's layers as CharEdit's (nil: they cannot be
+// kept): each layer is read as the file's only one, a cell IcyDraw leaves
+// invisible is empty, a layer whose cells have a transparent background is one
+// where black shows below.
+func icyFileLayers(doc *icyDoc, flat *Doc) []Layer {
+	if len(doc.layers) < 2 || len(doc.layers) > maxLayers || len(doc.skipped) > 0 {
+		return nil
+	}
+	ls := make([]Layer, len(doc.layers))
+	for i, l := range doc.layers {
+		if l == nil || l.group || l.mode != 0 {
+			return nil
+		}
+		one, lc := *doc, *l
+		lc.visible = true
+		one.layers = []*icyLayer{&lc}
+		d, _, _ := icyPage(&one)
+		clear := layerNormal
+		for _, c := range l.cells {
+			if i > 0 && c.visible && c.bg.kind == 't' {
+				clear = layerBlack
+			}
+		}
+		ls[i] = Layer{doc: d, name: l.title, hidden: !l.visible, clear: clear, keep: &layerKeep{IcyFlags: l.flags, IcyColour: l.colour}}
+	}
+	return layersKept(ls, flat)
+}
+
+// writeIcyLayers gives an IcyDraw document of every layer of t (page: them put
+// together, for the picture): an empty cell of a layer above the bottom one is
+// invisible, a black background on a layer where black shows below transparent.
+func writeIcyLayers(t *Tab, page *Doc, pal [16]uint32, f *Font, ice bool, preview image.Image) []byte {
+	if f == nil {
+		f = fontByID("vga")
+	}
+	o := &icyOut{buffer: icyCP437, ice: map[bool]byte{true: icyIce, false: icyBlink}[ice], fontMod: 2,
+		w: page.cols, h: max(1, page.rows), fontH: f.rows()}
+	for _, c := range biosPalette(pal) {
+		o.pal = append(o.pal, c&0xFFFFFF)
+	}
+	o.fonts = []icyFontRec{icyFontOf(f.name, f, f.rows())}
+	ls := t.layersOut(page)
+	for i, l := range ls {
+		d, clear, bottom := l.doc, l.clear, i == 0
+		var below *Doc
+		if !bottom && clear == layerBlack {
+			below = flatten(ls[:i], 0, ls[0].doc)
+		}
+		flags := uint32(1)
+		if l.keep != nil {
+			flags = l.keep.IcyFlags &^ 1
+			if !l.hidden {
+				flags |= 1
+			}
+		} else if l.hidden {
+			flags = 0
+		}
+		ol := icyOutLayer{title: t.layerName(i), flags: flags}
+		if l.keep != nil {
+			ol.colour = l.keep.IcyColour
+		}
+		ol.cell = func(x, y int) (uint32, int, int, byte, uint16) {
+			v := d.get(x, y)
+			if !bottom && d.blankAt(v) {
+				return 32, 7, 0, 0, icyInvisible
+			}
+			at := cellAttr(v)
+			fg, bg, flags := int(at&15), int(at>>4), uint16(0)
+			if !ice && bg > 7 {
+				bg, flags = bg&7, icyBlinkAttr
+			}
+			if below != nil && cellBg(v) == 0 {
+				// Transparent: IcyDraw shows the colour of the lower half of the cell
+				// below (its half-block rule); where that is not the cell's background,
+				// the background is written as it is seen.
+				u := below.get(x, y)
+				ubg := int(cellAttr(u) >> 4)
+				if !ice && ubg > 7 {
+					ubg &= 7
+				}
+				if bg = ubg; icyLowerColour(u) == ubg {
+					bg = -1
+				}
+			}
+			return uint32(cellCh(v)), fg, bg, 0, flags
+		}
+		o.layers = append(o.layers, ol)
+	}
+	return o.encode(preview)
+}
+
+// ---------------------------------------------------------------- REXPaint
+
+// xpFileLayers are a REXPaint image's layers as CharEdit's (nil: they cannot be
+// kept): a cell of REXPaint's transparent pink on a layer above the bottom one is empty.
+func xpFileLayers(b []byte, flat *Doc) []Layer {
+	layers, w, h, err := xpRaw(b)
+	if err != nil || len(layers) < 2 {
+		return nil
+	}
+	pick, pal := rgbColours(xpMerge(layers, w, h)) // the colours as the page has them (parseXP)
+	if pal == nil {
+		vga := paletteByID("vga").colors
+		pal = &vga
+	}
+	colour := func(col uint32) int {
+		if i := pick(col); i >= 0 && i < 16 && pal[i]&0xFFFFFF == col {
+			return i
+		}
+		return nearestOf(col, *pal)
+	}
+	ls := make([]Layer, len(layers))
+	for k, l := range layers {
+		d := newDoc(w, h)
+		if k == 0 {
+			fillCells(d.cells, makeCell(' ', colour(0xAAAAAA), colour(0), 0))
+		}
+		for i := 0; (i+1)*10 <= len(l.data); i++ {
+			x, y, c, clear := l.cell(i)
+			if y >= h {
+				continue
+			}
+			if clear {
+				if k > 0 {
+					continue
+				}
+				c.bg = 0
+			}
+			d.cells[y*w+x] = makeCell(int(c.ch), colour(c.fg), colour(c.bg), 0)
+		}
+		ls[k] = Layer{doc: d}
+	}
+	return layersKept(ls, flat)
+}
+
+// writeXPLayers gives a REXPaint image of the page's visible layers (REXPaint
+// keeps no hidden ones, and shows 9 at most: the lowest are merged). An empty
+// cell of a layer above the bottom one gets the transparent pink; a black
+// background where black shows below gets the background below it (REXPaint has
+// no see-through background).
+func (a *App) writeXPLayers(page *Doc) []byte {
+	var vis []Layer
+	hidden, baked := 0, 0
+	for _, l := range a.layersOut(page) {
+		if l.hidden {
+			hidden++
+			continue
+		}
+		vis = append(vis, l)
+	}
+	if len(vis) == 0 {
+		return writeXP(page, a.pal, a.ice)
+	}
+	if n := len(vis); n > 9 { // the lowest put together as the first
+		low := flatten(vis[:n-8], 0, vis[0].doc)
+		vis = append([]Layer{{doc: low}}, vis[n-8:]...)
+	}
+	rows := max(1, page.rows)
+	var raw bytes.Buffer
+	le := func(v int32) { binary.Write(&raw, binary.LittleEndian, v) }
+	le(-1)
+	le(int32(len(vis)))
+	for k, l := range vis {
+		var below *Doc
+		if k > 0 && l.clear == layerBlack {
+			below = flatten(vis[:k], 0, vis[0].doc)
+		}
+		le(int32(page.cols))
+		le(int32(rows))
+		for x := 0; x < page.cols; x++ {
+			for y := 0; y < rows; y++ {
+				v := l.doc.get(x, y)
+				if k > 0 && page.blankAt(v) {
+					le(0)
+					raw.Write([]byte{0, 0, 0, 0xFF, 0, 0xFF})
+					continue
+				}
+				if below != nil && cellBg(v) == 0 {
+					v = v&^0xF000 | below.get(x, y)&0xF000
+					baked++
+				}
+				le(int32(cellCh(v)))
+				f, bg := a.pal[cellFg(v)], a.pal[shownBg(v, a.ice)]
+				raw.Write([]byte{byte(f >> 16), byte(f >> 8), byte(f), byte(bg >> 16), byte(bg >> 8), byte(bg)})
+			}
+		}
+	}
+	var out bytes.Buffer
+	zw := gzip.NewWriter(&out)
+	zw.Write(raw.Bytes())
+	zw.Close()
+	var notes []string
+	if hidden > 0 {
+		notes = append(notes, fmt.Sprintf("%d hidden layers left out (REXPaint keeps none)", hidden))
+	}
+	if baked > 0 {
+		notes = append(notes, fmt.Sprintf("%d black backgrounds got the colour below (REXPaint has no see-through background)", baked))
+	}
+	if len(notes) > 0 {
+		a.msg("REXPaint: " + joinNotes(notes))
+	}
+	return out.Bytes()
+}
+
+func joinNotes(n []string) string {
+	s := ""
+	for i, v := range n {
+		if i > 0 {
+			s += "; "
+		}
+		s += v
+	}
+	return s
+}
+
+// ---------------------------------------------------------------- Playscii
+
+// psciFileLayers are a Playscii file's layers as CharEdit's (nil: they cannot be
+// kept), for a file of one frame: each layer is read as the file's only one (by
+// z, as Playscii draws them); a layer with see-through backgrounds under its
+// characters is one where black shows below.
+func psciFileLayers(b []byte, flat *Doc) []Layer {
+	var f psciFile
+	if err := json.Unmarshal(b, &f); err != nil || len(f.Frames) != 1 {
+		return nil
+	}
+	layers := append([]psciLayer{}, f.Frames[0].Layers...)
+	if len(layers) < 2 || len(layers) > maxLayers {
+		return nil
+	}
+	for i := 1; i < len(layers); i++ { // by z, lowest first (stable), as parsePsci
+		for j := i; j > 0 && layers[j].Z < layers[j-1].Z; j-- {
+			layers[j], layers[j-1] = layers[j-1], layers[j]
+		}
+	}
+	ls := make([]Layer, len(layers))
+	one := 1.0
+	for i, l := range layers {
+		g := f
+		lc := l
+		lc.Visible = &one
+		g.Frames = []psciFrame{{Delay: f.Frames[0].Delay, Layers: []psciLayer{lc}}}
+		js, err := json.Marshal(&g)
+		if err != nil {
+			return nil
+		}
+		art, err := parsePsci(js)
+		if err != nil || len(art.docs) != 1 || len(art.need) > 0 {
+			return nil
+		}
+		clear := layerNormal
+		for _, t := range l.Tiles {
+			if i > 0 && t.Bg <= 0 && t.Fg > 0 {
+				clear = layerBlack
+			}
+		}
+		ls[i] = Layer{doc: art.docs[0], name: l.Name, hidden: l.Visible != nil && *l.Visible == 0, clear: clear, keep: &layerKeep{PsciZ: l.Z}}
+	}
+	return layersKept(ls, flat)
+}
+
+// psciLayersOut are the Playscii layers of a page of layers: an empty cell of a
+// layer above the bottom one is fully transparent, a black background where
+// black shows below Playscii's transparent 0.
+func psciLayersOut(ls []Layer, page *Doc, w, h int, tile func(*Doc, int, int) psciTile) []psciLayer {
+	var out []psciLayer
+	for i, l := range ls {
+		name := l.name
+		if name == "" {
+			name = fmt.Sprintf("Layer %d", i+1)
+		}
+		pl := psciLayer{Z: float64(i), Name: name, Tiles: make([]psciTile, 0, w*h)}
+		vis := 1.0
+		if l.hidden {
+			vis = 0
+		}
+		pl.Visible = &vis
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				v := l.doc.get(x, y)
+				if i > 0 && page.blankAt(v) {
+					pl.Tiles = append(pl.Tiles, psciTile{})
+					continue
+				}
+				t := tile(l.doc, x, y)
+				if i > 0 && l.clear == layerBlack && cellBg(v) == 0 && !page.uni {
+					t.Bg = 0
+				}
+				pl.Tiles = append(pl.Tiles, t)
+			}
+		}
+		out = append(out, pl)
+	}
+	return out
+}
+
+// psciLayersOf are the layers a Playscii file of the page keeps (nil: it is put together).
+func (a *App) psciLayersOf(page *Doc) []Layer {
+	if !layersKeptBy("psci", a.mode) {
+		return nil
+	}
+	return a.layersOut(page)
+}
+
+// icyLowerColour is the colour IcyDraw gives a transparent background over cell
+// v (palette number, BIOS order): the colour of the lower half of v (icy_engine
+// paint/half_block.rs, HalfBlock::from_char): a space's background, a lower half
+// block's or full block's foreground, an upper half's background, else the
+// foreground when both colours are one, else 0.
+func icyLowerColour(v uint32) int {
+	at := cellAttr(v)
+	fg, bg := int(at&15), int(at>>4)
+	switch cellCh(v) {
+	case 0, 32, 255:
+		return bg
+	case 219, 220:
+		return fg
+	case 223:
+		return bg
+	}
+	if fg == bg {
+		return fg
+	}
+	return 0
+}

@@ -464,9 +464,22 @@ type icyOut struct {
 	screen       []byte       // the SCREEN record (nil: none)
 	// cell gives a cell: its character, colours (palette numbers), font and attributes.
 	cell func(x, y int) (ch uint32, fg, bg int, page byte, attr uint16)
+	// layers, when there are several (layers_formats.go): written instead of cell's one.
+	layers []icyOutLayer
+}
+
+// icyOutLayer is a layer of an IcyDraw file to write; a colour -1 is transparent.
+type icyOutLayer struct {
+	title  string
+	colour [4]byte
+	flags  uint32
+	cell   func(x, y int) (ch uint32, fg, bg int, page byte, attr uint16)
 }
 
 func icyColourBytes(b []byte, c int) []byte {
+	if c < 0 { // transparent (a layer's)
+		return append(b, 0)
+	}
 	if c < 16 {
 		return append(b, byte(1+c))
 	}
@@ -479,23 +492,32 @@ func (o *icyOut) encode(preview image.Image) []byte {
 		key  string
 		data []byte
 	}
-	var layer []byte
-	layer = append(layer, icyString("Background")...)
-	layer = append(layer, 0, 0, 0, 0, 0)               // mode normal, no colour
-	layer = binary.LittleEndian.AppendUint32(layer, 1) // visible
-	layer = append(layer, 0, 0, 0, 0, 0, 0, 0, 0)      // offset
-	layer = binary.LittleEndian.AppendUint32(layer, uint32(o.w))
-	layer = binary.LittleEndian.AppendUint32(layer, uint32(o.h))
+	outs := o.layers
+	if outs == nil {
+		outs = []icyOutLayer{{title: "Background", flags: 1, cell: o.cell}} // mode normal, no colour, visible
+	}
+	var layers [][]byte
 	wide := false // a colour past 15: ICED version 2 (IcyDraw's custom palette)
-	for y := 0; y < o.h; y++ {
-		for x := 0; x < o.w; x++ {
-			ch, fg, bg, page, attr := o.cell(x, y)
-			wide = wide || fg > 15 || bg > 15
-			layer = binary.LittleEndian.AppendUint32(layer, ch)
-			layer = icyColourBytes(layer, fg)
-			layer = icyColourBytes(layer, bg)
-			layer = append(layer, page, byte(attr), byte(attr>>8))
+	for _, ol := range outs {
+		var layer []byte
+		layer = append(layer, icyString(ol.title)...)
+		layer = append(layer, 0) // mode normal
+		layer = append(layer, ol.colour[:]...)
+		layer = binary.LittleEndian.AppendUint32(layer, ol.flags)
+		layer = append(layer, 0, 0, 0, 0, 0, 0, 0, 0) // offset
+		layer = binary.LittleEndian.AppendUint32(layer, uint32(o.w))
+		layer = binary.LittleEndian.AppendUint32(layer, uint32(o.h))
+		for y := 0; y < o.h; y++ {
+			for x := 0; x < o.w; x++ {
+				ch, fg, bg, page, attr := ol.cell(x, y)
+				wide = wide || fg > 15 || bg > 15
+				layer = binary.LittleEndian.AppendUint32(layer, ch)
+				layer = icyColourBytes(layer, fg)
+				layer = icyColourBytes(layer, bg)
+				layer = append(layer, page, byte(attr), byte(attr>>8))
+			}
 		}
+		layers = append(layers, layer)
 	}
 	version := uint16(1)
 	if wide {
@@ -527,7 +549,10 @@ func (o *icyOut) encode(preview image.Image) []byte {
 		font = append(font, f.bits[:256*f.h]...)
 		recs = append(recs, rec{"FONT", font})
 	}
-	recs = append(recs, rec{"LAYER", layer}, rec{"END", nil})
+	for _, layer := range layers {
+		recs = append(recs, rec{"LAYER", layer})
+	}
+	recs = append(recs, rec{"END", nil})
 	var raw [][]byte
 	for _, r := range recs {
 		raw = append(raw, icyRecord(r.key, r.data))
