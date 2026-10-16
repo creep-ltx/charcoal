@@ -267,7 +267,7 @@ func d64Art(img []byte) (d64File, int, error) {
 	var first d64File
 	n := 0
 	for _, f := range files {
-		if f.kind&7 == 2 && isOurC64Prg(f.data) {
+		if f.kind&7 == 2 && (isOurC64Prg(f.data) || isTEDPrg(f.data)) {
 			if n == 0 {
 				first = f
 			}

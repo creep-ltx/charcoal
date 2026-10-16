@@ -107,6 +107,13 @@ against each platform's best editor. Each step says what it wins.
     pairs in the font editor), CharEdit's own .prg (set at $2000, VIC registers) and .d64, the ACME source and
     BASIC listing with sets and modes. Later: DirArt, a run in VICE (not installed here; checked in a 6502 and
     by ACME), CharPad .ctm writing, Petmate files with modes.
+  - [x] **Plus/4, C16, C116 (TED)** (done 2026-10-16, ted.go, ted_formats.go): a PETSCII model with the TED's
+    121 colours (hue x luminance grid in the Colours, the wheel for luminance) and flash per cell, screen and
+    border colours, the ROM's characters from VICE; VICE's computed palette (identical to xplus4's screenshots),
+    YAPE's and Colodore's; Marq's Plus/4 .prg (run in VICE's xplus4: pixel-identical to CharEdit's PNG) and .c,
+    a .d64, TED Screen Editor's .scrn + .proj, Petmate9's c16 screens, .seq with the KERNAL's colours and FLASH
+    codes, PNG at VICE's 384x288. Later: custom character sets on the Plus/4 (TEDSE's .chrs, a .prg with a set),
+    Marq's BASIC/ACME exports for the Plus/4, the screen editor's ESC commands in .seq, multicolour text mode.
 - [x] **Amstrad CPC (AMSCII)** (done 2026-10-16, cpc.go): mode 1 40x25 4 inks, mode 0 20x25 16 inks, mode 2
   80x25 2 inks; the 27 colours, inks and border in the Colours panel; the ROM font built in (Amstrad's
   permission, as the Spectrum's); .bin that runs on a CPC, .dsk, Playscii .psci with Logiker's exporter; reads

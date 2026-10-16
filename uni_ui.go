@@ -491,6 +491,12 @@ func (a *App) convertFromMachine() {
 				fg, bg = bg, fg
 			}
 			fgc, bgc := rgbColour(pal[fg&15]), rgbColour(pal[bg&15])
+			if a.ted() { // whole TED colours (ted.go)
+				fgc, bgc = rgbColour(a.tedRGB(tedAttr(v))), rgbColour(a.tedRGB(d.bg))
+				if v&0x80 != 0 {
+					fgc, bgc = bgc, fgc
+				}
+			}
 			n.cells[i] = uniCell(code, pairOf(fgc, bgc))
 		}
 		return n

@@ -283,7 +283,7 @@ func (a *App) drawOnion(fb *FB, ox, oy, x0, x1, y0, y1 int) {
 			paper := uint32(cPaper)
 			switch {
 			case a.screen():
-				paper = a.pal[a.doc.bg]
+				paper = a.screenRGB(a.doc.bg)
 			case a.zx() || a.st() || a.cpc():
 				paper = a.pal[cellBg(v)&15]
 			}

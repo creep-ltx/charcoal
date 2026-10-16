@@ -57,6 +57,7 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | Teletext | .tti .ep1, edit.tf links (.url), Mode 7 dumps; Bedstead font (CC0) built in; a .tti carousel opens as frames (one per subpage) and saving rewrites only changed subpages' OL 0-24 rows, every other line kept (teletext.go writeTTIFrames) |
 | Minitel (2026-10-16) | .vdt (Videotex stream; screens a clear ends become frames); Bisson's Minitel font (CC0) built in; see "Minitel and Viewdata pages" |
 | Viewdata (2026-10-16) | a teletext page of 24 rows: .cpt streams (.car carousels as frames), 960-byte .bin frames, Telstar .json frames, and .tti / edit.tf |
+| Plus/4, C16 (2026-10-16) | a PETSCII model: Marq's Plus/4 .prg and .c, .d64, TED Screen Editor .scrn (+ .proj), Petmate9 c16 screens, .seq; TED colours and flash; see "Plus/4 and C16 pages" |
 | Unicode (2026-10-16) | UTF-8 ANSI (256/24-bit SGR), durdraw .dur (frames), mIRC .irc (also written from PC pages), HTML; GNU Unifont's art blocks built in (OFL); see "Unicode page" below |
 
 CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide art shrunk to fit, m plays.
@@ -637,6 +638,55 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   scroll), autosave keeps the cells only (the picture comes back when the file is opened again), Split/frames
   on IGS pages, the Animate draw orders in .ig. A space on pen 0 in the text part shows the picture (on the ST it
   paints pen 0): the only place the page differs from the ST.
+
+## Plus/4 and C16 pages (2026-10-16, branch r3-ted)
+
+- **Model**: machine "plus4" in `machines` (mode "c64", `a.ted()`), so every PETSCII path (typing, F-keys,
+  shapes, frames, Animate, Play, Split) works. A cell's bits 8-15 are the **TED attribute byte**: cellFg = hue,
+  cellBg = luminance | flash<<3 (`tedAttr`, `tedCell`); `Doc.bg`/`Doc.border` are whole TED colours (0-127), so
+  **never index `a.pal` with a Plus/4 page's bg/border**: use `a.screenRGB(c)` (TED colour or `a.pal[c&15]`) or
+  `a.tedRGB`. `a.pal` on a Plus/4 page is the KERNAL's 16 colours (`kernal16`) for code that knows only 16.
+  The brush: `a.fg` is a whole TED colour (0-127) on a Plus/4 page, `a.flash` (the ZX's toggle) is flash;
+  `tedBrush()`. Colour keys/steps change the hue and keep the luminance (`tedKey`, `tedStep`), the wheel over the
+  Colours grid `tedLum`. `Snap.mach` makes undo of a C64 <-> Plus/4 switch bring machine and colours back
+  (`convertMachineColours`: nearest by RGB, one undo step, done before `a.machine` changes so the snapshot
+  holds the old machine).
+- **Colours** (*verified*): `tedVICE()` computes VICE 3.9's internal TED palette (ted-color.c angles/luminances,
+  video-color.c: basesat 56/1.75, phase -9.5, UV->CbCr, saturation 1250 for the TED, float32 as VICE): an
+  xplus4 screenshot of all 128 gives exactly these values. YAPE and Colodore are VICE's .vpl files. KERNAL
+  colour table ($E133 codes, $E143 colours), power-on $FF15=$71 $FF19=$6E ($F338 table), FLASH ON 0x82 / OFF
+  0x84 ($053C, RETURN clears it), all *verified* by disassembling kernal-318004-05.bin.
+- **ROM**: `cbmROMs` gets PLUS4/kernal-318004-05.bin (16 KB, SHA-1 7c7e07f0...); `addCBMFonts` takes the sets
+  at $D000/$D400 (128 glyphs each, 128-255 reversed: the TED's hardware reverse). The download question now
+  says 34 KB. `tedNeedsROM` asks when a Plus/4 file opens without it.
+- **Files** (ted_formats.go): `.prg` = Marq's template-plus4.prg form (`tedPrgHead`, 2088 bytes; `isTEDPrg`
+  by the template), also on a `.d64` (`d64Art`, `readScreens` via `tedScreen`); the same format ids "prg" and
+  "d64" as the C64's, with entries "c64 (Plus/4)" in `formats` (`tedHides` in modeFormats; psci and pmjson are
+  hidden on Plus/4 pages); `.scrn` (TEDSE "save screen": $C000, attributes, 24-byte signature, codes, 24 more)
+  with `NAME.proj` read next to it and written by `tedSaved` after writeOut; `.seq`: `parseSeqOn`/`writeSeqOn`
+  with ted (PetTerm.ted: `tedByte`; also Petmate9's 0x16+byte "tedFull" colour and ESC + one byte skipped),
+  `petWriter.ted` for Animate's draw orders, `splitStream(... "plus4" ...)` via `a.tedMode()`, `newPetTermOn`;
+  Marq `.c` (META PLUS4, colours 0-127, no flash) and Petmate (`c16Upper`/`c16Lower`, attribute bytes) in
+  export.go by `PetScreen.machine`. PNG/GIF border 32/40/48 (VICE's 384x288). Open as "Plus/4 PETSCII".
+  A PNG (every page type) now draws flashing and blinking cells in their "on" look, as GIF/APNG did; before,
+  it showed the phase the screen was in when saved.
+- **Tests** (`ted_test.go`, helpers `tedF*`): palette spot values and order, KERNAL tables and ROM glyphs (with
+  the ROM: `CHARCOAL_TED_ROM=kernal-318004-05.bin`, else a made-up set so the rest still runs), .seq round
+  trips (KERNAL luminance, any luminance as hue + flash), the .prg run in c64x_test's 6502, TEDSE with and
+  without .proj (`CHARCOAL_TEDSE_FILES=` a TEDScreenEdit checkout: its title and help screens), Marq's
+  plus4-stripes.c, Petmate c16 and Petmate9's own c16_colorbars.petmate (`testdata/petmate9`; with
+  `CHARCOAL_PETMATE9=` a checkout, its 17-screen c16-5frame.petmate too), the editor (typing, flash, pick, Colour tool, keys, undo, picture, every
+  format saved and opened), machine switch + undo, Animate (draw orders, effects, fade), autosave,
+  `TestTEDMutations`, `FuzzTED`, FuzzParsers' plus4 readers. **`TestTEDInXplus4`** (`CHARCOAL_XPLUS4=` a program
+  taking prg and png, e.g. a headless VICE 3.9 build: `./configure --enable-headlessui --disable-html-docs
+  --without-alsa --without-pulse`, needs xa and dos2unix; run `xplus4 -default -sounddev dummy -warp
+  -autostartprgmode 1 -limitcycles 30000000 -exitscreenshot out.png -autostart in.prg` from a folder holding the
+  ROMs, with the real HOME: another HOME made it crash): CharEdit's PNG and VICE's screenshot are identical,
+  pixel for pixel, on a random page in both cases and on the 128-colour grid.
+- Not done: custom character sets on Plus/4 pages (TEDSE's .chrs, a .prg with a set; the font editor works for
+  the page only), Marq's Plus/4 BASIC/ACME exports, the screen editor's ESC commands (skipped when read),
+  Petmate9's own c16 .prg player output (assembled at run time; not read), multicolour text mode (TED $FF07
+  bit 4), blocks pasted from a C64 page keep their 4-bit colours (shown at luminance 0), Marq's editor not run (needs Java).
 
 ## Keys and safety (2026-10-13, evening)
 

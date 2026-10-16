@@ -244,7 +244,7 @@ func (sp *speedPreview) restart(now time.Time) {
 	var em emulator
 	switch {
 	case a.c64():
-		em = newPetTerm(t)
+		em = newPetTermOn(t, a.ted())
 	case a.atari():
 		em = newAtariTerm(t)
 	case a.st():

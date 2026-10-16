@@ -7,7 +7,7 @@ import "testing"
 func TestMirrorTablesUndo(t *testing.T) {
 	loadC64Fonts()
 	for _, f := range fonts {
-		if f.id == "c64lower" || f.id == "vic20lower" || f.id == "petlower" || f.id == "c128lower" {
+		if f.id == "c64lower" || f.id == "vic20lower" || f.id == "petlower" || f.id == "c128lower" || f.id == "plus4lower" {
 			continue // Marq's lower-case tables have three one-way entries; kept as he made them
 		}
 		for _, k := range []int{flipH, flipV} {

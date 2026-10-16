@@ -414,6 +414,10 @@ func (a *App) fadeCell(v uint32, paper uint32, t float64) uint32 {
 		b := rgbColour(lerpRGB(paper, colourRGB(bg, &a.pal), t))
 		return uniRestyle(v, f, b)
 	}
+	if a.ted() { // the nearest of the TED's colours; flashing stays (ted.go)
+		c := a.tedNearest(lerpRGB(paper, a.tedRGB(tedAttr(v)), t))
+		return v&^0x7F00 | uint32(c)<<8
+	}
 	fg, bg := cellFg(v), cellBg(v)
 	nfg, nbg := a.nColours(false), a.nColours(true)
 	switch {
@@ -463,7 +467,7 @@ func (a *App) nearestColour(rgb uint32, lo, hi int) int {
 // paperColour is the colour cells fade from: the clear screen's background.
 func (a *App) paperRGB(d, e *Doc) uint32 {
 	if a.screen() {
-		return a.pal[d.bg]
+		return a.screenRGB(d.bg)
 	}
 	return a.pal[cellBg(e.cells[0])]
 }
@@ -522,6 +526,7 @@ func (a *App) drawSteps(d *Doc, o *drawOrder) []drawStep {
 type streamOpts struct {
 	amiga, sauce, lower bool
 	res                 STRes
+	ted                 bool // a Plus/4 page: flashing as FLASH ON/OFF codes
 }
 
 // cursorWriter writes one page type's codes, keeping track of the terminal's cursor.
@@ -578,7 +583,7 @@ func newStepStream(fmtID string, d *Doc, o streamOpts) *stepStream {
 	var w cursorWriter
 	switch fmtID {
 	case "seq":
-		w = &petWriter{cols: d.cols, rows: d.rows, lower: o.lower, fg: -1}
+		w = &petWriter{cols: d.cols, rows: d.rows, lower: o.lower, fg: -1, ted: o.ted}
 	case "ata":
 		w = &ataWriter{cols: d.cols}
 	case "vt52":
@@ -928,6 +933,8 @@ type petWriter struct {
 	lower    bool
 	x, y, fg int
 	rev      bool
+
+	ted, flash bool // a Plus/4's: FLASH ON (0x82) and OFF (0x84); RETURN ends flashing (ted_formats.go)
 }
 
 func (w *petWriter) at() (int, int) { return w.x, w.y }
@@ -960,7 +967,7 @@ func (w *petWriter) move(x, y int) []byte {
 	}
 	b := shortest(rel, home, ret)
 	if len(b) > 0 && b[0] == 0x0D {
-		w.rev = false
+		w.rev, w.flash = false, false
 	}
 	w.x, w.y = x, y
 	return b
@@ -983,6 +990,10 @@ func (w *petWriter) put(v uint32, later func(x, y int) bool) []byte {
 		w.fg = cellFg(v)
 		out = append(out, petColour[w.fg])
 	}
+	if f := cellBg(v)&8 != 0; w.ted && sc != 0x20 && f != w.flash {
+		w.flash = f
+		out = append(out, map[bool]byte{true: 0x82, false: 0x84}[f])
+	}
 	c := screenToPet(sc & 0x7F)
 	out = append(out, c)
 	w.step()
@@ -997,7 +1008,7 @@ func (w *petWriter) put(v uint32, later func(x, y int) bool) []byte {
 			w.step()
 		case w.y < w.rows:
 			out = append(out, 0x0D)
-			w.x, w.y, w.rev = 0, w.y+1, false
+			w.x, w.y, w.rev, w.flash = 0, w.y+1, false, false
 		default:
 			out = append(out, 0x22, 0x14)
 		}
@@ -1154,7 +1165,7 @@ func (a *App) writeOrderedPaced(fmtID string, d *Doc, sauce bool) ([]byte, []pau
 }
 
 func (a *App) streamOpts(sauce bool) streamOpts {
-	return streamOpts{amiga: a.amiga(), sauce: sauce, lower: a.lower(), res: a.res()}
+	return streamOpts{amiga: a.amiga(), sauce: sauce, lower: a.lower(), res: a.res(), ted: a.ted()}
 }
 
 // pageStreamFormat is the stream format of the page type ("" for teletext and the Spectrum).

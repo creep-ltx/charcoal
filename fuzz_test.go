@@ -84,6 +84,15 @@ func FuzzParsers(f *testing.F) {
 			}
 		}
 	}
+	{ // the Plus/4 (ted.go, ted_formats.go)
+		d := tedFPage(1, 40, 25, false)
+		f.Add(writeTEDPrg(d, true))
+		f.Add(writeTEDSE(d))
+		f.Add(writeSeqOn(d, false, true, true))
+		f.Add(writeMarq(d, false, "plus4"))
+		f.Add(writePetmateFrames(nil, []PetScreen{{doc: d, fb: -1, machine: "plus4"}}))
+		f.Add([]byte("\x1cA\x82B\x16\xc6\x1bQ\x0d\x84\x9aF\x16"))
+	}
 	{ // Atari ST IGS (igs.go)
 		f.Add([]byte(igsFSample))
 		f.Add([]byte("G#&>0,636,4,0,>CL@,16,0)1,3:1)319,99,x,0:0C1,2:1L319,99,+2,0:&>20,60,20,0,W@2,0,x,a@b@c@:"))
@@ -165,6 +174,18 @@ func FuzzParsers(f *testing.F) {
 		check("petmate json", func() []*Doc { return screens(parsePetmateJSON(b)) })
 		check("petmate", func() []*Doc { return screens(parsePetmate(b)) })
 		check("prg", func() []*Doc { d, _, _ := parsePrg(b); return one(d) })
+		check("plus4 prg", func() []*Doc { d, _, _ := parseTEDPrg(b); return one(d) })
+		check("tedse", func() []*Doc { d, _, _ := parseTEDSE(b, b); return one(d) })
+		check("plus4 seq", func() []*Doc { // and what it shows is shown again by CharEdit's stream
+			d, l := parseSeqOn(b, 40, true)
+			if d.rows*d.cols <= 64000 {
+				back, _ := parseSeqOn(writeSeqOn(d, l == 1, false, true), 40, true)
+				if diff := tedFSame(d, back, true); diff != "" {
+					t.Fatalf("plus4 seq written again: %s", diff)
+				}
+			}
+			return one(d)
+		})
 		check("vt52", func() []*Doc { return one(parseVT52(b, stResolutions[0], 0)) })
 		check("igs", func() []*Doc { // and what it writes back reads back
 			l := readIGS(b, -1)

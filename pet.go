@@ -124,6 +124,11 @@ func addCBMFonts(r cbmROM, b []byte) {
 					}
 				case "c128": // the C64's set first, the C128's own second
 					v = b[4096+set*2048+c*8+row]
+				case "plus4": // the KERNAL ROM's $D000-$D7FF: 128 glyphs a set, the TED reverses 128-255 (ted.go)
+					v = b[0x1000+set*1024+(c&127)*8+row]
+					if c >= 128 {
+						v = ^v
+					}
 				default:
 					v = b[set*2048+c*8+row]
 				}
@@ -327,6 +332,11 @@ type PetTerm struct {
 	x, y, fg    int
 	rev         bool
 	lower       int // the character set asked for: -1 none, 0 upper, 1 lower
+
+	// A Plus/4's screen editor (ted_formats.go): fg is a whole TED colour, flash
+	// the FLASH ON state, esc the bytes an ESC command or Petmate's colour code still takes.
+	ted, flash bool
+	esc        int
 }
 
 func newPetTerm(d *Doc) *PetTerm { return &PetTerm{doc: d, fg: 14, lower: -1} }
@@ -336,6 +346,9 @@ func (t *PetTerm) cursor() (int, int) { return t.x, t.y }
 func (t *PetTerm) write(b []byte) {
 	d := t.doc
 	for _, c := range b {
+		if t.ted && t.tedByte(c) {
+			continue
+		}
 		if col := petColourOf(c); col >= 0 {
 			t.fg = col
 			continue
@@ -402,7 +415,11 @@ func (t *PetTerm) write(b []byte) {
 			if t.rev {
 				sc |= 0x80
 			}
-			d.set(t.x, t.y, makeCell(sc, t.fg, 0, 0))
+			if t.ted {
+				d.set(t.x, t.y, tedCell(sc, t.fg|map[bool]int{true: 0x80}[t.flash]))
+			} else {
+				d.set(t.x, t.y, makeCell(sc, t.fg, 0, 0))
+			}
 			if t.x++; t.x >= d.cols {
 				t.x, t.y = 0, t.y+1
 			}
@@ -411,13 +428,19 @@ func (t *PetTerm) write(b []byte) {
 }
 
 // parseSeq reads a .seq file; it returns the character set it asks for (-1, 0 upper, 1 lower).
-func parseSeq(b []byte, cols int) (*Doc, int) {
+func parseSeq(b []byte, cols int) (*Doc, int) { return parseSeqOn(b, cols, false) }
+
+// parseSeqOn reads a .seq as a C64 (or PET, VIC-20, C128) prints it, or with ted as a Plus/4 does.
+func parseSeqOn(b []byte, cols int, ted bool) (*Doc, int) {
 	if cols <= 0 {
 		cols = 40
 	}
 	d := newDoc(cols, 25)
 	d.glyph0 = true
 	t := newPetTerm(d)
+	if ted {
+		t.ted, t.fg = true, tedSeqInk
+	}
 	var f fullest
 	t.beforeClear = func() { f.look(t.doc) }
 	writeWatching(t, b, &f)
@@ -447,7 +470,12 @@ func parseSeq(b []byte, cols int) (*Doc, int) {
 // (only RETURN and DEL still act; KERNAL 901227-03, $E716-$E7EE). So before a
 // control code after an odd number of quotes, another " closes quote mode and a
 // DEL takes that quote off the screen again.
-func writeSeq(d *Doc, lower, clear bool) []byte {
+func writeSeq(d *Doc, lower, clear bool) []byte { return writeSeqOn(d, lower, clear, false) }
+
+// writeSeqOn is writeSeq for a C64 or, with ted, a Plus/4: the colour codes give
+// each hue at the KERNAL's luminance (ted_formats.go), FLASH ON (0x82) and OFF
+// (0x84) go where flashing changes; RETURN ends flashing too.
+func writeSeqOn(d *Doc, lower, clear, ted bool) []byte {
 	var out []byte
 	if clear {
 		out = append(out, 0x93)
@@ -457,7 +485,7 @@ func writeSeq(d *Doc, lower, clear bool) []byte {
 	} else {
 		out = append(out, 0x8E)
 	}
-	fg, rev, quote := -1, false, false
+	fg, rev, quote, flash := -1, false, false, false
 	control := func(c byte) {
 		if quote {
 			out = append(out, 0x22, 0x14)
@@ -483,6 +511,10 @@ func writeSeq(d *Doc, lower, clear bool) []byte {
 				fg = cellFg(v)
 				control(petColour[fg])
 			}
+			if f := cellBg(v)&8 != 0; ted && sc != 0x20 && f != flash {
+				flash = f
+				control(map[bool]byte{true: 0x82, false: 0x84}[f])
+			}
 			c := screenToPet(sc & 0x7F)
 			if c == 0x22 {
 				quote = !quote
@@ -492,7 +524,7 @@ func writeSeq(d *Doc, lower, clear bool) []byte {
 		switch {
 		case y < rows-1 && last < d.cols-1:
 			out = append(out, 0x0D)
-			rev, quote = false, false // RETURN ends reverse and quote mode on a C64
+			rev, quote, flash = false, false, false // RETURN ends reverse and quote mode on a C64, and flashing on a Plus/4
 		case y == rows-1 && last < 0:
 			control(0x1D)
 		}

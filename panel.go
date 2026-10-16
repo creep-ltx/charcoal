@@ -51,6 +51,9 @@ func (a *App) drawTools(u *UI, x, y, w, cols int) int {
 	if a.zx() {
 		a.flash = toggle("Flash", a.flash, "Flash: new cells swap ink and paper twice a second")
 	}
+	if a.ted() {
+		a.flash = toggle("Flash", a.flash, "Flash: new cells flash, as with FLASH ON (Plus/4)")
+	}
 	if a.mt() {
 		a.drawMTToggles(toggle) // minitel_ui.go
 	}
@@ -82,6 +85,8 @@ func (a *App) drawCharset(u *UI, x, y, cols int) Rect {
 			if k := c - 128; k >= 0x20 && (k < 0x40 || k >= 0x60) {
 				a.drawTTCell(fb, px, py, 1, ttCell{code: k, mosaic: true, fg: 7, control: -1}, false)
 			}
+		case a.ted(): // black or white on the screen colour
+			a.drawCell(fb, px, py, 1, tedCell(c, map[int]int{0: 0x00, 1: 0x71}[a.previewFg()]))
 		case a.printable(c):
 			a.drawCell(fb, px, py, 1, makeCell(c, a.previewFg(), 0, 0))
 		default:
@@ -186,6 +191,9 @@ func (a *App) drawColours(u *UI, x, y, perRow int) int {
 	if a.cpc() { // the inks and the 27 colours (cpc.go)
 		return a.drawCPCColours(u, x, y, perRow)
 	}
+	if a.ted() { // the TED's hues and luminances (ted.go)
+		return a.drawTEDColours(u, x, y, perRow)
+	}
 	fb := u.fb
 	n := 16
 	if a.mt() {
@@ -264,6 +272,9 @@ func (a *App) drawBrush(u *UI, x, y int) int {
 		fgShown = a.doc.ink
 	}
 	note := fmt.Sprintf("char %d  fg %d  bg %d", a.brush, fgShown, bgShown)
+	if a.ted() {
+		note = fmt.Sprintf("char %d  colour $%02X  screen $%02X", a.brush, a.tedBrush(), a.doc.bg&127)
+	}
 	if a.uni() {
 		note = fmt.Sprintf("%s  fg %s  bg %s", a.charLabel(a.brush), colourName(a.uniFg()), colourName(a.uniBg()))
 	}

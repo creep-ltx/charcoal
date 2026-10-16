@@ -39,10 +39,10 @@ func splitStream(b []byte, mode string, cols int, amiga bool, res STRes, atHome 
 	var em emulator
 	var setHooks func(clear, home func())
 	switch mode {
-	case "c64":
+	case "c64", "plus4": // plus4: a Plus/4's PETSCII (ted.go)
 		d = newDoc(cols, 25)
 		d.glyph0 = true
-		t := newPetTerm(d)
+		t := newPetTermOn(d, mode == "plus4")
 		em, setHooks = t, func(c, h func()) { t.beforeClear, t.beforeHome = c, h }
 	case "atari":
 		d = newDoc(cols, 24)
@@ -123,7 +123,7 @@ func (a *App) streamSplit() splitInfo {
 	if a.source == nil || a.srcKind != "" || a.sourceBin || a.zx() || a.tt() || a.cpc() || a.mt() {
 		return splitInfo{}
 	}
-	docs, _, homes := splitStream(a.source, a.mode, a.doc.cols, a.amiga(), a.res(), false, lineBps(a.baud), a.codes)
+	docs, _, homes := splitStream(a.source, a.tedMode(), a.doc.cols, a.amiga(), a.res(), false, lineBps(a.baud), a.codes)
 	return splitInfo{len(docs), homes}
 }
 
@@ -131,7 +131,7 @@ func (a *App) streamSplit() splitInfo {
 // home), as one undo step.
 func (a *App) splitFrames(atHome bool) {
 	a.endPlay()
-	docs, holds, _ := splitStream(a.source, a.mode, a.doc.cols, a.amiga(), a.res(), atHome, lineBps(a.baud), a.codes)
+	docs, holds, _ := splitStream(a.source, a.tedMode(), a.doc.cols, a.amiga(), a.res(), atHome, lineBps(a.baud), a.codes)
 	if len(docs) < 2 {
 		a.msg("The file shows only one picture")
 		return
@@ -171,7 +171,7 @@ func (a *App) writeStreamFramesPaced(fmtID string, docs []*Doc, sauce bool) ([]b
 		clear := i > 0 || a.info.clear
 		switch fmtID {
 		case "seq":
-			out = append(out, writeSeq(d, a.lower(), clear)...)
+			out = append(out, writeSeqOn(d, a.lower(), clear, a.ted())...)
 		case "ata":
 			out = append(out, writeAta(d, clear)...)
 		case "vt52":

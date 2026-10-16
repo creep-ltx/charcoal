@@ -82,7 +82,7 @@ func (a *App) newFx(d, e *Doc, seed int64) *fx {
 	default:
 		x.paper = cellBg(e.cells[0])
 	}
-	if c := a.pal[x.paper&15]; 2*(c>>16&255)+4*(c>>8&255)+3*(c&255) < 9*128 {
+	if c := a.screenRGB(x.paper); 2*(c>>16&255)+4*(c>>8&255)+3*(c&255) < 9*128 { // a Plus/4's paper is a whole TED colour
 		x.bright = x.colour(0xFFFFFF)
 	} else {
 		x.bright = x.colour(0)
@@ -142,6 +142,9 @@ func (x *fx) glyph() int { return x.glyphs[x.r.Intn(len(x.glyphs))] }
 
 // colour is the page's colour nearest to rgb.
 func (x *fx) colour(rgb uint32) int {
+	if x.a.ted() { // a whole TED colour (ted.go)
+		return x.a.tedNearest(rgb)
+	}
 	n := x.a.nColours(false)
 	if x.a.zx() {
 		n = 16
@@ -183,6 +186,9 @@ func (x *fx) cellOf(c, ch, col int, inverse bool) uint32 {
 		if inverse {
 			ch ^= 0x80
 		}
+		if x.a.ted() {
+			return tedCell(ch, col)
+		}
 		return makeCell(ch, col, cellBg(p), 0)
 	case x.a.zx():
 		ink, paper := col&7, cellBg(p)&7
@@ -208,6 +214,9 @@ func (x *fx) inkOf(c int) int {
 	col := cellFg(v)
 	if ch := cellCh(v); !x.a.c64() && (ch == 32 || ch == 0 || ch == 255) {
 		col = cellBg(v)
+	}
+	if x.a.ted() {
+		col = tedAttr(v) & 127
 	}
 	if x.a.uni() {
 		fg, bg := uniColoursOf(v)
@@ -252,6 +261,9 @@ func (x *fx) glint(v uint32, amt float64) uint32 {
 			return v ^ 0x80
 		}
 		return v&^0xFF00 | uint32(cellBg(v))<<8 | uint32(cellFg(v))<<12
+	case a.ted():
+		c := a.tedNearest(lerpRGB(a.tedRGB(tedAttr(v)), 0xFFFFFF, amt))
+		return v&^0x7F00 | uint32(c)<<8
 	case a.c64():
 		c := a.nearestColour(lerpRGB(a.pal[cellFg(v)], 0xFFFFFF, amt), 0, a.nColours(false))
 		return v&^0xF00 | uint32(c)<<8

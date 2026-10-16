@@ -1,0 +1,3 @@
+c16_colorbars.petmate is a test workspace of Petmate9 (github.com/wbochar/petmate9, _tests/, commit 62907a1):
+a C16/Plus/4 screen ("c16Upper") with all 128 TED colours. MIT licence, as Petmate
+(see third_party/petmate-LICENSE.txt).

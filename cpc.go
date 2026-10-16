@@ -157,7 +157,7 @@ func (a *App) borderPx(d *Doc) uint32 {
 	if a.cpc() {
 		return cpcColour(a.cpcSet.border)
 	}
-	return a.pal[d.borderColour()]
+	return a.screenRGB(d.borderColour())
 }
 
 // cpcCellW and cpcCellH are a cell's size in pixels in each mode.

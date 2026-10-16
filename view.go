@@ -46,7 +46,7 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	smear := false
 	switch {
 	case a.screen():
-		bgc, it, ul = a.pal[a.doc.bg], false, false
+		bgc, it, ul = a.screenRGB(a.doc.bg), false, false
 	case a.st():
 		bgc = a.pal[bg]
 	case a.zx():
@@ -68,6 +68,12 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	switch {
 	case a.atari():
 		fgc = a.pal[a.doc.ink]
+	case a.ted(): // the cell's whole TED colour; a flashing cell's ink is off half the time
+		if ink, on := a.tedInk(v); on {
+			fgc = ink
+		} else {
+			fgc = bgc
+		}
 	case a.c64() && a.mach().mono: // the PET: one colour on the screen
 		fgc = a.pal[1]
 	case a.c64() && a.mach().colours == 8: // the VIC-20 shows 8 text colours
@@ -548,7 +554,7 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			a.setMode(modeOrder[i])
 		})
 	} else {
-		modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti. CPC: Amstrad CPC, .bin. MT: Minitel, .vdt. VD: Viewdata (Prestel, Telstar), .cpt, .bin, Telstar .json. Uni: Unicode (terminals, IRC; a PC or Amiga page is converted, undoably), UTF-8 ANSI, .dur, .irc."
+		modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, Plus/4, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti. CPC: Amstrad CPC, .bin. MT: Minitel, .vdt. VD: Viewdata (Prestel, Telstar), .cpt, .bin, Telstar .json. Uni: Unicode (terminals, IRC; a PC or Amiga page is converted, undoably), UTF-8 ANSI, .dur, .irc."
 		for _, m := range modeOrder {
 			label := modeNames[m]
 			if m == "cpc" {
@@ -650,6 +656,12 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 	pcur := 0
 	for _, p := range palettes {
 		palNames, palIDs = append(palNames, p.name), append(palIDs, p.id)
+	}
+	if a.ted() { // a Plus/4 page: the TED's 128 colours as VICE, YAPE or Colodore show them (ted.go)
+		palNames, palIDs = nil, nil
+		for _, p := range tedPalettes {
+			palNames, palIDs = append(palNames, p.name), append(palIDs, p.id)
+		}
 	}
 	if a.ownPal != nil {
 		palNames, palIDs = append(palNames, "The file's own"), append(palIDs, "file")

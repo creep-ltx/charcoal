@@ -42,6 +42,7 @@ func startTiles() []startTile {
 		{"PET", "c64", pet, "", 1, 0},
 		{"VIC-20", "c64", "vic20", "", 6, 8},
 		{"C128", "c64", c128, "", 13, 16},
+		{"Plus/4", "c64", "plus4", "", 0, 16},
 		{"ZX Spectrum", "zx", "", "", 0, 8},
 		{"Teletext", "tt", "", "", 7, 8},
 		{"Amstrad CPC", "cpc", "", "", 1, 4},
@@ -70,7 +71,7 @@ func (tl startTile) tab() *Tab {
 		m := machineByID(tl.machine)
 		t.machine = m.id
 		t.paletteFor["c64"] = m.palette
-		t.doc = newDoc(m.cols, m.rows)
+		t.doc = newMachineDoc(m)
 	}
 	if tl.stres != "" {
 		t.stres = tl.stres
@@ -125,6 +126,8 @@ func (a *App) pickTile(tl startTile) {
 		a.fg, a.bg = 1, 0
 	case tl.mode == "mt":
 		a.fg, a.bg = 7, 0
+	case tl.machine == "plus4": // black on the power-on screen (ted.go)
+		a.fg, a.flash = 0x00, false
 	case old.mode == "st" || old.mode == "zx" || old.mode == "cpc":
 		a.fg, a.bg = 7, 0
 	}
@@ -457,6 +460,9 @@ func (a *App) paperColour() uint32 {
 	i := a.paperIndex()
 	if !a.screen() && !a.st() && !a.zx() && !a.ice {
 		i &= 7
+	}
+	if a.ted() && a.screen() { // a Plus/4's screen colour is a whole TED colour
+		return a.screenRGB(i)
 	}
 	return a.pal[i]
 }

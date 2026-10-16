@@ -1,3 +1,4 @@
-pet-ukkeli.c and vic20-iso.c are example pictures from Marq's PETSCII editor
+pet-ukkeli.c, vic20-iso.c and plus4-stripes.c are example pictures from Marq's PETSCII editor
 (http://www.kameli.net/marq/?page_id=2717, petscii.zip examples/), WTFPL like the editor
 (see third_party/marq-petscii-LICENSE.txt). A PET picture is saved with its characters only.
+plus4-stripes.c is a Plus/4 picture: border, background and colours are whole TED colours (0-127).

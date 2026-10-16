@@ -124,6 +124,7 @@ type Snap struct {
 	order  *drawOrder
 	mode   string    // the page type: undoing a conversion to or from Unicode changes it back
 	cpc    *cpcSetup // a CPC page's inks and mode as they were (nil on other pages)
+	mach   string    // a PETSCII page's machine: undoing a move to or from the Plus/4 brings its colours back
 	vic    *vicSetup // a C64 page's text mode and $D022-$D024 as they were (nil on other pages)
 }
 type Play struct {
@@ -408,6 +409,9 @@ func (a *App) cell(ch int) uint32 {
 		if a.atari() {
 			return makeCell(ch, 0, 0, 0) // one text colour for the whole screen
 		}
+		if a.ted() { // the brush's whole TED colour and flash (ted.go)
+			return tedCell(ch, a.tedBrush())
+		}
 		return makeCell(ch, a.fg, 0, 0)
 	}
 	return makeCell(ch, a.fg, a.bg, a.styleFlags())
@@ -425,6 +429,9 @@ func (a *App) brushCell() uint32 {
 	}
 	if a.atari() {
 		return makeCell(a.brush, 0, 0, 0)
+	}
+	if a.ted() {
+		return tedCell(a.brush, a.tedBrush())
 	}
 	if a.c64() {
 		return makeCell(a.ecmChar(a.brush), a.fg, 0, 0)
@@ -447,7 +454,7 @@ func (a *App) previewFg() int {
 		return 7
 	}
 	// Black or white, whichever shows better on the screen colour (by its brightness).
-	c := a.pal[a.doc.bg&15]
+	c := a.screenRGB(a.doc.bg)
 	r, g, b := float64(c>>16&255), float64(c>>8&255), float64(c&255)
 	if 0.299*r+0.587*g+0.114*b > 110 {
 		return 0
@@ -456,6 +463,10 @@ func (a *App) previewFg() int {
 }
 
 func (a *App) setPalette() {
+	if a.ted() { // the KERNAL's 16 colours of the page's TED palette (ted.go)
+		a.pal = a.tedPal().kernal16()
+		return
+	}
 	if a.cpc() { // the page's inks
 		a.cpcEnsure()
 		a.pal = a.cpcSet.palette()
@@ -596,7 +607,7 @@ func nextGen() int { genSeq++; return genSeq }
 
 func (a *App) snapshot() Snap {
 	d := a.doc.clone()
-	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap()}
+	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine}
 }
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
@@ -657,6 +668,13 @@ func (a *App) restore(s Snap) {
 	}
 	if s.vic != nil && a.c64() {
 		a.vic = *s.vic
+	}
+	if a.c64() && s.mach != "" && s.mach != a.machine && hasROM(machineByID(s.mach).family) {
+		lower := a.lower()
+		a.machine = s.mach
+		a.setCase(lower)
+		a.paletteFor["c64"] = a.mach().palette
+		a.setPalette()
 	}
 	a.showCase()
 	a.dirty = a.gen != a.savedGen
@@ -836,6 +854,10 @@ func (a *App) paintOne(x, y, button int, fx, fy bool) {
 		if (button == 3 && a.c64()) || a.atari() {
 			return // a C64 cell has no background of its own, an Atari cell no colour at all
 		}
+		if a.ted() { // the whole attribute: colour and flash
+			a.setCell(x, y, old&^0xFF00|uint32(a.tedBrush())<<8)
+			return
+		}
 		if button == 3 {
 			a.setCell(x, y, old&^0xF000|uint32(a.bg)<<12)
 		} else {
@@ -949,6 +971,9 @@ func (a *App) pick(x, y int) {
 	if !a.atari() {
 		a.fg = cellFg(v)
 	}
+	if a.ted() { // the whole TED colour, and whether it flashes
+		a.fg, a.flash = tedAttr(v)&127, tedAttr(v)&128 != 0
+	}
 	if !a.screen() {
 		a.bg = cellBg(v)
 	}
@@ -1040,6 +1065,8 @@ func (a *App) nColours(bg bool) int {
 		return a.cpcSet.info().inks
 	case a.c64() && !bg && a.mach().mono:
 		return 1
+	case a.ted():
+		return 128
 	case a.c64() && !bg:
 		return a.mach().colours
 	}
@@ -1063,6 +1090,10 @@ func (a *App) stepFg(d int) {
 		a.msg(why)
 		return
 	}
+	if a.ted() { // the hue steps, the luminance stays (ted.go)
+		a.tedStep(d)
+		return
+	}
 	n := a.nColours(false)
 	a.setFg((a.fgNow()%n + d + n) % n)
 }
@@ -1073,6 +1104,10 @@ func (a *App) stepBg(d int) {
 		return
 	}
 	n := a.nColours(true)
+	if a.ted() {
+		a.setBg(a.doc.bg&0x70 | (a.doc.bg&15+d+16)%16)
+		return
+	}
 	a.setBg((a.bgNow()%n + d + n) % n)
 }
 
@@ -1084,6 +1119,10 @@ func (a *App) colourKey(i int, bg bool) {
 		return
 	}
 	n := a.nColours(bg)
+	if a.ted() && i < 16 {
+		a.tedKey(i, bg)
+		return
+	}
 	if i >= n {
 		a.msg(fmt.Sprintf("This page has %d colours (0-%d)", n, n-1))
 		return
@@ -1119,6 +1158,8 @@ func (a *App) defaultColours() {
 		a.fg, a.bg = 0, 7 // black ink on white paper, as at start-up
 	case a.cpc():
 		a.fg, a.bg = 1, 0 // pen 1 on paper 0, as at start-up
+	case a.ted(): // black on a light screen, white on a dark one
+		a.fg, a.flash = map[bool]int{true: 0x00, false: 0x71}[a.doc.bg>>4&7 >= 4 && a.doc.bg&15 != 0], false
 	case a.c64():
 		a.fg = map[string]int{"vic20": 6, "pet": 1, "pet80": 1}[a.machine]
 		if a.fg == 0 {
@@ -1300,7 +1341,7 @@ func (a *App) reparse() {
 	if a.reparseUni() {
 		return
 	}
-	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseVideotex() {
+	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseVideotex() || a.reparseTED() {
 		return
 	}
 	switch a.srcKind {
@@ -1370,7 +1411,7 @@ func (a *App) reparse() {
 		if cols == 0 {
 			cols = a.mach().cols
 		}
-		d, lower := parseSeq(a.source, cols)
+		d, lower := parseSeqOn(a.source, cols, a.ted())
 		a.doc = d
 		if lower >= 0 {
 			a.setCase(lower == 1)
@@ -1413,6 +1454,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		return
 	}
 	if a.loadVideotex(b, name, path, as) { // Minitel .vdt, Viewdata .cpt/.bin/.json (minitel_ui.go)
+		return
+	}
+	if a.loadTED(b, name, path, as) { // TED Screen Editor's .scrn, Open as Plus/4 (ted_formats.go)
 		return
 	}
 	if what := notArt(b); what != "" && as == "auto" {
@@ -1479,7 +1523,7 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		kind = "petmate"
 	case isMarq(b):
 		kind = "marq"
-	case strings.HasSuffix(strings.ToLower(name), ".prg") && isOurC64Prg(b):
+	case strings.HasSuffix(strings.ToLower(name), ".prg") && (isOurC64Prg(b) || isTEDPrg(b)):
 		kind = "prg"
 	case isD64(name, b): // a disk with a screen's program on it (c64x_d64.go)
 		if _, _, err := d64Art(b); errors.Is(err, errD64NoScreen) {
@@ -1507,6 +1551,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		scr, err := a.screens(b, kind)
 		if err != nil {
 			a.msg("Could not read " + name + ": " + err.Error())
+			return
+		}
+		if scr[0].machine == "plus4" && a.tedNeedsROM(func() { a.loadBytes(b, name, path, as) }) {
 			return
 		}
 		a.mode, a.srcKind = "c64", kind
@@ -1763,6 +1810,9 @@ func (a *App) readScreens(b []byte, kind string) ([]PetScreen, error) {
 			}
 			b = f.data
 		}
+		if scr, ok := tedScreen(b); ok { // a Plus/4's (ted_formats.go)
+			return scr, nil
+		}
 		d, lower, err := readC64Prg(b)
 		if err != nil {
 			return nil, err
@@ -1859,7 +1909,7 @@ func (a *App) setMode(m string) {
 		// An empty page takes the new machine's width and colours.
 		switch {
 		case m == "c64":
-			a.doc = newDoc(a.mach().cols, a.mach().rows)
+			a.doc = newMachineDoc(a.mach())
 		case m == "atari":
 			a.doc = newAtariDoc()
 		case m == "st":
@@ -1923,17 +1973,24 @@ func (a *App) setMachine(id string) {
 		return
 	}
 	lower := a.lower()
+	reread := a.source != nil && !a.dirty && !a.splitPage() && (a.srcKind == "" || a.srcKind == "seq")
+	fresh := a.source == nil && !a.dirty && a.doc.empty()
+	if !reread && !fresh { // to or from a Plus/4: the colours become the nearest (one undo step, ted.go)
+		a.convertMachineColours(a.machine, id)
+	} else {
+		a.tedBrushFor(a.machine, id, fresh)
+	}
 	a.machine, a.defMachine = id, id
 	a.setCase(lower)
 	a.paletteFor["c64"] = m.palette
 	a.setPalette()
 	switch {
-	case a.source != nil && !a.dirty && !a.splitPage() && (a.srcKind == "" || a.srcKind == "seq"):
+	case reread:
 		a.forceCols = m.cols
 		a.reparse()
 		a.setCase(lower)
-	case a.source == nil && !a.dirty && a.doc.empty():
-		a.doc = newDoc(m.cols, m.rows)
+	case fresh:
+		a.doc = newMachineDoc(m)
 		a.applyMode()
 	case a.doc.cols != m.cols && a.srcKind != "marq" && a.srcKind != "petmate":
 		// The page takes the machine's width; Ctrl+Z brings the old one back.
@@ -2056,7 +2113,7 @@ func (a *App) makeTab(mode string) *Tab {
 	t.machine = a.defMachine
 	if mode == "c64" {
 		m := machineByID(t.machine)
-		t.doc = newDoc(m.cols, m.rows)
+		t.doc = newMachineDoc(m)
 		t.saveFmt, t.name = "seq", "untitled.seq"
 	}
 	t.stres = a.defSTRes
@@ -2536,6 +2593,9 @@ func (a *App) modeFormats() []Format {
 		if f.modes == "c64 (C64)" && (!a.c64() || a.machine != "c64") {
 			continue // a C64 program runs on a C64 only
 		}
+		if a.tedHides(f) { // the Plus/4's own, and what it cannot have (ted_formats.go)
+			continue
+		}
 		if strings.Contains(f.modes, a.mode) {
 			out = append(out, f)
 		}
@@ -2608,6 +2668,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		return out, nil
 	}
 	if out, ok, err := a.encodeUni(fmtID, d); ok { // uniformats.go
+		return out, err
+	}
+	if out, ok, err := a.encodeTED(fmtID, d); ok { // the Plus/4's .prg, .d64, .scrn and .seq (ted_formats.go)
 		return out, err
 	}
 	if out, ok, err := a.encodeC64x(fmtID, d); ok { // C64 .prg and .d64 beyond Petmate's form, asm and BASIC (c64x_prg.go)
@@ -2723,7 +2786,10 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		if fmtID == "png2" {
 			z = 2
 		}
+		blinkWas := a.blink
+		a.blink = true // flashing and blinking cells in their "on" look, as the animations draw them
 		fb := a.renderDoc(d, z)
+		a.blink = blinkWas
 		img := image.NewRGBA(image.Rect(0, 0, fb.w, fb.h))
 		for i, p := range fb.px {
 			img.Pix[i*4], img.Pix[i*4+1], img.Pix[i*4+2], img.Pix[i*4+3] = byte(p>>16), byte(p>>8), byte(p), 255
@@ -2753,7 +2819,7 @@ func (a *App) petScreens() []PetScreen {
 	a.keepCase()
 	out := make([]PetScreen, a.nFrames())
 	for i := range out {
-		out[i] = PetScreen{doc: a.frameDoc(i), lower: map[bool]int{true: 1}[a.lower()], name: strings.TrimSuffix(a.name, filepath.Ext(a.name)), fb: -1}
+		out[i] = PetScreen{doc: a.frameDoc(i), lower: map[bool]int{true: 1}[a.lower()], name: strings.TrimSuffix(a.name, filepath.Ext(a.name)), fb: -1, machine: a.machine}
 		if a.frames != nil {
 			f := a.frames[i]
 			out[i].name, out[i].fb = f.name, f.src
@@ -2863,7 +2929,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
-	note := a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID)
+	note := a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID) + a.tedSaved(path, fmtID)
 	if a.animatedSave(fmtID) {
 		note += pacedNote(a.pageBoard(), ps) + a.writeCopies(path, fmtID)
 	}
@@ -2930,7 +2996,7 @@ func (a *App) playBytes() []byte {
 	}
 	switch {
 	case a.c64():
-		return writeSeq(a.doc, a.lower(), false)
+		return writeSeqOn(a.doc, a.lower(), false, a.ted())
 	case a.atari():
 		return writeAta(a.doc, false)
 	case a.st():
@@ -2955,7 +3021,7 @@ func (a *App) play() {
 	d.bg, d.ink, d.border = a.doc.bg, a.doc.ink, a.doc.border
 	var em emulator = newTerm(d, a.amiga())
 	if a.c64() {
-		em = newPetTerm(d)
+		em = newPetTermOn(d, a.ted())
 	}
 	if a.atari() {
 		em = newAtariTerm(d)

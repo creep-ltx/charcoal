@@ -133,10 +133,27 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
 - Pages for a machine's screen keep its width: PETSCII the machine's, Atari 38 or 40; only Amiga, PC and Unicode
   pages can be any width (W).
 - **PETSCII page** (the Machine gadget): PET 40/80 columns (green, amber or white screen), VIC-20 (22x23, 8 text
-  colours), C64 (40x25; Pepto or Colodore colours), C128 40 columns, C128 80 columns (VDC, RGBI colours). Each
-  machine's own character set, upper/graphics and lower/upper, from VICE (first run or Settings, 18 KB, SHA-1
+  colours), C64 (40x25; Pepto or Colodore colours), C128 40 columns, C128 80 columns (VDC, RGBI colours), Plus/4.
+  Each machine's own character set, upper/graphics and lower/upper, from VICE (first run or Settings, 34 KB, SHA-1
   checked). Rendering checked against 125 pictures exported by Marq's PETSCII editor: all of the same version
   identical, cell by cell.
+- **Plus/4 page** (also the C16 and C116; the Plus/4 start tile, or Model: Plus/4): 40x25 like the C64, but
+  every cell has the TED's whole attribute: one of 16 hues in 8 luminances (121 colours, black has no
+  luminance) and **Flash** (the tool rail's toggle; flashing cells blink on the page). The screen colour and the
+  border are TED colours too; a new page has the Plus/4's power-on colours (black on white, a light blue
+  border). The Colours panel is the hue x luminance grid (left: the brush, right: the screen colour, middle:
+  the border; the wheel over it makes the brush lighter or darker, as in Marq's PETSCII editor); Ctrl+0-7 and
+  Ctrl+arrows change the hue and keep the luminance. Palettes: VICE's own (the default: VICE 3.9's xplus4
+  shows exactly these), YAPE's and Colodore's (VICE's `.vpl` files). The character set is the Plus/4 ROM's
+  (from VICE, like the other Commodore ROMs). Files: **`.prg`** (Marq's PETSCII editor's Plus/4 program: `RUN`
+  shows the page; checked in VICE's xplus4: its screenshot and CharEdit's PNG are identical, pixel for pixel,
+  border included), a **`.d64`** holding it, **`.scrn`** (TED Screen Editor's screen, with its `.proj` for the
+  size and colours, written next to it), Marq's **`.c`** (`PLUS4`), Petmate9's **`.petmate`** (`c16Upper` /
+  `c16Lower` screens), **`.seq`** as a Plus/4 prints it (the colour codes give the KERNAL's luminance of each
+  hue, FLASH ON / OFF are 0x82 / 0x84; the save says how many cells show another luminance), PNG / GIF / APNG
+  as VICE's screenshots (384x288, the screen at 32,40). Open as "Plus/4 PETSCII" reads any file as a Plus/4
+  prints it; changing a page between the C64 and the Plus/4 turns its colours into the nearest (Ctrl+Z
+  undoes it).
 - **Atari ST page**: the ST's VT52 terminal in low (40x25, 16 colours), medium (80x25, 4) or high resolution
   (80x25, mono); each cell its own colours; `.vt` streams read and written, the resolution guessed from the pens
   and columns used. Font: EmuTOS's, downloaded on first use (GPL, so not built in), SHA-1 checked.
@@ -287,6 +304,9 @@ open again become the page's file (Save writes the same format again).
 | Marq's PETSCII editor | `.bas`, `.s` | C64 | a BASIC listing (for petcat) and an ACME program of a 40x25 screen (data only for other sizes); with a custom set, multicolour or ECM: the registers and the set (BASIC: VIC bank 3, screen `$C400`, set `$C800`; ACME: the set at `$2000`) | no | its source; the ACME output assembled by ACME 0.97 and run in a 6502 (c64x_test.go) |
 | CharPad | `.ctm` (v5-v9) | C64 | (read only) the character set, mode, colours; the map laid out as characters | yes, as a font or a page | CharPad 2.7's format pages; c64lib's test projects (`testdata/charpad`), every version the same page |
 | Petmate | `.json` | PETSCII | every screen (Petmate's JSON export) | yes | its source (exporters/json.ts) |
+| Marq's PETSCII editor | `.prg`, `.c` | Plus/4 | the program of its Plus/4 template (screen codes, attributes, border, background, case); the C array with `PLUS4` (no flash: the editor has none) | yes | its source (m_plus4.pde) and template; the `.prg` run in VICE's xplus4 |
+| TED Screen Editor | `.scrn` + `.proj` | Plus/4 | attributes, its 24-byte signature, screen codes ("save screen"); the project's size, colours, case | yes (without a `.proj`: 40 columns, black) | its source and README; its own title and help screens |
+| Petmate9 | `.petmate` | Plus/4 | `c16Upper` / `c16Lower` screens with the TED's attribute bytes and colours | yes | its source |
 
 Traps: Petmate's `.pet` export says 0 for lower case where Marq's says 1 (CharEdit follows Marq); IcyDraw
 evens out colours that do not show when it saves and writes NUL as a space; an ArtWorx or TundraDraw page is
@@ -541,7 +561,7 @@ Delete, Insert, Esc. The defaults, the PC ANSI editors' (Moebius, PabloDraw, The
 | Alt+T, D, K, L, P, S, B | tools: Type, Draw, Colour, Fill, Pick, Select, Half (PC, Unicode) / Sixel (teletext, Viewdata, Minitel) |
 | Ctrl+Alt+PgUp / PgDn | Unicode page: the character table's previous / next block |
 | Ctrl+Up / Ctrl+Down, Ctrl+Left / Ctrl+Right | foreground -/+, background -/+ |
-| Ctrl+0-7, Alt+0-7 | foreground, background colour (again: the bright one) |
+| Ctrl+0-7, Alt+0-7 | foreground, background colour (again: the bright one; Plus/4: the hue, its luminance kept) |
 | Alt+U, Ctrl+D, Ctrl+Shift+X, Ctrl+E | take the colours under the cursor, default colours, swap, iCE on/off |
 | Ctrl+F1-F10, Ctrl+Shift+Up / Down | F-key set 1-10, next / previous set |
 | Ctrl+= / Ctrl++, Ctrl+-, Ctrl+9 | zoom in, out, fit the width |
@@ -660,6 +680,10 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | zstd decoder (IcyDraw files) | github.com/klauspost/compress v1.19.0, Klaus Post, The Go Authors (xxhash: Caleb Spare) | BSD 3-clause (and Apache 2.0 parts, MIT xxhash), `third_party/klauspost-compress-LICENSE.txt` |
 | Playscii's palettes (`psciPalettes`) and glyph tables | Playscii, JP LeBreton (the colours and glyph order of its palettes/ and charsets/) | MIT, `third_party/playscii-LICENSE.txt` |
 | Marq's ACME copy loop (`marqAsmCode`) | Marq's PETSCII editor | WTFPL, `third_party/marq-petscii-LICENSE.txt` |
+| The Plus/4 program's head (`tedPrgHead`, `ted_formats.go`) | Marq's PETSCII editor's `template-plus4.prg` | WTFPL, `third_party/marq-petscii-LICENSE.txt` |
+| The Plus/4 palettes (`ted.go`) | VICE: its TED colour model (`src/plus4/ted-color.c`, `src/video/video-color.c`) worked out again in Go, and the colour values of its `yape-pal.vpl` (taken from a YAPE screenshot) and `colodore_ted.vpl` (Pepto's colodore.com); colour values only, no VICE code | VICE is GPL-2; colours are measurements |
+| `testdata/marq/plus4-stripes.c` | Marq's PETSCII editor's Plus/4 example | WTFPL, `testdata/marq/README` |
+| `testdata/petmate9/c16_colorbars.petmate` | Petmate9's C16 test workspace (github.com/wbochar/petmate9) | MIT, `testdata/petmate9/README` |
 | Test art in `testdata/alove` | ansilove's tests | BSD 2-clause, `testdata/alove/LICENSE-ansilove.txt` |
 | Test files in `testdata/moebius` | written and read back by Moebius's own save and load code (github.com/blocktronics/moebius, `app/libtextmode`), run from a separate checkout by `tools/moebius/gen.js` and `check.js`; no Moebius code is copied | Moebius is Apache-2.0; the generated files are Charcoal's (MIT) |
 | `testdata/icydraw` | `testdata/alove`'s art as IcyDraw 0.6 saves it | as above |
@@ -670,5 +694,5 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | `testdata/igs/icydraw` | IcyDraw's IGS test scripts and its renders of them | MIT or Apache-2.0, `testdata/igs/icydraw/README` |
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE
-project) and the EmuTOS font sources (GPL; 8x8, 8x16 and, for IGS's small text, 6x6), for PETSCII and Atari ST
+project; for the Plus/4 its KERNAL ROM, which holds the characters) and the EmuTOS font sources (GPL; 8x8, 8x16 and, for IGS's small text, 6x6), for PETSCII and Atari ST
 pages.

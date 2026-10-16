@@ -19,9 +19,9 @@ func withFonts(t *testing.T, st bool) {
 			fonts = append(fonts, &Font{id: id, name: id, kind: kind, bits: make([]byte, 256*16)})
 		}
 	}
-	for _, fam := range []string{"pet", "vic20", "c64", "c128"} {
-		add(fam+"upper", "c64")
-		add(fam+"lower", "c64")
+	for _, r := range cbmROMs { // every Commodore machine's (the Plus/4's too)
+		add(r.family+"upper", "c64")
+		add(r.family+"lower", "c64")
 	}
 	if st {
 		add("st8x8", "st")

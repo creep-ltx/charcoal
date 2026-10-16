@@ -52,6 +52,8 @@ func (a *App) borderSize(w, h, z int) (int, int, int) {
 	switch {
 	case a.cpc():
 		return w / 10, h * 82 / 400, h * 62 / 400
+	case a.ted(): // as VICE's xplus4 shows it: 384 x 288, the screen at 32,40 (ted.go)
+		return 32 * z, 40 * z, 48 * z
 	case a.screen() || a.zx():
 		return 32 * z, 32 * z, 32 * z
 	}

@@ -77,6 +77,8 @@ func marqName(machine string) (name string, colours bool) {
 		return "PETHI", false
 	case "vic20":
 		return "VIC20", true
+	case "plus4":
+		return "PLUS4", true
 	}
 	return "C64", true
 }
@@ -102,7 +104,7 @@ func writeMarqFrames(docs []*Doc, lower bool, machine string) []byte {
 		if colours {
 			parts = 2
 			fmt.Fprintf(&b, "unsigned char frame%04d[]={// border,bg,chars,colors\n", i)
-			fmt.Fprintf(&b, "%d,%d,\n", d.borderColour(), d.bg)
+			fmt.Fprintf(&b, "%d,%d,\n", d.borderColour(), d.bg) // a Plus/4's: whole TED colours (ted.go)
 		} else {
 			fmt.Fprintf(&b, "unsigned char frame%04d[]={\n", i)
 		}
@@ -110,9 +112,12 @@ func writeMarqFrames(docs []*Doc, lower bool, machine string) []byte {
 			for y := 0; y < h; y++ {
 				for x := 0; x < w; x++ {
 					v := d.get(x, y)
-					if part == 0 {
+					switch {
+					case part == 0:
 						fmt.Fprintf(&b, "%d,", cellCh(v))
-					} else {
+					case machine == "plus4": // hue and luminance; the editor has no flash
+						fmt.Fprintf(&b, "%d,", tedAttr(v)&127)
+					default:
 						fmt.Fprintf(&b, "%d,", cellFg(v))
 					}
 				}
@@ -161,6 +166,11 @@ func parseMarq(b []byte) ([]PetScreen, error) {
 		}
 		d := newDoc(w, h)
 		switch {
+		case len(nums) >= 2+2*w*h && machine == "plus4": // whole TED colours (ted.go)
+			d.border, d.bg = nums[0]&127, nums[1]&127
+			for i := 0; i < w*h; i++ {
+				d.cells[i] = tedCell(nums[2+i]&255, nums[2+w*h+i]&255)
+			}
 		case len(nums) >= 2+2*w*h: // border, background, characters, colours
 			d.border, d.bg = nums[0]&15, nums[1]&15
 			for i := 0; i < w*h; i++ {
@@ -361,7 +371,7 @@ func (a *App) writeHTML() []byte {
 	bgOf := func(v uint32) uint32 {
 		switch {
 		case a.screen():
-			return a.pal[d.bg]
+			return a.screenRGB(d.bg)
 		case a.ice:
 			return a.pal[cellBg(v)]
 		}
@@ -374,7 +384,7 @@ func (a *App) writeHTML() []byte {
 	}
 	page := a.pal[0]
 	if a.screen() {
-		page = a.pal[d.borderColour()]
+		page = a.screenRGB(d.borderColour())
 	}
 	fmt.Fprintf(&b, "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>%s</title>\n", html.EscapeString(title))
 	fmt.Fprintf(&b, "<style>body{background:%s;margin:2em}pre{font:16px/1 \"Topaz a600a1200a400\",\"Px437 IBM VGA 8x16\",monospace;display:inline-block;background:%s;padding:0;margin:0}</style>\n",
@@ -389,6 +399,9 @@ func (a *App) writeHTML() []byte {
 			fg, bg := a.pal[cellFg(v)], bgOf(v)
 			if a.atari() {
 				fg = a.pal[d.ink]
+			}
+			if a.ted() {
+				fg = a.tedRGB(tedAttr(v))
 			}
 			key := uint64(fg)<<32 | uint64(bg)
 			if v&italic != 0 {
@@ -503,14 +516,21 @@ func parsePetmate(b []byte) ([]PetScreen, error) {
 		}
 		d := newDoc(w, h)
 		d.bg, d.border = s.BackgroundColor&15, s.BorderColor&15
+		ted := strings.HasPrefix(s.Charset, "c16") // Petmate9's C16/Plus/4 screens: whole TED colours (ted.go)
+		if ted {
+			d.bg, d.border = s.BackgroundColor&127, s.BorderColor&127
+		}
 		for y, row := range s.Framebuf {
 			for x, p := range row {
 				if x < w && y < h {
 					d.cells[y*w+x] = makeCell(p.Code&255, p.Color&15, 0, 0)
+					if ted {
+						d.cells[y*w+x] = tedCell(p.Code&255, p.Color&255)
+					}
 				}
 			}
 		}
-		out = append(out, PetScreen{doc: d, lower: petmateLower(s.Charset), name: s.Name, fb: i})
+		out = append(out, PetScreen{doc: d, lower: petmateLower(s.Charset), name: s.Name, fb: i, machine: map[bool]string{true: "plus4"}[ted]})
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("the Petmate file has no screens")
@@ -568,14 +588,20 @@ func writePetmateFrames(src []byte, scr []PetScreen) []byte {
 			for x := range row {
 				v := d.get(x, y)
 				row[x] = petmatePixel{cellCh(v), cellFg(v)}
+				if s.machine == "plus4" { // Petmate9 keeps the TED's attribute byte
+					row[x].Color = tedAttr(v)
+				}
 			}
 			cells[y] = row
 		}
 		fb["width"], fb["height"], fb["framebuf"] = raw(d.cols), raw(rows), raw(cells)
 		fb["backgroundColor"], fb["borderColor"] = raw(d.bg), raw(d.borderColour())
 		var cs string
-		if json.Unmarshal(fb["charset"], &cs) != nil || petmateLower(cs) != max(s.lower, 0) {
+		if json.Unmarshal(fb["charset"], &cs) != nil || petmateLower(cs) != max(s.lower, 0) || strings.HasPrefix(cs, "c16") != (s.machine == "plus4") {
 			fb["charset"] = raw(map[bool]string{true: "lower", false: "upper"}[s.lower == 1])
+			if s.machine == "plus4" {
+				fb["charset"] = raw(map[bool]string{true: "c16Lower", false: "c16Upper"}[s.lower == 1])
+			}
 		}
 		if s.name != "" {
 			fb["name"] = raw(s.name)
