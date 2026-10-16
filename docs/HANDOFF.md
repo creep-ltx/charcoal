@@ -13,7 +13,9 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
   folder (random effects, budgets, random screens per board), Moebius compatibility + key presets, files for
   other editors. **Next on the roadmap: step 3, compo-ready** (work stages from undo history, party rule check,
   runs-on-the-machine exports), then step 4/5 (docs/roadmap.md).
-- **Release how-to:** bump `const version` in main.go (X.YbN = beta), commit, push main, `git tag -a vX.YbN -m ...`,
+- **Release how-to:** add the version's section to CHANGELOG.md (plain words for artists and sysops; the
+  release page is made from it by tools/release/notes.sh, and the release job fails without it), bump
+  `const version` in main.go (X.YbN = beta), commit, push main, `git tag -a vX.YbN -m ...`,
   push the tag; GitHub Actions builds the three zips and a prerelease (tags with "b"). Check the run with
   `gh run watch`, then `gh release view`. Before tagging: `go test ./...`, the same as CI runs it (Go 1.24 from
   go.mod, no downloaded ROMs/fonts: `HOME=<empty> GOMODCACHE=$(go env GOMODCACHE) GOCACHE=$(go env GOCACHE)

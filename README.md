@@ -28,6 +28,8 @@ piece taken down, open an issue.
 
 ## Download
 
+What is new in each version: [CHANGELOG.md](CHANGELOG.md) (each release page says the same).
+
 Get the newest version from the [releases page](https://github.com/creep-ltx/charcoal/releases): open
 "Assets" under the top release and pick the zip for your computer. Unpack it (double-click the zip). Each
 holds the program, this README, the licence and the font and library licences (`licences/`).
