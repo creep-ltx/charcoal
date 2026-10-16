@@ -1375,9 +1375,62 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   seen: CHARCOAL_ICYMACH/CHARCOAL_ICYDIR as TestOthIcyExternal) and `TestLayRealFiles` (CHARCOAL_LAYER_FILES).
   The big check reads pages as seen and counts files that keep their layers (none of its .icy/.xp/.psci have
   more than one layer). Screenshots: /tmp/charcoal-layers/*.png.
-- Not done: layers with frames; lock (IcyDraw's lock bits are only written back); groups, offsets, text layers,
-  opacity; layers on Spectrum/CPC/MSX/MZ pages (their empty cell is not blank); .icy layers of PETSCII/Atari/ST
-  pages (flattened, kept beside the file); Playscii's PETSCII/Atari layers; a drawing session with layers.
+- Not done then (round 7 did lock, frames, machines and machine .icy: "Layers, the rest" below): groups,
+  offsets, text layers, opacity; Playscii's PETSCII/Atari layers; a drawing session with layers.
+
+## Layers, the rest (2026-10-16, branch r7-layers2; design: docs/layers-design.md §9)
+
+- **Lock** (`layers_lock.go`): `Layer.locked`; IcyDraw's LAYER flag bit 2 (EDIT_LOCK) read and written
+  (`icyEditLock`, `icyLayerFlags`; bits 1 and 4, the position and alpha locks, stay in `layerKeep.IcyFlags`).
+  Enforced twice: the tools refuse at their start (`pagePress` for every tool but Type/Select/Pick, a block
+  stamp, lifting a selection, `typeByte`), and **`pushUndo` is the net**: on a locked layer it keeps the page in
+  `Tab.lockSnap` instead of pushing, and `lockCheck` (main loop, after every event, after `pass()`, after
+  `scriptStep`) puts the cells back if they changed (and ends a drag: `a.button` = 0), else pushes the step it
+  would have been (a screen colour, a VIC mode: the page's, not the layer's). Tests that edit then check must call
+  `a.lockCheck()` themselves. Structure (W, H, rows/cols, crop, conversions) changes a locked layer too, as in
+  IcyDraw; delete and merge down refuse it. Saved in the autosave and the side file (`Locked`).
+- **Layers with frames** (`layers_frames.go`), Playscii's model (art.py keeps `layers_z/visibility/names` once,
+  tiles per frame): `Tab.layers` is the layer list (meta, the same for every frame) with the current frame's
+  pictures; `Frame.layers []*Doc` a frame's layer pictures (stale while current). **`Frame.doc` of a frame that
+  is not current is the picture its layers make** (`flattenFrame`), so the strip, onion, playing, GIF/APNG and
+  every frames writer read it unchanged; `frameDoc(cur)` returns `seen()` (and `seen()` returns t.doc while
+  `seeing`). `goFrame` = `storeFrame` (stores clones, remakes the picture) + `loadFrame`. Layer ops first change
+  every other frame (`everyFrameLayers`, a new list each time: frames' slices are shared with undo steps), then
+  the current one, then `settleFrames` remakes the pictures (a frame left with one layer gets it as its doc).
+  `withEveryFrame` maps fn over every frame's every layer and its picture. Undo: **every structural step is
+  `wholeSnap`** (frames and layers both, `whole` and `lwhole` set; `restore` handles both in one case);
+  `restore` of a cell step of another frame stores this frame and loads that one at the step's layer;
+  `snapshotLike` grows a redo layer to the frame's height (it was a shrunk stored layer before: a redo on another
+  layer could shorten the page). Limits: `allCells`. Autosave: `autosaveFrame.LRows` (rows of each layer,
+  cells frame by frame, layer by layer; an older CharEdit calls such an autosave damaged rather than misread it).
+  `.psci` writes every frame's layers (`psciLayersOf(docs)` -> `[][]Layer`) and reads them (`psciFramesLayers`:
+  every frame's layers as `psciFileLayers(b, fi, flat)`, one meta, black-shows-below if any frame needs it,
+  each frame checked with `layersKept`). Other frames formats: written as seen and **the page stays dirty**
+  (writeOut's message "keeps the frames but not their layers"); no side file for frames of layers. Still refused:
+  Split, Animate's "as frames" (`layersNoFrames`), drawing sessions.
+- **Machines** (`layered()` = `layerMode` minus IGS/SkyPix): Spectrum, CPC, MSX, MZ-700. The clear rule stays
+  `blankAt` (a space or NUL on background 0 = what every eraser writes: `paintAt` right button and `clearSel` write
+  `blank` on every page) plus `layerClearAt`: not a flashing Spectrum space (`flashFlag`: its ink shows) nor the
+  MZ's second set's 32 (`mzSet2`). The machines' own cleared cells (ZX white paper, MZ white on blue) cover;
+  `emptyCell()` returns `blank` on an upper ZX/MZ layer so inserted rows and moved blocks leave clear cells
+  (CPC's and MSX's own empties are already blank). Black shows below: CPC and MZ (per-cell paper); not the
+  Spectrum (ink and paper share BRIGHT) nor MSX (colours are the screen's or the character group's). Dim fades
+  to the cleared screen's paper (ZX pal[7], CPC pal[0], MZ pal[1], MSX the character's colour); without that,
+  the solid colour cells a .scr reads back (spaces on coloured paper) did not fade at all. `setMode` refuses to
+  go to or from these four with layers (`layerFixedMode`), and no longer re-reads the file of a page of layers.
+- **.icy of PETSCII/Atari/ST** (`icymach.go` `writeIcyMachine` builds `cellOf(doc)`; `icyMachineLayers`):
+  every layer, empty cells invisible; an ST layer with black shows below is written with the background as
+  seen (it reads back as a normal layer that looks the same: IcyDraw's transparency takes the lower half's colour
+  by CP437 shapes). Read: `icyFileLayers(doc, flat, page)` with `icyMachLayerPage` (each layer read as the
+  machine's page); `reparseEditor` now calls `fileLayers` after `reparseIcyMachine`.
+- Tests (`lay2_test.go`, helpers `lay2F*`): lock (tools, net, page fields kept, refusals, autosave, side file,
+  IcyDraw flags), frames of layers (ops in every frame, undo/redo across frames and layers, every frames writer
+  = the flat frames' bytes for PC/PETSCII/Atari/ST/Unicode, autosave, .psci, the dirty .ans), machines (new layer
+  = same file bytes, draw/erase, insert row, saves = seen, side file, mode refusal, clear cells, black), machine
+  .icy round trips (7 page kinds), env-gated `TestLay2IcyExternal` (IcyDraw's engine reads all 18 machine page
+  kinds with two layers as CharEdit sees them: *verified* 2026-10-16). Screenshots: /tmp/charcoal-layers2/.
+- Not done: a layer shared by every frame (a still background), groups, offsets, text layers, opacity; Split
+  and Animate's frames on a page of layers; REXPaint/Playscii lock (they have none).
 
 ## Keys and safety (2026-10-13, evening)
 

@@ -2,6 +2,18 @@
 
 Each version's section is also its release page on GitHub. Newest first.
 
+## Unreleased
+
+- **Lock a layer** (Lock in the Layers panel, Page > Lock the layer): no tool changes it, so you can draw
+  around a finished part without touching it. IcyDraw files keep the lock.
+- **Layers and frames together**, as in Playscii: every frame has every layer. Add a layer and every frame has
+  it; each frame draws its own letters on it. The strip, the onion skin, Play, GIF and APNG show every frame as
+  you see it. Playscii `.psci` files keep frames and layers; other animation files save the frames as you see
+  them (the page stays unsaved, so the layers are not lost by mistake).
+- **Layers on ZX Spectrum, Amstrad CPC, MSX and Sharp MZ-700 pages.** A space on black (on the CPC: on paper 0)
+  is an empty cell that shows the layers below; the machine's white paper covers, as on the screen.
+- IcyDraw `.icy` files of PETSCII, Atari and Atari ST pages keep their layers (before, they were put together).
+
 ## 0.1b13 (2026-10-16)
 
 - **Wide characters on Unicode pages:** Chinese, Japanese and Korean characters, fullwidth forms and emoji take

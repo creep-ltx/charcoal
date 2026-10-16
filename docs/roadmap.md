@@ -102,8 +102,11 @@ against each platform's best editor. Each step says what it wins.
 - [x] Layers (done 2026-10-16, layers*.go, docs/layers-design.md): PC, Amiga, Unicode, PETSCII, Atari and ST pages;
   empty cells show the layers below, "black shows below" per layer; new/copy/delete/move/merge/show/hide, the
   others dim or hidden; the Layers panel, Page > Layers, keys; undo; autosave; IcyDraw/REXPaint/Playscii files keep
-  them, other formats save what is seen and keep the layers beside the file. Later: layers with frames (a still
-  background under moving letters), lock, groups, layers on Spectrum/CPC/MSX/MZ pages.
+  them, other formats save what is seen and keep the layers beside the file. Later: groups, offsets, text layers,
+  a layer shared by every frame (a still background under moving letters).
+- [x] Layers, the rest (done 2026-10-16, layers_lock.go layers_frames.go, docs/layers-design.md §9): lock (IcyDraw's
+  edit lock read and written); layers with frames (Playscii's model: every frame has every layer; .psci keeps both);
+  layers on Spectrum, CPC, MSX and MZ-700 pages; .icy keeps the layers of PETSCII, Atari and ST pages.
 
 ## Step 5: platform by platform
 

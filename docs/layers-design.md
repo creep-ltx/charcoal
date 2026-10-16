@@ -288,3 +288,22 @@ takes it:
   side file for frames of layers.
 - Still refused on a layered page: Split (a stream's frames) and Animate's "as frames" (they make frames
   of one picture), drawing sessions.
+
+### Spectrum, CPC, MSX and MZ-700 pages
+
+The rule stays `blankAt` (a space or NUL on background 0), because that is what every eraser writes on every
+page (`paintAt`'s right button and `clearSel` write `blank`): exact without a rule per machine. Two cells
+`blankAt` calls empty are not: a flashing Spectrum space (flash swaps ink and paper) and the MZ-700's second
+set's character 32 (a glyph): `layerClearAt` leaves them covering. The machines' own cleared cells (white
+paper, white on blue) cover, as they do on the screen; `emptyCell()` gives `blank` on an upper Spectrum or MZ
+layer, so a row put in or a block moved leaves clear cells. Black shows below on CPC and MZ (each cell its own
+paper); not on the Spectrum (ink and paper share BRIGHT: a mixed cell has no attribute) nor MSX (no colours in
+the cell). A page of layers keeps its machine (`layerFixedMode`).
+
+### IcyDraw's PETSCII, ATASCII and ST pages
+
+The same LAYER records as a PC page, each layer's cells written by the machine page's own cell function
+(`writeIcyMachine`'s `cellOf`), empty cells invisible. An ST layer where black shows below is written with the
+backgrounds as seen: IcyDraw's transparent background takes the lower half's colour by CP437 shapes, which an
+ST font does not have. Read back per layer as the machine's page, kept only when they look as IcyDraw's merge.
+*Verified* with IcyDraw's engine on all 18 page kinds (`TestLay2IcyExternal`).

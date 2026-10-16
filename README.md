@@ -377,13 +377,13 @@ open again become the page's file (Save writes the same format again).
 | iCEDraw | `.idf` | PC, Amiga | cells (runs as iCEDraw packs them), font, palette | yes | ansilove (picture identical), IcyDraw's reader; files IcyDraw wrote |
 | ArtWorx | `.adf` | PC, Amiga, 80 columns | cells, font, the 16 colours in the EGA's 64 | yes | ansilove (picture identical), IcyDraw's reader; files IcyDraw wrote |
 | TundraDraw | `.tnd` | PC, Amiga, 80 columns | cells with 24-bit colours (no font) | yes | ansilove (colours; it cannot draw characters 1, 2, 4, 6), IcyDraw's reader; files IcyDraw wrote |
-| IcyDraw | `.icy` | PC, Amiga | every layer (name, shown or hidden; empty cells invisible, black that shows below transparent), font, palette, iCE or blink; a picture of the first 80 rows | yes (version 1 with or without zstd, and the older version 0; layers kept when CharEdit's show them as IcyDraw does, else put together; picture layers and effects left out) | IcyDraw's reader; files IcyDraw 0.6 wrote; IcyDraw's engine reads a layered file cell for cell as CharEdit shows it |
-| IcyDraw | `.icy` | PETSCII (C64, C128 40/80, VIC-20, PET 40/80, Plus/4 as IcyDraw's C16), Atari, Atari ST | IcyDraw's page of that machine: its machine and case, screen colour and border, the character set (a page's own set too), the machine's colour numbers (the C16's 128, the VDC's own order), flash | yes, on that machine's page (an XEP80 page of 80 columns shows its first 40; the VDC's per-cell set: the one most cells use) | IcyDraw's engine reads all 18 page kinds cell for cell and draws them pixel for pixel as CharEdit; files its engine wrote |
+| IcyDraw | `.icy` | PC, Amiga | every layer (name, shown or hidden, locked; empty cells invisible, black that shows below transparent), font, palette, iCE or blink; a picture of the first 80 rows | yes (version 1 with or without zstd, and the older version 0; layers kept when CharEdit's show them as IcyDraw does, else put together; picture layers and effects left out) | IcyDraw's reader; files IcyDraw 0.6 wrote; IcyDraw's engine reads a layered file cell for cell as CharEdit shows it |
+| IcyDraw | `.icy` | PETSCII (C64, C128 40/80, VIC-20, PET 40/80, Plus/4 as IcyDraw's C16), Atari, Atari ST | IcyDraw's page of that machine: its machine and case, screen colour and border, the character set (a page's own set too), the machine's colour numbers (the C16's 128, the VDC's own order), flash; every layer (name, shown or hidden, locked; empty cells invisible; on an ST page black that shows below is written as the colour seen) | yes, on that machine's page (an XEP80 page of 80 columns shows its first 40; the VDC's per-cell set: the one most cells use; layers kept when CharEdit's show them as IcyDraw does) | IcyDraw's engine reads all 18 page kinds cell for cell and draws them pixel for pixel as CharEdit, also with layers; files its engine wrote |
 | PabloDraw | `.pd` | PC, Amiga | PabloDraw's own file: its font (by PabloDraw's name, or the font itself), palette, cells with 24-bit colours; SAUCE for other widths | yes (an Amiga font opens on an Amiga page) | its source (Pablo.cs, Tundra.cs, BitFont.cs, Eto's Palette) |
 | TheDraw | `.td` | PC | (read only) TheDraw 4's own save file: every page layer, as frames | yes | TheDraw 4.63's own example files; abydos' reader |
 | TheDraw, ACiDDraw | `.bsv` | PC, 80 columns | a BASIC BSAVE screen dump (`BLOAD` loads it into the text screen) | yes | TheDraw's manual |
 | REXPaint | `.xp` | PC | every shown layer (empty cells in REXPaint's transparent pink; 9 at most), 24-bit colours | yes (layers kept when CharEdit's show them as REXPaint does, else put together) | IcyDraw's reader |
-| Playscii | `.psci` | PC (dos), Amiga (amiga_topaz), PETSCII (c64_real_*, commodore_pet), Atari (atari) | every frame with its hold; a page of layers (PC, Amiga, ST): every layer, empty cells transparent; Playscii's own charset and palette by name | yes, also c64_petscii, c64_edscii (Playscii's defaults) and jpetscii; other charsets open as a PC page; the layers of a file of one frame kept when CharEdit's show them as they are, else put together | Playscii's own loader (art.py); its glyph order compared with the ROM fonts |
+| Playscii | `.psci` | PC (dos), Amiga (amiga_topaz), PETSCII (c64_real_*, commodore_pet), Atari (atari) | every frame with its hold; a page of layers (PC, Amiga, ST): every layer of every frame, empty cells transparent; Playscii's own charset and palette by name | yes, also c64_petscii, c64_edscii (Playscii's defaults) and jpetscii; other charsets open as a PC page; the layers (of every frame) kept when CharEdit's show them as they are, else put together | Playscii's own loader (art.py); its glyph order compared with the ROM fonts |
 | Playscii | `.psci` | PC with Playscii's set as its font: Apple II, Agat, BBC Master, Intellivision, Pac-Man, Sharp MZ (Japanese), ZX81 (`speccy`); Atari ST (`atari_st`) | the same charset and palette names and numbers as read (a palette other than ansi/ega is the page's own colours: the 16 the art uses most of a bigger one) | yes; the sets' pictures and Playscii's palettes are fetched on first use (see Licences) | Playscii's charset.py/palette.py; its own art (56 files) |
 | Marq's PETSCII editor | `.pet` | C64 | screen codes, colours, border, background, case | yes | its source (m_c64.pde) |
 | Marq's PETSCII editor | `.bas`, `.s` | C64 | a BASIC listing (for petcat) and an ACME program of a 40x25 screen (data only for other sizes); with a custom set, multicolour or ECM: the registers and the set (BASIC: VIC bank 3, screen `$C400`, set `$C800`; ACME: the set at `$2000`) | no | its source; the ACME output assembled by ACME 0.97 and run in a 6502 (c64x_test.go) |
@@ -427,9 +427,11 @@ empty cells; Alt+O), **Play** (Ctrl+P, at 1/2x to 4x, looping or once). Undo cov
 
 ![A page of three layers: the picture, letters over it, the Layers panel](docs/screenshots/layers.png)
 
-PC, Amiga, Unicode, PETSCII, Atari and Atari ST pages can have **layers**: pictures on top of one another. Every
-tool draws on the current layer; its empty cells (a space on black, as when nothing was drawn) show the layers
-below, so erasing on a layer shows what is under it. A black full block covers. A layer can let **black show
+PC, Amiga, Unicode, PETSCII, Atari, Atari ST, Spectrum, CPC, MSX and MZ-700 pages can have **layers**: pictures on
+top of one another. Every tool draws on the current layer; its empty cells (a space on black, as when nothing was
+drawn; on the CPC a space on paper 0) show the layers below, so erasing on a layer shows what is under it. A black
+full block covers; on the Spectrum and the MZ-700 the machine's own cleared cell (white paper, white on blue) covers
+too, as it does on the screen. A layer can let **black show
 below**: its letters keep their colour and the background below shows under them (letters over a picture).
 
 - Alt+Shift+N adds a layer above the current one, Ctrl+Shift+PgUp / PgDn go up and down, Alt+Shift+Up / Down move
@@ -438,14 +440,22 @@ below**: its letters keep their colour and the background below shows under them
 - The **Layers** panel (Studio layout) lists them, the top one first: the box shows or hides, a click works on
   one (on the current one: rename it), buttons for New, Copy, Up, Down, Merge, Delete, Black, and the other
   layers shown, dim or hidden. The status line says which layer you are on.
+- **Lock** a layer (the panel's Lock button, Page > Lock the layer) and no tool changes it: drawing, typing, fills,
+  pasting and Delete say it is locked. Width, height and rows still change every layer. IcyDraw's lock is read
+  and written.
 - Pick takes the colours you see; Copy copies the current layer, **Edit > Copy what is seen** the picture.
 - Width, height, rows and columns change every layer; undo covers all of it (undoing an edit of another layer
   goes to that layer).
 - Saved as IcyDraw `.icy`, REXPaint `.xp` or Playscii `.psci` the layers are in the file. Any other format gets
   the picture as it is seen (hidden layers left out) and CharEdit keeps the layers beside the file: opening the
   file again brings them back, as long as nothing else changed it. Autosave keeps them too.
-- A page has frames or layers, not both (yet); teletext, Viewdata, Minitel, Spectrum, CPC, MSX and MZ-700 pages
-  have one layer. A drawing session shares pages of one layer.
+- **Layers and frames together**, as in Playscii: every frame has every layer (a new layer goes into every frame,
+  each frame draws its own on it; a new frame gets every layer). The strip, the onion skin, playing, GIF/APNG and
+  every file of frames show each frame as it is seen. Playscii `.psci` keeps both; any other file of frames
+  (.ans, .seq ...) gets the frames as seen and the page stays unsaved (only the autosave keeps the layers).
+  Split and Animate's frames want a page of one layer.
+- Teletext, Viewdata and Minitel pages have one layer (a colour code acts on the rest of its row). A drawing
+  session shares pages of one layer.
 
 ## Reference picture, shapes and brushes
 
@@ -861,7 +871,7 @@ resizing and chat went both ways in each.
 | `keys.go` | the table of actions and their default keys, the keys file, the help's key list |
 | `rowscols.go`, `blockjobs.go` | insert/delete rows and columns; fill, move and crop a block |
 | `frames.go`, `strip.go`, `streams.go` | frames and their undo, the frame strip and onion skin, cutting streams into frames |
-| `layers.go`, `layers_ui.go`, `layers_keep.go`, `layers_formats.go` | layers: putting them together, working on them and their undo, the panel, autosave and the file beside a flat file, the `.icy`/`.xp`/`.psci` layers (`layers_test.go`) |
+| `layers.go`, `layers_ui.go`, `layers_keep.go`, `layers_formats.go`, `layers_lock.go`, `layers_frames.go` | layers: putting them together, working on them and their undo, the panel, autosave and the file beside a flat file, the `.icy`/`.xp`/`.psci` layers, locked layers, layers with frames (`layers_test.go`, `lay2_test.go`) |
 | `anim.go`, `apng.go` | GIF and APNG export |
 | `animcost.go`, `animcost_ui.go` | animation detail levels, the cost of a saved animation (size, time at a speed, weight), Play's line timing, the Animate requester's cost, marks and preview at a speed |
 | `autosave.go` | autosave and offering it back, `.bak` on save, recent files |
