@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // othFPage is a CharEdit page of a machine for an IcyDraw round trip.
@@ -1163,4 +1164,48 @@ func TestOthSkyPixInCharEdit(t *testing.T) {
 	if a.sky.pix[10*skyW+10] != 3 {
 		t.Fatal("the drawing did not come back")
 	}
+}
+
+// FuzzOthReaders: this round's readers on any bytes: no crash, no page past the largest, no slow input.
+//
+//	systemd-run --user --scope -q -p MemoryMax=4G go test -run XXX -fuzz FuzzOthReaders -fuzztime 60s -parallel 2 .
+func FuzzOthReaders(f *testing.F) {
+	d := newDoc(3, 2)
+	d.cells[1] = makeCell(65, 4, 5, 0)
+	pd, _ := writePD(d, paletteByID("vga").colors, fontByID("vga"), true)
+	f.Add(pd)
+	f.Add(writeBSV(d))
+	f.Add([]byte(skyFDrawing))
+	f.Add([]byte("name: x\nbounding-box: 7x9\n\n0x41:\n    .@.\n    @.@\n\n    left-bearing: 1\n"))
+	f.Add(othFPsci("apple2", "pico8", 2, [][3]int{{1, 2, 3}, {0, 1, 1}}))
+	f.Fuzz(func(t *testing.T, b []byte) {
+		start := time.Now()
+		var docs []*Doc
+		if p, err := parsePD(b); err == nil {
+			docs = append(docs, p.doc)
+		}
+		pages, _ := parseTD(b)
+		docs = append(docs, pages...)
+		if d, err := parseBSV(b); err == nil {
+			docs = append(docs, d)
+		}
+		docs = append(docs, readSkyPix(b).cells)
+		if doc, err := parseIcyDraw(b); err == nil {
+			if m := icyMachinePage(doc, &gtiaPAL); m != nil {
+				docs = append(docs, m.doc)
+			}
+		}
+		if art, err := parsePsci(b); err == nil {
+			docs = append(docs, art.docs...)
+		}
+		parseYaff(b)
+		for _, d := range docs {
+			if d.cols*d.rows > maxPageCells || len(d.cells) < d.cols*d.rows {
+				t.Fatalf("a page of %dx%d (%d cells)", d.cols, d.rows, len(d.cells))
+			}
+		}
+		if el := time.Since(start); el > 2*time.Second {
+			t.Fatalf("took %v", el)
+		}
+	})
 }
