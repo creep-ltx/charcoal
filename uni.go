@@ -656,6 +656,7 @@ func init() {
 		formats = append(formats, f)
 	}
 	framesFormats["dur"] = true
+	modeNoStream["uni"] = "a Unicode page: Animate's draw orders are for BBS streams (open it and make frames, saved as .dur)"
 	for i := range formats { // the formats every page has
 		switch formats[i].id {
 		case "utf8", "png", "png2", "gif", "apng", "html":

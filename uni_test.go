@@ -1059,3 +1059,18 @@ func TestUniWidth(t *testing.T) {
 		t.Errorf("cropped: %d %q", a.doc.cols, uniRune(uniCode(a.doc.get(0, 0))))
 	}
 }
+
+// Animate a folder leaves Unicode files alone, saying why.
+func TestUniBatchSkips(t *testing.T) {
+	testApp(t, "pc")
+	src := t.TempDir()
+	b, err := os.ReadFile("testdata/durdraw/indyz-kali.utf8.ans")
+	if err != nil {
+		t.Skip(err)
+	}
+	os.WriteFile(filepath.Join(src, "kali.utf8.ans"), b, 0o644)
+	r := runBatch(t, batchSpec{Inputs: []string{src}, Effect: "clock", Board: "none", Seed: 1, Out: filepath.Join(t.TempDir(), "o")})
+	if len(r.items) != 1 || !strings.Contains(r.items[0].skipped, "Unicode page") {
+		t.Errorf("skipped: %+v", r.items)
+	}
+}
