@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -516,5 +518,100 @@ func TestLayPanel(t *testing.T) {
 	u.click = nil
 	if y := a.drawLayers(u, x, 10, w); y <= 10+2*gadH {
 		t.Fatalf("the rows and buttons end at %d", y)
+	}
+}
+
+// layFStack makes a page of three layers: art at the bottom, a short layer, a hidden one with black shows below.
+func layFStack(a *App) {
+	layFArt(a, 4)
+	a.newLayer(false)
+	a.doc.set(3, 0, makeCell('M', 14, 0, 0))
+	a.renameLayer(1, "Letters")
+	a.newLayer(false)
+	a.doc.set(5, 1, makeCell('H', 9, 0, 0))
+	a.toggleBlackClear()
+	a.toggleLayer(2)
+	a.goLayer(1)
+}
+
+// layFSame: two tabs have the same layers.
+func layFSame(t *testing.T, got, want *Tab) {
+	t.Helper()
+	if got.nLayers() != want.nLayers() || got.lay != want.lay {
+		t.Fatalf("%d layers at %d, want %d at %d", got.nLayers(), got.lay, want.nLayers(), want.lay)
+	}
+	for i := range want.nLayers() {
+		g, w := got.layers[i], want.layers[i]
+		if g.name != w.name || g.hidden != w.hidden || g.clear != w.clear {
+			t.Errorf("layer %d: %+v, want %+v", i, g, w)
+		}
+		gd, wd := got.layerDoc(i), want.layerDoc(i)
+		for y := range max(gd.rows, wd.rows) {
+			for x := range wd.cols {
+				if gd.get(x, y) != wd.get(x, y) && !(wd.blankAt(gd.get(x, y)) && wd.blankAt(wd.get(x, y))) {
+					t.Fatalf("layer %d cell %d,%d: %08x, want %08x", i, x, y, gd.get(x, y), wd.get(x, y))
+				}
+			}
+		}
+	}
+	if !sameLook(got.seen(), want.seen()) {
+		t.Fatal("the pages do not look the same")
+	}
+}
+
+func TestLayAutosave(t *testing.T) {
+	for _, mode := range []string{"pc", "uni", "c64"} {
+		a := testApp(t, mode)
+		layFStack(a)
+		a.path, a.name = "/nowhere/art.ans", "art.ans"
+		if err := writeAutosave(a.Tab); err != nil {
+			t.Fatal(err)
+		}
+		want := a.Tab
+		b := restart(t, mode)
+		files := leftAutosaves()
+		if len(files) != 1 {
+			t.Fatalf("%d autosaves", len(files))
+		}
+		if err := b.restoreAutosave(files[0]); err != nil {
+			t.Fatal(err)
+		}
+		layFSame(t, b.Tab, want)
+		removeAutosave(b.autoID)
+	}
+}
+
+func TestLaySideFile(t *testing.T) {
+	a := testApp(t, "pc")
+	layFStack(a)
+	want := a.Tab
+	p := filepath.Join(t.TempDir(), "art.ans")
+	if !a.writeOut(p, "ansi") || a.dirty {
+		t.Fatalf("saved: dirty %v %q", a.dirty, a.message)
+	}
+	if !strings.Contains(a.message, "3 layers put together") || !strings.Contains(a.message, "1 hidden") {
+		t.Errorf("message %q", a.message)
+	}
+	b := restart(t, "pc")
+	b.openPath(p, "auto")
+	layFSame(t, b.Tab, want)
+	// the file changed elsewhere: it opens as one layer
+	data, _ := os.ReadFile(p)
+	os.WriteFile(p, append([]byte("x"), data...), 0o644)
+	c := restart(t, "pc")
+	c.openPath(p, "auto")
+	if c.layers != nil {
+		t.Fatal("a changed file got its layers back")
+	}
+	// saved again with one layer: the side file goes
+	os.WriteFile(p, data, 0o644)
+	d := restart(t, "pc")
+	d.openPath(p, "auto")
+	d.mergeAll()
+	d.writeOut(p, "ansi")
+	e := restart(t, "pc")
+	e.openPath(p, "auto")
+	if e.layers != nil {
+		t.Fatal("a page saved as one layer got layers back")
 	}
 }

@@ -2520,6 +2520,7 @@ func (a *App) openPath(path, as string) {
 	a.restoreVICMode(path) // a C64 page's multicolour or ECM (c64x.go)
 	// The work's history, for its work stages (stages.go).
 	a.restoreStages(path, b)
+	a.restoreLayersFile(path, b) // the layers kept beside a file of one picture (layers_keep.go)
 }
 
 func (a *App) anyDirty() int {
@@ -3135,7 +3136,8 @@ func (a *App) writeOut(path, fmtID string) bool {
 		}
 		a.codes = map[bool]string{true: fmtID}[isBBSCodes(fmtID) || fmtID == "imageseq"] // the source is now in these codes (or none)
 		a.markSaved()
-		writeStages(a.Tab, path, data) // the work's history goes with the file (stages.go); losing it loses no art
+		writeStages(a.Tab, path, data)            // the work's history goes with the file (stages.go); losing it loses no art
+		writeLayersFile(a.Tab, path, data, fmtID) // the layers, beside a file of one picture (layers_keep.go)
 		dropAutosave(a.Tab)
 		a.rememberRef() // the reference goes with the file's new name
 		addRecent(path)
@@ -3145,7 +3147,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
-	note := a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID) + a.tedSaved(path, fmtID) + a.dirartSaved(fmtID)
+	note := a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID) + a.tedSaved(path, fmtID) + a.dirartSaved(fmtID) + a.layersSaveNote(fmtID, own)
 	if a.animatedSave(fmtID) {
 		note += pacedNote(a.pageBoard(), ps) + a.writeCopies(path, fmtID)
 	}
