@@ -532,8 +532,10 @@ right, the letter as the Logo tool will type it (outline fonts in the Logo tool'
   colours. A space is see-through (a space on black, in a colour font): the page below shows; TheDraw's solid
   space is character 255. Outline fonts are drawn with the letters A-P and @, which become the outline style's
   lines when typed (TheDraw's manual, "Editing outline type fonts").
-- **Ctrl+S** writes the `.tdf`: a file of one font is saved in place; a font from a file of several (or from a
-  `.zip`) is saved as a file of its own. Letters you did not change are written byte for byte as they were.
+- **Ctrl+S** writes the `.tdf` in place. A font from a file of several goes back into that file, in its place,
+  the other fonts byte for byte as they were; only a font from a `.zip` (or a file CharEdit may not write) is
+  saved as a file of its own, `<name>.tdf`, and the status line says so. Letters you did not change are written
+  byte for byte as they were (letters that shared their bytes with others in the old file each get their own).
   Character 13 and an `&` at a block letter's right edge cannot be stored (TheDraw would read a line's end):
   the save says how many became spaces.
 - Checked: every letter of Roy/SAC's 3,547 fonts written anew draws the same; TheDraw 4.63's TDFONTS opens

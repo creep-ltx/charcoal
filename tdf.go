@@ -94,6 +94,8 @@ type tdfFont struct {
 	glyphs  [tdfChars]*tdfGlyph
 	read    [tdfChars]bool
 	lineH   int // the lines a Return moves down (0: not worked out yet)
+	off     int // where the font's record starts in its file
+	end     int // and where it ends
 }
 
 // tdfCell is a cell of a glyph or of laid-out text.
@@ -139,6 +141,7 @@ func parseTDF(b []byte, file string) ([]*tdfFont, error) {
 		return nil, fmt.Errorf("%s: %s", "TheDraw font file", why)
 	}
 	for o < len(b) && b[o] != 0 {
+		start := o
 		if o+4+1+12+4+4+2*tdfChars > len(b) {
 			return fail("cut short")
 		}
@@ -172,6 +175,7 @@ func parseTDF(b []byte, file string) ([]*tdfFont, error) {
 		h.Write([]byte(f.name))
 		h.Write(b[o-size-2*tdfChars : o])
 		f.sum = fmt.Sprintf("%x", h.Sum(nil))
+		f.off, f.end = start, o
 		fonts = append(fonts, f)
 	}
 	if len(fonts) == 0 {

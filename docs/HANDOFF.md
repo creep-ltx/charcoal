@@ -1264,11 +1264,14 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   a new letter gets the last one's size), `fedCopyTo` (refuses a letter in the font), `fedDelete` (clears, not
   defined; undo brings the cells and "defined" comes back from non-blank), `fedSetDesc` (the last n rows),
   `fedRefused` (not a PC page, frames, layers). A letter is defined when read or once non-blank (`fedTake`).
-  `fedOpen/fedOpenHere/fedOpenFont` (a file of one `.tdf` font: saved in place; else path "" and `<name>.tdf`),
+  `fedOpen/fedOpenHere/fedOpenFont`: saved in place; a font of a pack keeps `before`/`after` (the file's header
+  and other fonts as read, via `tdfFont.off/end` from parseTDF; `place` "font 2 of 3") and is written back
+  between them (a trailing 0 or junk after the fonts is dropped); a font from a `.zip` or a file `fedWritable`
+  refuses gets path "" and `<name>.tdf` (the user's choice, 2026-10-16),
   `openFedNew` (`FedNewReq`), `openFedEdit` (TDFReq with `editing` and `all`: Edit is the main button; also an
   Edit... button in the normal list). Save: format "tdf" (modes "tdf": never listed for other pages; a font tab's
   `modeFormats` is only it), `fedEncode` via othEncode; `reparseEditor`/`othReparse` "tdf" keep the page.
-  `setCols` allows 1-255 columns on a font tab. Autosave: `<id>.tdfed` (letter index + the .tdf), restored by
+  `setCols` allows 1-255 columns on a font tab. Autosave: `<id>.tdfed` (letter index, the font's place in its pack, the file as Ctrl+S would write it), restored by
   `restoreFedAutosave` after `restoreAutosave`'s applyMode; removeAutosave deletes it. The strip (`drawFedStrip`,
   `fedStripH`) is drawn above the frame strip in both layouts (layout.go, view.go), with a preview
   (`ff.tdf(a.doc)` = the font re-read through parseTDF, rendered by `render`, cached per gen). Actions
@@ -1287,13 +1290,14 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   files written back, SHADING.TD open-edit-Ctrl+S; glyph round trips of all three kinds (`fedFLook`: what the
   font can keep); `TestFedRealFonts` (Roy/SAC's 3,547 fonts and TDFONTS.TDF: unchanged letters byte for byte,
   every letter re-encoded draws the same in two styles); new font, per-letter undo, save/open/save byte-identical,
-  copy/delete/name/spacing, multi-font files, refusals, autosave, the strip and the picker's Edit. Env-gated:
+  copy/delete/name/spacing, a pack of three (the middle one edited: the others byte for byte, no trailing 0; the
+  edited TDFONTS.TDF pack also opened in TDFONTS 4.63), read-only and .zip fonts, refusals, autosave, the strip and the picker's Edit. Env-gated:
   `CHARCOAL_FED_TDOUT` (writes sample .td/.tdf for TheDraw), `CHARCOAL_FED_TDBIN="x.td x.bin [page]"` (TheDraw's
   `.bin` save of a loaded .td = CharEdit's reading; all 5 samples and 3 page layers pass), `CHARCOAL_FED_ICY` +
   `CHARCOAL_ICYDIR` (retrofont, the cctdf example built in the bwrap sandbox, dumps glyph parts: 1,838 letters
   equal). FuzzParsers: .td written back, and every letter of a fuzzed font re-encoded draws the same.
-- **Not done**: editing several fonts of one file together (a font from a file of several saves as its own file:
-  the user may want them kept together); outline letters are edited as their letters A-P (the preview shows the
+- **Not done**: editing several fonts of one pack in one tab (each opens in its own tab; two tabs of one pack
+  would each write their own state of the others); outline letters are edited as their letters A-P (the preview shows the
   style), no picker for TheDraw's outline pieces; no "test typing" box beyond the preview (save, then the Logo
   tool lists the file if it is in the library); TheDraw 3 `.td`, `.tdl` libraries; a `.td` taller than 100 lines
   or wider than 160 is written but TheDraw cannot show all of it.

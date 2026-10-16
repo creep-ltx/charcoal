@@ -172,6 +172,20 @@ func TestFedTDSamples(t *testing.T) {
 		font, _ := encodeTDFFont(fmt.Sprintf("Fed %s", tdfKindNames[kind]), kind, 1, &glyphs)
 		os.WriteFile(filepath.Join(dir, fmt.Sprintf("FED%d.TDF", kind)), tdfFileBytes(font), 0o644)
 	}
+	// TheDraw's TDFONTS.TDF with its second font (BigOutline) renamed and its 'A' changed, saved back into the pack.
+	h, _ := os.UserHomeDir()
+	if b, err := os.ReadFile(filepath.Join(h, ".cache/charcoal-others/thedraw/td463/TDFONTS.TDF")); err == nil {
+		testApp(t, "pc")
+		tdfFClean(t)
+		pack := filepath.Join(dir, "PACK.TDF")
+		os.WriteFile(pack, b, 0o644)
+		fs, _ := parseTDF(b, pack)
+		a.fedOpenFont(fs[1])
+		fedFDraw(map[[2]int]uint32{{1, 1}: attrCell('@', 7), {2, 1}: attrCell('@', 7)})
+		fieldFedName.set("BigEdited")
+		fieldFedName.enter()
+		a.save(false)
+	}
 }
 
 // CHARCOAL_FED_TDBIN="file.td file.bin": TheDraw loaded file.td and saved it as a
@@ -644,15 +658,6 @@ func TestFedEditing(t *testing.T) {
 	if f.name != "Renamed font" || f.gap() != 3 || f.has('a') || !f.has('A') {
 		t.Fatalf("%q gap %d a %v", f.name, f.gap(), f.has('a'))
 	}
-	// A font from a file of several: saved as a file of its own.
-	two := tdfFileBytes(fedFFontBytes(t, "One"), fedFFontBytes(t, "Two"))
-	multi := filepath.Join(t.TempDir(), "two.tdf")
-	os.WriteFile(multi, two, 0o644)
-	fs, _ := parseTDF(two, multi)
-	a.fedOpenFont(fs[1])
-	if a.path != "" || a.name != "Two.tdf" {
-		t.Fatalf("path %q name %q", a.path, a.name)
-	}
 	// Not on a PC page any more: refused.
 	a.mode = "c64"
 	a.fedGo(5)
@@ -661,6 +666,76 @@ func TestFedEditing(t *testing.T) {
 	}
 	if _, err := a.encode("tdf"); err == nil {
 		t.Fatal("encoded off a PC page")
+	}
+}
+
+// A font of a pack of three edited and saved: back into the pack, the other two
+// byte for byte in their order, no 0 at the end (TDFONTS refuses one); from a
+// .zip or a file CharEdit may not write: a file of its own.
+func TestFedPack(t *testing.T) {
+	testApp(t, "pc")
+	tdfFClean(t)
+	one, two, three := fedFFontBytes(t, "One"), fedFFontBytes(t, "Two"), fedFFontBytes(t, "Three")
+	pack := append(tdfFileBytes(one, two, three), 0) // as IcyDraw writes it: the 0 goes
+	path := filepath.Join(t.TempDir(), "pack.tdf")
+	os.WriteFile(path, pack, 0o644)
+	fs, _ := parseTDF(pack, path)
+	a.fedOpenFont(fs[1])
+	ff := a.fed()
+	if a.path != path || ff.place != "font 2 of 3" || !strings.Contains(a.message, "back into pack.tdf") {
+		t.Fatalf("path %q place %q: %s", a.path, ff.place, a.message)
+	}
+	fedFDraw(map[[2]int]uint32{{0, 0}: attrCell('Z', 7)})
+	fieldFedName.set("Two edited")
+	fieldFedName.enter()
+	a.save(false)
+	if a.dirty || !strings.Contains(a.message, "font 2 of 3") {
+		t.Fatalf("save: %s", a.message)
+	}
+	b, _ := os.ReadFile(path)
+	got, err := parseTDF(b, path)
+	if err != nil || len(got) != 3 || got[1].name != "Two edited" || got[1].glyph('A').rows[0][0].ch != 'Z' {
+		t.Fatalf("read back: %v %d", err, len(got))
+	}
+	if !bytes.Equal(b[got[0].off:got[0].end], one) || !bytes.Equal(b[got[2].off:got[2].end], three) || got[0].off != 20 {
+		t.Fatal("the other fonts changed")
+	}
+	if got[2].end != len(b) {
+		t.Fatalf("%d bytes after the last font", len(b)-got[2].end)
+	}
+	// Saved again unchanged: the same bytes.
+	a.save(false)
+	if again, _ := os.ReadFile(path); !bytes.Equal(again, b) {
+		t.Fatal("saved again differently")
+	}
+	// An autosave of it comes back into the pack.
+	if err := writeAutosave(a.Tab); err != nil {
+		t.Fatal(err)
+	}
+	id := a.autoID
+	js, _ := os.ReadFile(filepath.Join(autosaveDir(), id+".json"))
+	var m autosaveMeta
+	json.Unmarshal(js, &m)
+	a.focusTab(a.newTab("pc"))
+	if err := a.restoreAutosave(autosaveFile{id, m}); err != nil || a.fed() == nil || a.fed().place != "font 2 of 3" || a.path != path {
+		t.Fatalf("restored: %v", err)
+	}
+	a.save(false)
+	if again, _ := os.ReadFile(path); !bytes.Equal(again, b) {
+		t.Fatal("restored and saved: different bytes")
+	}
+	// A read-only pack: a file of its own.
+	os.Chmod(path, 0o444)
+	fs, _ = parseTDF(b, path)
+	a.fedOpenFont(fs[2])
+	if os.Getuid() != 0 && (a.path != "" || a.name != "Three.tdf" || a.fed().before != nil) {
+		t.Fatalf("read-only: path %q name %q", a.path, a.name)
+	}
+	// From a .zip: a file of its own.
+	fs[0].file = filepath.Join(t.TempDir(), "fonts.zip")
+	a.fedOpenFont(fs[0])
+	if a.path != "" || a.name != "One.tdf" {
+		t.Fatalf("zip: path %q name %q", a.path, a.name)
 	}
 }
 

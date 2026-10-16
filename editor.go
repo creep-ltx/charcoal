@@ -2471,7 +2471,8 @@ func (a *App) closeTab(t *Tab) {
 		return
 	}
 	a.tabs = append(a.tabs[:i], a.tabs[i+1:]...)
-	dropAutosave(t) // closed on purpose: saved, or its changes thrown away
+	delete(fedTabs, t) // a TheDraw font's tab (fed.go)
+	dropAutosave(t)    // closed on purpose: saved, or its changes thrown away
 	if len(a.tabs) == 0 {
 		a.newTab(t.mode)
 	}
