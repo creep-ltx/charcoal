@@ -192,6 +192,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
+      - name: Release notes from CHANGELOG.md (fails without a section for this version)
+        run: tools/release/notes.sh "${GITHUB_REF_NAME}" > release-notes.md
       - uses: actions/download-artifact@v8
         with:
           pattern: charcoal-*
@@ -199,4 +202,5 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           prerelease: ${{ contains(github.ref_name, 'b') }}
+          body_path: release-notes.md
           files: charcoal-*.zip
