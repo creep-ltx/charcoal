@@ -2063,7 +2063,7 @@ func (a *App) reparseEditor() bool {
 			a.msxBrushColours()
 		}
 		a.fileLayers() // its layers, when CharEdit's layers show them as they are (layers_formats.go)
-	case "pd", "td", "bsv":
+	case "pd", "td", "bsv", "tdf":
 		a.othReparse() // othformats.go
 	case "pet", "pmjson":
 		scr, err := a.editorScreens(a.srcKind, a.source)
@@ -2173,8 +2173,11 @@ func (a *App) encodeEditor(fmtID string, d *Doc) (out []byte, ok bool, err error
 		}
 	case "pmjson":
 		out = writePetmateJSON(a.petScreens())
-	case "pd", "bsv":
-		out, _ = a.othEncode(fmtID, d) // othformats.go
+	case "pd", "bsv", "td", "tdf":
+		out, _ = a.othEncode(fmtID, d) // othformats.go (tdf: the font editor, fed.go)
+		if out == nil && (fmtID == "td" || fmtID == "tdf") {
+			err = errors.New(strings.TrimPrefix(a.message, "Could not save: "))
+		}
 	default:
 		ok = false
 	}

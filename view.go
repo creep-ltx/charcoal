@@ -297,6 +297,13 @@ func (a *App) drawWindow(u *UI) {
 		pane.y = status.y - pane.h
 	}
 	end := pane.y
+	if a.fed() != nil { // the letter strip of a TheDraw font (fed.go)
+		strip := Rect{0, end - fedStripH(), W, fedStripH()}
+		if strip.y-top >= 80 {
+			end = strip.y
+			a.drawFedStrip(u, strip)
+		}
+	}
 	if a.stripShown() {
 		strip := Rect{0, pane.y - gadH - 3, W, gadH + 3}
 		if strip.y-top >= 80 {

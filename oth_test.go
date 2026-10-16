@@ -974,7 +974,7 @@ func TestOthTheDrawFiles(t *testing.T) {
 	}
 	a := testApp(t, "pc")
 	a.loadBytes(b, "SHADING.TD", filepath.Join(dir, "SHADING.TD"), "auto")
-	if a.mode != "pc" || a.nFrames() != 3 || a.path != "" || a.saveFmt != "ansi" {
+	if a.mode != "pc" || a.nFrames() != 3 || a.path == "" || a.saveFmt != "td" { // CharEdit writes .TD since round 7
 		t.Fatalf("opened as %s, %d frames, path %q, saves %s", a.mode, a.nFrames(), a.path, a.saveFmt)
 	}
 }

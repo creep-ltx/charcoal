@@ -86,7 +86,7 @@ func tdfFFile(fonts ...tdfFFont) []byte {
 // as TheDraw's own "Outline" draws a box, a colour font with a space on black
 // (left out) and one on red (drawn).
 func tdfFBlock() tdfFFont {
-	return tdfFFont{name: "TestBlock", kind: tdfBlock, spacing: 1, glyphs: map[rune][]string{
+	return tdfFFont{name: "TestBlock", kind: tdfBlock, spacing: 2 /* a gap of 1 */, glyphs: map[rune][]string{
 		'A': {"\xdc\xdc\xdc", "\xdb \xdb", "\xdb\xff\xdb"},
 		'B': {"\xdb\xdb", "\xdb\xdf"},
 		'Q': {"\xdb\xdb\xdb", "\xdb \xdb", "\xdf\xdf\xdb", "  \xdf&"},
@@ -159,7 +159,7 @@ func TestTDFParse(t *testing.T) {
 	for i, want := range []struct {
 		name          string
 		kind, spacing int
-	}{{"TestBlock", tdfBlock, 1}, {"TestOutline", tdfOutline, 0}, {"TestColour", tdfColour, 2}} {
+	}{{"TestBlock", tdfBlock, 2}, {"TestOutline", tdfOutline, 0}, {"TestColour", tdfColour, 2}} {
 		f := fs[i]
 		if f.name != want.name || f.kind != want.kind || f.spacing != want.spacing || f.index != i || f.file != "test.tdf" {
 			t.Errorf("font %d: %+v", i, f)
@@ -362,7 +362,7 @@ func TestTDFColourCells(t *testing.T) {
 	if v := a.doc.get(2, 1); cellCh(v) != ' ' || cellFg(v) != 11 || cellBg(v) != 4 { // 0x1E: yellow on blue
 		t.Errorf("solid space: %x", v)
 	}
-	if a.cx != 3+2 {
+	if a.cx != 3+1 { // spacing byte 2: a gap of 1 (tdfFont.gap)
 		t.Errorf("cursor %d", a.cx)
 	}
 }

@@ -36,6 +36,13 @@ func (a *App) drawStudio(u *UI, body Rect) {
 	}
 	center := Rect{rail.x + rail.w, body.y, panel.x - rail.x - rail.w, body.h}
 	end := center.y + center.h
+	if a.fed() != nil { // the letter strip of a TheDraw font (fed.go)
+		strip := Rect{center.x, end - fedStripH(), center.w, fedStripH()}
+		if strip.y-center.y >= 80 {
+			end = strip.y
+			a.drawFedStrip(u, strip)
+		}
+	}
 	if a.stripShown() {
 		strip := Rect{center.x, end - gadH - 3, center.w, gadH + 3}
 		if strip.y-center.y >= 80 {

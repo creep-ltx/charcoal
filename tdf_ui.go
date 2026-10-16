@@ -477,7 +477,7 @@ func (a *App) logoGlyph(f *tdfFont, r rune) {
 	}
 	sp := tdfSpacing()
 	if sp < 0 {
-		sp = f.spacing
+		sp = f.gap()
 	}
 	logo.x = x + p.w + sp
 	a.cx = min(a.doc.cols-1, logo.x)
@@ -580,7 +580,7 @@ func (a *App) drawLogoOptions(u *UI, x, y, right int) int {
 	names := tdfSpacingNames
 	if f != nil {
 		names = slices.Clone(names)
-		names[0] = fmt.Sprintf("Font's spacing (%d)", f.spacing)
+		names[0] = fmt.Sprintf("Font's spacing (%d)", f.gap())
 	}
 	u.choice("tdfspacing", place(choiceW(names)), names, max(0, min(len(names)-1, tp.Spacing)), "Columns between the letters", func(i int) {
 		tp.Spacing = i
@@ -625,6 +625,7 @@ type TDFReq struct {
 	thumbs       map[string]*FB
 	back         Dialog // the requester to go back to (the line requester), nil: none
 	all          bool   // an Amiga page lists the fonts it cannot show too
+	editing      bool   // opened to pick a font to edit (fed.go): Edit is the main button
 	lastClk      time.Time
 }
 
@@ -675,6 +676,10 @@ func (d *TDFReq) filter() {
 }
 
 func (d *TDFReq) use() {
+	if d.editing { // picked for the font editor (fed.go)
+		d.edit()
+		return
+	}
 	if d.sel < 0 || d.sel >= len(d.list) {
 		return
 	}
@@ -694,6 +699,15 @@ func (d *TDFReq) use() {
 	if !a.tdfFits(f) {
 		a.msg(f.name + " uses CP437 characters an Amiga page lacks: letters that need them are not typed")
 	}
+}
+
+// edit opens the chosen font in the TheDraw font editor (fed.go).
+func (d *TDFReq) edit() {
+	if d.sel < 0 || d.sel >= len(d.list) {
+		return
+	}
+	closeDialog()
+	a.fedOpenFont(d.list[d.sel])
 }
 
 func (d *TDFReq) cancel() {
@@ -810,15 +824,25 @@ func (d *TDFReq) draw(u *UI) {
 		f := d.list[d.sel]
 		blitScaled(fb, pr.inset(4), d.thumb(f, d.sampleText(f)))
 	}
-	switch buttonRow(u, in, "Add fonts...", "Download...", "Cancel", "Use") {
+	main := "Use"
+	if d.editing {
+		main = "Edit"
+	}
+	switch buttonRow(u, in, "Add fonts...", "Download...", "Edit...", "Cancel", main) {
 	case 0:
 		d.addFolder()
 	case 1:
 		openTDFDownload(func() { openTDFPicker(d.back) })
 	case 2:
-		d.cancel()
+		d.edit()
 	case 3:
-		d.use()
+		d.cancel()
+	case 4:
+		if d.editing {
+			d.edit()
+		} else {
+			d.use()
+		}
 	}
 }
 

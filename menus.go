@@ -164,6 +164,8 @@ func init() {
 			tool("Logo (TheDraw fonts)", "logo"),
 			{label: "TheDraw fonts...", action: "logo_font"},
 			{label: "Type a line in the font...", action: "logo_line"},
+			{label: "New TheDraw font...", action: "font_tdf_new"},
+			{label: "Edit a TheDraw font...", action: "font_tdf_edit"},
 			menuSep,
 			{label: "Line", action: "shape_line"},
 			{label: "Box", action: "shape_box"},

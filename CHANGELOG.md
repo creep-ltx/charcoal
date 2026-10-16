@@ -31,6 +31,14 @@ Each version's section is also its release page on GitHub. Newest first.
 - **DirArt: the disk's header line is part of the art.** A DirArt disk opens with the disk's name (shown
   reversed, as the C64 lists it) as the first row, the files below it, and saves it back. **Changed:** a DirArt
   disk opens one row taller. Pages without a header row (new ones, Marq's and Petmate9's) save as before.
+- **TheDraw font editor:** Draw > *New TheDraw font...* or *Edit a TheDraw font...* (the font list's *Edit*). Each
+  letter is drawn as a small page with all of CharEdit's tools; a strip under the page picks the letter, names the
+  font, sets its spacing and the letter's descender lines, copies and deletes letters. Ctrl+S saves the `.tdf`,
+  which TheDraw's own font editor and IcyDraw open. Block, Colour and Outline fonts.
+- **TheDraw `.td` files are saved now**, not only opened: Ctrl+S on an opened `.td` writes it again, and Save as
+  offers "TheDraw (.td)" for PC pages. The frames are TheDraw's page layers (up to 8). TheDraw 4.63 loads them.
+- **Fixed:** the Logo tool put one column too many between letters: a font's spacing is now counted as TheDraw
+  counts it.
 
 ## 0.1b13 (2026-10-16)
 
