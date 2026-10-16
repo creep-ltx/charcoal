@@ -1266,7 +1266,10 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   `fedRefused` (not a PC page, frames, layers). A letter is defined when read or once non-blank (`fedTake`).
   `fedOpen/fedOpenHere/fedOpenFont`: saved in place; a font of a pack keeps `before`/`after` (the file's header
   and other fonts as read, via `tdfFont.off/end` from parseTDF; `place` "font 2 of 3") and is written back
-  between them (a trailing 0 or junk after the fonts is dropped); a font from a `.zip` or a file `fedWritable`
+  between them (a trailing 0 or junk after the fonts is dropped). **At save time `fedFreshPack` reads the pack
+  again** (`cpcTarget`, else a.path) and takes the others from disk: the font found by its place `at` and name
+  `inName`; not found (the pack changed) -> the pack is left alone, the font goes to `<name>.tdf` (or -2 ...)
+  beside it, the tab follows, and the error stops writeOut. `fedAutosaving` keeps autosaves off the disk pack; a font from a `.zip` or a file `fedWritable`
   refuses gets path "" and `<name>.tdf` (the user's choice, 2026-10-16),
   `openFedNew` (`FedNewReq`), `openFedEdit` (TDFReq with `editing` and `all`: Edit is the main button; also an
   Edit... button in the normal list). Save: format "tdf" (modes "tdf": never listed for other pages; a font tab's
@@ -1296,8 +1299,8 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   `.bin` save of a loaded .td = CharEdit's reading; all 5 samples and 3 page layers pass), `CHARCOAL_FED_ICY` +
   `CHARCOAL_ICYDIR` (retrofont, the cctdf example built in the bwrap sandbox, dumps glyph parts: 1,838 letters
   equal). FuzzParsers: .td written back, and every letter of a fuzzed font re-encoded draws the same.
-- **Not done**: editing several fonts of one pack in one tab (each opens in its own tab; two tabs of one pack
-  would each write their own state of the others); outline letters are edited as their letters A-P (the preview shows the
+- **Not done**: editing several fonts of one pack in one tab (each opens in its own tab; saves merge through the
+  file on disk, `TestFedPackTwoTabs`); outline letters are edited as their letters A-P (the preview shows the
   style), no picker for TheDraw's outline pieces; no "test typing" box beyond the preview (save, then the Logo
   tool lists the file if it is in the library); TheDraw 3 `.td`, `.tdl` libraries; a `.td` taller than 100 lines
   or wider than 160 is written but TheDraw cannot show all of it.

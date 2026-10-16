@@ -48,6 +48,8 @@ type fedFont struct {
 	before  []byte // the file's header and fonts before this one, as read (saved back around it)
 	after   []byte // the file's fonts after this one
 	place   string // "font 2 of 3": where it sits in its file ("": a file of its own)
+	at      int    // its place in the pack (from 1)
+	inName  string // the name it has in the pack on disk: saving finds it there by place and name
 	copying bool   // Copy: the next letter clicked gets the current one
 	preview struct {
 		gen, cur, style int
@@ -314,6 +316,7 @@ func (a *App) fedOpenFont(f *tdfFont) {
 		g := fs[f.index]
 		ff.before, ff.after = b[:g.off:g.off], b[g.end:fs[len(fs)-1].end]
 		ff.place = fmt.Sprintf("font %d of %d", f.index+1, len(fs))
+		ff.at, ff.inName = f.index+1, g.name
 	}
 	a.fedOpen(ff, path, name)
 	where := "Ctrl+S saves " + name
@@ -324,6 +327,52 @@ func (a *App) fedOpenFont(f *tdfFont) {
 		where = "Ctrl+S saves it back into " + name + " (" + ff.place + "; the other fonts as they are)"
 	}
 	a.msg(fmt.Sprintf("Editing %s (%s): the letter strip under the page picks the letter; %s", f.name, tdfKindNames[f.kind], strings.Replace(where, "Ctrl+S", keyName("save"), 1)))
+}
+
+// fedAutosaving: fedEncode runs for an autosave, which must not touch the pack.
+var fedAutosaving bool
+
+// fedFreshPack reads the pack being saved to as it is on disk now (another tab
+// may have saved another of its fonts) and takes the fonts around this one from
+// it. When the font is no longer at its place under its name, the pack is left
+// alone: the font goes to a file of its own beside it, and the tab to that file
+// (the error tells writeOut not to write the pack).
+func (a *App) fedFreshPack(ff *fedFont, font []byte) error {
+	if fedAutosaving {
+		return nil // the pack as last read; the real save reads it again
+	}
+	target := cpcTarget // writeOut's file
+	if target == "" {
+		target = a.path
+	}
+	b, err := os.ReadFile(target)
+	if os.IsNotExist(err) {
+		return nil // Save as a new file: the pack as it was read
+	}
+	if err == nil {
+		if fs, e := parseTDF(b, target); e == nil && ff.at <= len(fs) && fs[ff.at-1].name == ff.inName {
+			g := fs[ff.at-1]
+			ff.before, ff.after = b[:g.off:g.off], b[g.end:fs[len(fs)-1].end]
+			ff.place = fmt.Sprintf("font %d of %d", ff.at, len(fs))
+			return nil
+		}
+	}
+	own := filepath.Join(filepath.Dir(target), fedFileName(ff.name))
+	for n := 2; ; n++ {
+		if _, e := os.Stat(own); os.IsNotExist(e) {
+			break
+		}
+		own = filepath.Join(filepath.Dir(target), strings.TrimSuffix(fedFileName(ff.name), ".tdf")+fmt.Sprintf("-%d.tdf", n))
+	}
+	if err := writeAtomic(own, tdfFileBytes(font)); err != nil {
+		return err
+	}
+	place := ff.place
+	ff.before, ff.after, ff.place, ff.at = nil, nil, "", 0
+	a.path, a.name = own, filepath.Base(own)
+	a.markSaved()
+	return fmt.Errorf("%s changed since %s was opened (it is not %s any more): saved as %s instead, %s left as it is",
+		filepath.Base(target), ff.name, place, filepath.Base(own), filepath.Base(target))
 }
 
 // fedWritable: may CharEdit write the file?
@@ -403,8 +452,14 @@ func (a *App) fedEncode() ([]byte, error) {
 	if loss.amp > 0 {
 		saveNote += fmt.Sprintf("; %d '&' written as spaces (TheDraw would read a line's end: light magenta on black, or at a letter's right edge)", loss.amp)
 	}
-	if ff.before != nil { // back into its pack, between the other fonts as they were read
-		saveNote += ", " + ff.place + " in the file (the others as they were)"
+	if ff.before != nil { // back into its pack, between the other fonts as they are on disk now
+		if err := a.fedFreshPack(ff, font); !fedAutosaving && err != nil {
+			return nil, err
+		}
+		if fs, err := parseTDF(append(append(slices.Clone(ff.before), font...), ff.after...), ""); err == nil && ff.at <= len(fs) && !fedAutosaving {
+			ff.inName = fs[ff.at-1].name // its name in the pack once written
+		}
+		saveNote += ", " + ff.place + " in the file (the others as they are)"
 		out := append(slices.Clone(ff.before), font...)
 		return append(out, ff.after...), nil
 	}
@@ -452,9 +507,9 @@ func writeFedAutosave(t *Tab, base string) error {
 		return nil
 	}
 	old := a.Tab
-	a.Tab = t
+	a.Tab, fedAutosaving = t, true
 	b, err := a.fedEncode()
-	a.Tab, saveNote = old, ""
+	a.Tab, saveNote, fedAutosaving = old, "", false
 	if err != nil {
 		return nil // the page itself is kept; the font as it was last saved
 	}
@@ -482,6 +537,7 @@ func (a *App) restoreFedAutosave(id string, path, name string) bool {
 	if b[1] > 0 {
 		ff.before, ff.after = file[:f.off:f.off], file[f.end:fs[len(fs)-1].end]
 		ff.place = fmt.Sprintf("font %d of %d", at, len(fs))
+		ff.at, ff.inName = at, f.name
 	}
 	if c := int(b[0]); c < tdfChars {
 		ff.cur = c

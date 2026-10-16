@@ -739,6 +739,69 @@ func TestFedPack(t *testing.T) {
 	}
 }
 
+// Two tabs edit fonts 1 and 3 of one pack: saved in either order, both edits are in
+// the file. A pack changed under a tab (its font gone from its place) is left alone:
+// the font goes to a file of its own.
+func TestFedPackTwoTabs(t *testing.T) {
+	for _, order := range [][2]int{{0, 1}, {1, 0}} {
+		testApp(t, "pc")
+		tdfFClean(t)
+		path := filepath.Join(t.TempDir(), "pack.tdf")
+		os.WriteFile(path, tdfFileBytes(fedFFontBytes(t, "One"), fedFFontBytes(t, "Two"), fedFFontBytes(t, "Three")), 0o644)
+		b, _ := os.ReadFile(path)
+		fs, _ := parseTDF(b, path)
+		var tabs [2]*Tab
+		for k, i := range []int{0, 2} {
+			a.fedOpenFont(fs[i])
+			tabs[k] = a.Tab
+			fedFDraw(map[[2]int]uint32{{0, 0}: attrCell(byte('X'+k), 7)})
+			fieldFedName.set(fs[i].name + " ed")
+			fieldFedName.enter()
+		}
+		for _, k := range order {
+			a.focusTab(tabs[k])
+			a.save(false)
+			if a.dirty || a.path != path {
+				t.Fatalf("tab %d: %s", k, a.message)
+			}
+		}
+		b, _ = os.ReadFile(path)
+		got, err := parseTDF(b, path)
+		if err != nil || len(got) != 3 || got[0].name != "One ed" || got[1].name != "Two" || got[2].name != "Three ed" ||
+			got[0].glyph('A').rows[0][0].ch != 'X' || got[2].glyph('A').rows[0][0].ch != 'Y' || got[2].end != len(b) {
+			t.Fatalf("order %v: %v %+v", order, err, got)
+		}
+		// Saved again (after the other tab's save): still both.
+		a.focusTab(tabs[order[0]])
+		a.pushUndo()
+		a.save(false)
+		if again, _ := os.ReadFile(path); !bytes.Equal(again, b) {
+			t.Fatalf("order %v: saved again differently", order)
+		}
+	}
+	// The pack changed: the font at place 3 is gone.
+	path := filepath.Join(t.TempDir(), "pack.tdf")
+	os.WriteFile(path, tdfFileBytes(fedFFontBytes(t, "One"), fedFFontBytes(t, "Two"), fedFFontBytes(t, "Three")), 0o644)
+	b, _ := os.ReadFile(path)
+	fs, _ := parseTDF(b, path)
+	a.fedOpenFont(fs[2])
+	fedFDraw(map[[2]int]uint32{{0, 0}: attrCell('Q', 7)})
+	two := tdfFileBytes(fedFFontBytes(t, "One"), fedFFontBytes(t, "Two"))
+	os.WriteFile(path, two, 0o644)
+	a.save(false)
+	if after, _ := os.ReadFile(path); !bytes.Equal(after, two) {
+		t.Fatal("the changed pack was written over")
+	}
+	own := filepath.Join(filepath.Dir(path), "Three.tdf")
+	ob, err := os.ReadFile(own)
+	if err != nil || a.path != own || a.dirty || !strings.Contains(a.message, "saved as Three.tdf") {
+		t.Fatalf("own file: %v %q %s", err, a.path, a.message)
+	}
+	if f := tdfFParse(t, ob); f.name != "Three" || f.glyph('A').rows[0][0].ch != 'Q' {
+		t.Fatal("own file's font")
+	}
+}
+
 func fedFFontBytes(t *testing.T, name string) []byte {
 	var glyphs [tdfChars][]byte
 	glyphs['A'-tdfFirst], _, _ = encodeTDFGlyph(tdfBlock, newDoc(2, 2), nil)
