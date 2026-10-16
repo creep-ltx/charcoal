@@ -12,7 +12,7 @@ import "fmt"
 func (a *App) drawTools(u *UI, x, y, w, cols int) int {
 	i := 0
 	for _, t := range tools {
-		if t.id == "half" && !a.pc() && !a.tt() {
+		if t.id == "half" && !a.pc() && !a.tt() && !a.uni() {
 			continue
 		}
 		r := Rect{x + (i%cols)*(w+4), y + (i/cols)*(smallH+4), w, smallH}
@@ -41,9 +41,9 @@ func (a *App) drawTools(u *UI, x, y, w, cols int) int {
 		}
 		return on
 	}
-	if a.amiga() {
-		a.ital = toggle("I", a.ital, "Italic (Amiga console SGR 3)")
-		a.under = toggle("U", a.under, "Underline (Amiga console SGR 4)")
+	if a.amiga() || a.uni() {
+		a.ital = toggle("I", a.ital, "Italic (SGR 3)")
+		a.under = toggle("U", a.under, "Underline (SGR 4)")
 	}
 	if a.zx() {
 		a.flash = toggle("Flash", a.flash, "Flash: new cells swap ink and paper twice a second")
@@ -62,6 +62,9 @@ func (a *App) drawTools(u *UI, x, y, w, cols int) int {
 // font's own size, and returns where they are. On a teletext page the first
 // half is the codes (attributes, then letters), the second the same codes as sixels.
 func (a *App) drawCharset(u *UI, x, y, cols int) Rect {
+	if a.uni() {
+		return a.drawUniCharset(u, x, y, cols)
+	}
 	fb := u.fb
 	CW, H := a.cellW(), a.cellH()
 	cm := Rect{x, y, cols * CW, 256 / cols * H}
@@ -154,7 +157,7 @@ func (a *App) drawFkeyRow(u *UI, x, y int) int {
 		fb.fill(r, cGrey)
 		fb.bevel(r, true)
 		fb.fill(Rect{r.x + 9, r.y + 2, 8, H}, cPaper)
-		a.drawCell(fb, r.x+9, r.y+2, 1, makeCell(c, a.previewFg(), 0, a.styleFlags()))
+		a.drawCell(fb, r.x+9, r.y+2, 1, a.previewCell(c))
 		name := fmt.Sprintf("F%d", i+1)
 		col := uint32(cText)
 		if i == a.factive {
@@ -167,7 +170,7 @@ func (a *App) drawFkeyRow(u *UI, x, y int) int {
 				a.setTool("draw")
 			}
 		}
-		u.setHint(r, fmt.Sprintf("F%d: character %d. F1-F10 type these; click makes it the brush", i+1, c))
+		u.setHint(r, fmt.Sprintf("F%d: character %s. F1-F10 type these; click makes it the brush", i+1, a.charLabel(c)))
 	}
 	return y + H + lineH + 6
 }
@@ -214,6 +217,9 @@ func (a *App) drawColours(u *UI, x, y, perRow int) int {
 			}
 		}
 	}
+	if a.uni() { // the 256 and 24-bit colours
+		return a.drawUniColours(u, x, y+(15/perRow+1)*26-4, perRow*20-2)
+	}
 	return y + (15/perRow+1)*26 - 8
 }
 
@@ -229,6 +235,7 @@ func (a *App) drawBrush(u *UI, x, y int) int {
 	u.setHint(br, "The brush")
 	if u.button(Rect{br.x + br.w + 8, y, buttonW("Swap"), smallH}, "Swap", false, "Swap foreground and background ("+keyName("swap_colours")+")") != nil {
 		a.fg, a.bg = a.bg, a.fg
+		a.ufg, a.ubg, a.ufgOn, a.ubgOn = a.ubg, a.ufg, a.ubgOn, a.ufgOn
 	}
 	fgShown, bgShown := a.fg, a.bg
 	if a.screen() {
@@ -237,7 +244,11 @@ func (a *App) drawBrush(u *UI, x, y int) int {
 	if a.atari() {
 		fgShown = a.doc.ink
 	}
-	fb.text(br.x+br.w+8+buttonW("Swap")+10, y+2, fmt.Sprintf("char %d  fg %d  bg %d", a.brush, fgShown, bgShown), cText)
+	note := fmt.Sprintf("char %d  fg %d  bg %d", a.brush, fgShown, bgShown)
+	if a.uni() {
+		note = fmt.Sprintf("%s  fg %s  bg %s", a.charLabel(a.brush), colourName(a.uniFg()), colourName(a.uniBg()))
+	}
+	fb.text(br.x+br.w+8+buttonW("Swap")+10, y+2, note, cText)
 	return br.x + br.w + 8
 }
 

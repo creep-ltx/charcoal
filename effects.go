@@ -163,6 +163,12 @@ func (x *fx) put(f *Doc, cx, cy int, v uint32) {
 func (x *fx) cellOf(c, ch, col int, inverse bool) uint32 {
 	p := x.e.cells[c]
 	switch {
+	case x.a.uni(): // any colour on the paper's
+		_, bg := uniColoursOf(p)
+		if inverse {
+			col, bg = bg, col
+		}
+		return uniCell(ch, pairOf(col, bg))
 	case x.a.tt():
 		return x.d.cells[c]&^0x7F | uint32(ch&0x7F)
 	case x.a.atari():
@@ -200,6 +206,13 @@ func (x *fx) inkOf(c int) int {
 	if ch := cellCh(v); !x.a.c64() && (ch == 32 || ch == 0 || ch == 255) {
 		col = cellBg(v)
 	}
+	if x.a.uni() {
+		fg, bg := uniColoursOf(v)
+		col = fg
+		if ch := uniCode(v); ch == 32 || ch == 0 {
+			col = bg
+		}
+	}
 	if col == x.paper {
 		col = x.bright
 	}
@@ -211,6 +224,12 @@ func (x *fx) inkOf(c int) int {
 func (x *fx) glint(v uint32, amt float64) uint32 {
 	a := x.a
 	switch {
+	case a.uni(): // the ink lights up (the paper of a space)
+		fg, bg := uniColoursOf(v)
+		if ch := uniCode(v); ch == 32 || ch == 0 {
+			return uniRestyle(v, fg, rgbColour(lerpRGB(colourRGB(bg, &a.pal), 0xFFFFFF, amt)))
+		}
+		return uniRestyle(v, rgbColour(lerpRGB(colourRGB(fg, &a.pal), 0xFFFFFF, amt)), bg)
 	case a.tt():
 		if amt >= 0.75 && v&0x7F > 0x20 {
 			return v&^0x7F | 0x7F // the solid block, in the row's colour
@@ -244,7 +263,7 @@ func (x *fx) glint(v uint32, amt float64) uint32 {
 
 // lineCell is a piece of a bright horizontal line at cell c (Power on).
 func (x *fx) lineCell(c int) uint32 {
-	ch := map[string]int{"pc": 0xC4, "c64": 0x40, "atari": 0x12}[x.a.mode]
+	ch := map[string]int{"pc": 0xC4, "c64": 0x40, "atari": 0x12, "uni": '─'}[x.a.mode]
 	if ch == 0 {
 		ch = '-'
 	}

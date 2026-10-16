@@ -340,6 +340,13 @@ func usedCell(mode string, v, e uint32) bool {
 		return v&255 != e&255
 	case "zx":
 		return v != e
+	case "uni": // as below, with the whole character and colours
+		if c := uniCode(v); v != e && (c == 32 || c == 0) && uniFlagsOf(v)&underline == 0 {
+			_, bv := uniColoursOf(v)
+			_, be := uniColoursOf(e)
+			return bv != be
+		}
+		return v != e
 	}
 	if v == e {
 		return false
@@ -399,6 +406,12 @@ func (a *App) cellsInOrderAt(d *Doc, e *Doc, pat int, rev, flip bool, detail int
 // fadeCell is cell v with its colours part of the way (t, 0 to 1) from the
 // paper colour to their own, each the nearest the page can show.
 func (a *App) fadeCell(v uint32, paper uint32, t float64) uint32 {
+	if a.uni() { // any colour: exactly part of the way
+		fg, bg := uniColoursOf(v)
+		f := rgbColour(lerpRGB(paper, colourRGB(fg, &a.pal), t))
+		b := rgbColour(lerpRGB(paper, colourRGB(bg, &a.pal), t))
+		return uniRestyle(v, f, b)
+	}
 	fg, bg := cellFg(v), cellBg(v)
 	nfg, nbg := a.nColours(false), a.nColours(true)
 	switch {

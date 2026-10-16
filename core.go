@@ -41,6 +41,7 @@ type Doc struct {
 	ink        int  // the one text colour of an Atari page
 	glyph0     bool // character 0 is a glyph (C64 "@", Atari heart), not an empty cell
 	fullest    bool // an animation whose fullest picture is shown, not its last
+	uni        bool // a Unicode page's cells: code and colour pair in the high bits too (uni.go)
 }
 
 func newDoc(cols, rows int) *Doc {
@@ -101,7 +102,7 @@ func (d *Doc) ensureRows(n int) {
 }
 
 func (d *Doc) clone() *Doc {
-	c := &Doc{cols: d.cols, rows: d.rows, cells: make([]uint32, d.rows*d.cols), bg: d.bg, border: d.border, ink: d.ink, glyph0: d.glyph0, fullest: d.fullest}
+	c := &Doc{cols: d.cols, rows: d.rows, cells: make([]uint32, d.rows*d.cols), bg: d.bg, border: d.border, ink: d.ink, glyph0: d.glyph0, fullest: d.fullest, uni: d.uni}
 	copy(c.cells, d.cells[:d.rows*d.cols])
 	if d.rows == 0 {
 		c.cells = make([]uint32, d.cols)
@@ -117,6 +118,9 @@ func isBlank(v uint32) bool {
 
 // blankAt: is v an empty cell on this page? (On C64 and Atari pages character 0 is drawn.)
 func (d *Doc) blankAt(v uint32) bool {
+	if d.uni {
+		return uniBlank(v)
+	}
 	if d.glyph0 && v&255 == 0 {
 		return false
 	}
@@ -224,7 +228,7 @@ func (d *Doc) trim(minRows int) {
 
 func (d *Doc) withCols(cols int) *Doc {
 	n := newDoc(cols, d.rows)
-	n.bg, n.border, n.ink, n.glyph0 = d.bg, d.border, d.ink, d.glyph0
+	n.bg, n.border, n.ink, n.glyph0, n.uni = d.bg, d.border, d.ink, d.glyph0, d.uni
 	w := min(cols, d.cols)
 	for y := 0; y < d.rows; y++ {
 		copy(n.cells[y*cols:y*cols+w], d.cells[y*d.cols:y*d.cols+w])
@@ -236,10 +240,11 @@ type Block struct {
 	w, h   int
 	cells  []uint32
 	mosaic []bool // teletext: which cells show sixels (nil: not known, letters)
+	uni    bool   // cut from a Unicode page (pasted elsewhere, its cells are converted)
 }
 
 func (d *Doc) copyRect(x0, y0, w, h int) *Block {
-	b := &Block{w: w, h: h, cells: make([]uint32, w*h)}
+	b := &Block{w: w, h: h, cells: make([]uint32, w*h), uni: d.uni}
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			b.cells[y*w+x] = d.get(x0+x, y0+y)
@@ -499,6 +504,9 @@ type Term struct {
 	lateWrap                                   bool // wrap when the next character comes (VT), not at once (ANSI.SYS)
 	screens                                    int  // clear screens seen
 	hiBg                                       bool // blink stands for a bright background colour (48;5;n, 100-107)
+	uni                                        bool // a Unicode page: 38/48;5 and 38/48;2 colours are kept exactly (uni.go)
+	fgX, bgX                                   int  // on a Unicode page, a colour beyond the 16 (-1: none)
+	hiFg                                       bool // on a Unicode page, 90-97: a bright colour, not bold (30-37 end it)
 }
 
 func newTerm(d *Doc, amiga bool) *Term {
@@ -510,14 +518,18 @@ func newTerm(d *Doc, amiga bool) *Term {
 func (t *Term) resetAttrs() {
 	t.fg, t.bg = 7, 0
 	t.bold, t.blink, t.ital, t.under, t.reverse, t.conceal, t.hiBg = false, false, false, false, false, false, false
+	t.fgX, t.bgX, t.hiFg = -1, -1, false
 }
 
 func (t *Term) attr() uint32 {
+	if t.uni && (t.fgX >= 0 || t.bgX >= 0 || t.ital || t.under) {
+		return t.uniAttr()
+	}
 	f, b := t.fg, t.bg
 	if t.reverse {
 		f, b = t.bg, t.fg
 	}
-	if t.bold {
+	if t.bold || t.hiFg {
 		f += 8
 	}
 	if t.blink {
@@ -537,6 +549,10 @@ func (t *Term) attr() uint32 {
 }
 
 func (t *Term) blankCell() uint32 {
+	if t.uni && (t.bgX >= 0 || (t.reverse && t.fgX >= 0)) {
+		_, bg := t.uniColours()
+		return uniCell(32, pairOf(7, bg))
+	}
 	if t.reverse {
 		return makeCell(32, 7, t.fg, 0)
 	}
@@ -829,20 +845,27 @@ func (t *Term) sgr(p []int) {
 		case v == 28:
 			t.conceal = false
 		case v >= 30 && v <= 37:
-			t.fg = v - 30
+			t.fg, t.fgX, t.hiFg = v-30, -1, false
 		case v == 39:
-			t.fg = 7
+			t.fg, t.fgX, t.hiFg = 7, -1, false
 		case v >= 40 && v <= 47:
-			t.bg = v - 40
+			t.bg, t.bgX = v-40, -1
+			if t.uni && t.hiBg { // after 100-107 a plain colour, as terminals have it
+				t.blink, t.hiBg = false, false
+			}
 		case v == 49:
-			t.bg = 0
+			t.bg, t.bgX = 0, -1
 			if t.hiBg {
 				t.blink, t.hiBg = false, false // the bright background was a colour, not blink
 			}
+		case v >= 90 && v <= 97 && t.uni:
+			t.fg, t.hiFg, t.fgX = v-90, true, -1
 		case v >= 90 && v <= 97:
-			t.fg, t.bold = v-90, true
+			t.fg, t.bold, t.fgX = v-90, true, -1
 		case v >= 100 && v <= 107:
-			t.bg, t.blink, t.hiBg = v-100, true, true
+			t.bg, t.blink, t.hiBg, t.bgX = v-100, true, true, -1
+		case (v == 38 || v == 48) && t.uni:
+			i = t.uniSgr(p, i)
 		case v == 38 || v == 48:
 			// 256 colours (Moebius's UTF-8 export writes its 16 as 38;5;n) and 24-bit
 			// colours, as the nearest of the 16.
@@ -1367,7 +1390,12 @@ func docText(d *Doc, runeOf func(int) rune, x0, y0, w, h int) []string {
 	for y := y0; y < y0+h; y++ {
 		var sb strings.Builder
 		for x := x0; x < x0+w; x++ {
-			sb.WriteRune(runeOf(cellCh(d.get(x, y))))
+			v := d.get(x, y)
+			if d.uni {
+				sb.WriteRune(uniRune(uniCode(v))) // the page's whole character, not its low byte
+				continue
+			}
+			sb.WriteRune(runeOf(cellCh(v)))
 		}
 		lines = append(lines, strings.TrimRight(sb.String(), " "))
 	}

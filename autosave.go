@@ -57,6 +57,7 @@ type autosaveMeta struct {
 	Ref          *RefPref        `json:"reference,omitempty"`  // the page's reference picture
 	OwnFont      *ArtFont        `json:"own_font,omitempty"`   // the page's own font, in id.font (fontfile.go)
 	Order        *drawOrder      `json:"draw_order,omitempty"` // the order Save draws a stream file in
+	UniPairs     [][3]int        `json:"uni_pairs,omitempty"`  // a Unicode page's styles 256 and up: fg, bg, italic|underline (uni.go)
 }
 
 // autosaveFrame is one frame of an autosaved page.
@@ -110,6 +111,9 @@ func writeAutosave(t *Tab) error {
 		Title: t.info.title, Author: t.info.author, Group: t.info.group, WriteSauce: t.info.writeSauce,
 		Clear: t.info.clear, Notes: t.info.notes}
 	m.SrcKind, m.Order = t.srcKind, t.order
+	if t.mode == "uni" {
+		m.UniPairs = uniPairsSnapshot()
+	}
 	if t.ref != nil {
 		m.Ref = t.ref.pref()
 	}
@@ -265,6 +269,9 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 		b = b[4*f.Cols*f.Rows:]
 		d.bg, d.border, d.ink, d.glyph0 = f.Bg, f.Border, f.Ink, f.Glyph0
 		docs[i] = d
+	}
+	if mode == "uni" {
+		uniRemapPairs(docs, m.UniPairs) // this run's table numbers them differently
 	}
 	a.mode, a.doc = mode, docs[m.Cur]
 	if m.Machine != "" {

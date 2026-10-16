@@ -38,6 +38,18 @@ func FuzzParsers(f *testing.F) {
 		f.Add(writeMarqPet(d, false))
 		f.Add(writePetmateJSON([]PetScreen{{doc: d}}))
 	}
+	{ // the Unicode page's files (uniformats.go)
+		d := newDoc(3, 2)
+		d.uni = true
+		d.cells[1] = uniCell(0x2588, styleOf(196, rgbFlag|0x123456, underline))
+		f.Add(writeUniAnsi(d))
+		out, _ := writeDur([]*Doc{d, d}, []int{100, 250}, "t", "a")
+		f.Add(out)
+		f.Add([]byte(`{"DurMovie":{"formatVersion":7,"colorFormat":"256","sizeX":2,"sizeY":2,"framerate":0,"frames":[{"delay":0,"contents":["ab"],"colorMap":[[[1,2]]]}]}}`))
+		m, _, _ := writeMirc(d, &vga16)
+		f.Add(m)
+		f.Add([]byte("\x0304,12a\x03\x02b\x04FF0000,00ff00c\x1d\x1f\x16\x0f\x0399,99\x031,"))
+	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		check := func(name string, run func() []*Doc) {
 			start := time.Now()
@@ -70,6 +82,14 @@ func FuzzParsers(f *testing.F) {
 		check("ansi pc", func() []*Doc { d, _, _ := parseArt(b, ParseOpts{}); return one(d) })
 		check("bin", func() []*Doc { d, _, _ := parseArt(b, ParseOpts{binary: true}); return one(d) })
 		check("ata", func() []*Doc { return one(parseAta(b, 40)) })
+		check("uni ansi", func() []*Doc { d, _ := parseUniArt(b, 0); return one(d) })
+		check("dur", func() []*Doc {
+			if art, err := parseDur(b); err == nil {
+				return art.docs
+			}
+			return nil
+		})
+		check("mirc", func() []*Doc { return one(parseMirc(b)) })
 		check("pcb", func() []*Doc { return one(parsePCBoard(b, 80)) })
 		check("avt", func() []*Doc { return one(parseAvatar(b, 80)) })
 		check("idf", func() []*Doc { return own(parseIDF(b)) })

@@ -160,24 +160,28 @@ func TestStartKeys(t *testing.T) {
 	withFonts(t, true)
 	a.hasC64 = true
 	prefs.Recent = []string{"/nowhere/a.ans", "/nowhere/b.ans"}
-	a.start, a.startCols = true, 5
+	// Two rows of tiles, however many page types there are.
+	tiles, _ := a.startItems()
+	cols := (tiles + 1) / 2
+	a.start, a.startCols = true, cols
 	press := func(k string) { editorKey(k, false, false, false) }
 	press("Right")
 	press("Down")
-	if a.startSel != 6 {
-		t.Fatalf("Right, Down: item %d, want 6 (VIC-20)", a.startSel)
+	if a.startSel != 1+cols {
+		t.Fatalf("Right, Down: item %d, want %d", a.startSel, 1+cols)
 	}
 	press("Down") // past the last row of tiles: the first recent file
-	if a.startSel != 10 {
-		t.Fatalf("Down from the last row: item %d, want 10", a.startSel)
+	if a.startSel != tiles {
+		t.Fatalf("Down from the last row: item %d, want %d", a.startSel, tiles)
 	}
 	press("Up")
-	if a.startSel != 6 {
-		t.Fatalf("Up from the recent files: item %d, want 6", a.startSel)
+	if a.startSel != 1+cols {
+		t.Fatalf("Up from the recent files: item %d, want %d", a.startSel, 1+cols)
 	}
+	tl := startTiles()[1+cols]
 	press("Return")
-	if a.start || a.mode != "c64" || a.machine != "vic20" {
-		t.Errorf("Return on VIC-20: start %v mode %s machine %s", a.start, a.mode, a.machine)
+	if a.start || a.mode != tl.mode || (tl.machine != "" && a.machine != tl.machine) {
+		t.Errorf("Return on %s: start %v mode %s machine %s", tl.label, a.start, a.mode, a.machine)
 	}
 
 	// Esc: the page of the type being worked on, untouched.
@@ -208,14 +212,14 @@ func TestStartKeys(t *testing.T) {
 	if a.start {
 		t.Error("Delete left the start screen up")
 	}
-	// Tab goes round every item: 10 tiles, 2 recent files, Open.
+	// Tab goes round every item: the tiles, 2 recent files, Open.
 	prefs.Recent = []string{"/nowhere/a.ans", "/nowhere/b.ans"}
 	a.start, a.startSel = true, 0
-	for i := 0; i < 13; i++ {
+	for i := 0; i < tiles+3; i++ {
 		press("Tab")
 	}
 	if a.startSel != 0 {
-		t.Errorf("13 Tabs: item %d, want 0", a.startSel)
+		t.Errorf("%d Tabs: item %d, want 0", tiles+3, a.startSel)
 	}
 }
 

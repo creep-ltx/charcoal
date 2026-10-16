@@ -213,6 +213,16 @@ func (a *App) mirrorCell(v uint32, fx, fy bool) uint32 {
 	if a.tt() || (!fx && !fy) {
 		return v
 	}
+	if a.uni() {
+		c := uniCode(v)
+		if fx {
+			c = uniMirror(c, flipH)
+		}
+		if fy {
+			c = uniMirror(c, flipV)
+		}
+		return uniWithCode(v, c)
+	}
 	f := a.font()
 	c := cellCh(v)
 	if fx {
@@ -240,11 +250,17 @@ func (a *App) putCell(x, y int, v uint32) {
 		if a.screen() {
 			keep = 127 // reversing belongs to the colours here
 		}
+		if a.uni() {
+			keep |= uniHiMask // the character's high byte
+		}
 		v = old&keep | v&^keep
 	case "char":
 		keep := uint32(255)
 		if a.screen() {
 			keep = 127
+		}
+		if a.uni() {
+			keep |= uniHiMask
 		}
 		v = v&keep | old&^keep
 	}
@@ -258,7 +274,7 @@ func (a *App) shadeSteps() []int {
 	if s := prefs.Shades[a.mode]; len(s) >= 2 {
 		ok := true
 		for _, c := range s {
-			ok = ok && c >= 0 && c < 256 && (c == 32 || a.printable(c))
+			ok = ok && c >= 0 && (c < 256 || a.uni()) && (c == 32 || a.printable(c))
 		}
 		if ok {
 			return s
@@ -267,6 +283,8 @@ func (a *App) shadeSteps() []int {
 	switch a.mode {
 	case "pc":
 		return []int{32, 0xB0, 0xB1, 0xB2, 0xDB} // ░▒▓█
+	case "uni":
+		return []int{32, '░', '▒', '▓', '█'}
 	case "c64":
 		return []int{32, 0x66, 0xA0} // the checkerboard, the reversed space
 	case "atari":
@@ -288,6 +306,9 @@ func (a *App) shadeCell(v uint32, up bool) (uint32, bool) {
 		return v, false
 	}
 	c := cellCh(v)
+	if a.uni() {
+		c = uniCode(v)
+	}
 	i := slices.Index(steps, c)
 	if a.blankShade(v) {
 		i = 0
@@ -317,6 +338,9 @@ func (a *App) shadeCell(v uint32, up bool) (uint32, bool) {
 // blankShade: an empty cell is the sequence's first step.
 func (a *App) blankShade(v uint32) bool {
 	c := cellCh(v)
+	if a.uni() {
+		c = uniCode(v)
+	}
 	return c == 32 || (c == 0 && !a.doc.glyph0)
 }
 
@@ -352,6 +376,14 @@ func (a *App) boxChars() []int {
 		return []int{0x40, 0x5D, 0x70, 0x6E, 0x6D, 0x7D}
 	case a.atari() && a.shapeStyle == "single": // ATASCII
 		return []int{0x12, 0x7C, 0x11, 0x05, 0x1A, 0x03}
+	case a.uni() && a.shapeStyle == "single":
+		return []int{'─', '│', '┌', '┐', '└', '┘'}
+	case a.uni() && a.shapeStyle == "double":
+		return []int{'═', '║', '╔', '╗', '╚', '╝'}
+	case a.uni() && a.shapeStyle == "round":
+		return []int{'─', '│', '╭', '╮', '╰', '╯'}
+	case a.uni() && a.shapeStyle == "heavy":
+		return []int{'━', '┃', '┏', '┓', '┗', '┛'}
 	}
 	return nil
 }
@@ -363,6 +395,8 @@ func (a *App) shapeStyles() ([]string, []string) {
 		return []string{"brush", "single", "double", "half"}, []string{"Brush", "Single lines", "Double lines", "Half blocks"}
 	case a.c64(), a.atari():
 		return []string{"brush", "single"}, []string{"Brush", "Box lines"}
+	case a.uni():
+		return []string{"brush", "single", "double", "round", "heavy", "half"}, []string{"Brush", "Single lines", "Double lines", "Rounded lines", "Heavy lines", "Half blocks"}
 	case a.tt():
 		return []string{"brush", "half"}, []string{"Brush", "Sixels"}
 	}
@@ -426,9 +460,9 @@ func (a *App) drawShapeTo(x, y int) {
 			a.sixelSym(p.x, p.y, !erase)
 		}
 	case style == "half":
-		col := a.fg
+		col := a.halfFg()
 		if erase {
-			col = a.bg
+			col = a.halfBg()
 		}
 		for _, p := range pts {
 			a.halfSym(p.x, p.y, col)

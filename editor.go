@@ -89,6 +89,7 @@ func defaultFkeys() map[string][][]int {
 		"st":    stFkeys,
 		"zx":    zxFkeys,
 		"tt":    ttFkeys,
+		"uni":   uniFkeys,
 	}
 }
 
@@ -117,6 +118,7 @@ type Snap struct {
 	frames []Frame // with whole: the list as it was (nil: a page of one picture)
 	cost   int     // the cells the step keeps, for undoBudget
 	order  *drawOrder
+	mode   string // the page type: undoing a conversion to or from Unicode changes it back
 }
 type Play struct {
 	bytes []byte
@@ -233,6 +235,7 @@ type App struct {
 	startCols     int // tiles in a row of the start screen, as last drawn
 	startCol      int // the column Up goes back to from the recent files
 	drawOpts          // shapes, shade, mirror, colour / character only (shapes.go)
+	uniOpts           // the Unicode page's colours beyond 16 and character block (uni.go)
 }
 
 var a *App
@@ -351,6 +354,9 @@ func (a *App) styleFlags() uint32 {
 
 // cell makes a cell of the page in the brush's colours.
 func (a *App) cell(ch int) uint32 {
+	if a.uni() {
+		return a.uniCellOf(ch)
+	}
 	if a.tt() {
 		return makeCell(ch&0x7F, 0, 0, 0)
 	}
@@ -370,6 +376,9 @@ func (a *App) cell(ch int) uint32 {
 }
 
 func (a *App) brushCell() uint32 {
+	if a.uni() {
+		return a.uniCellOf(a.brush)
+	}
 	if a.tt() {
 		return makeCell(a.brush&0x7F, 0, 0, 0)
 	}
@@ -435,6 +444,9 @@ func (a *App) setPalette() {
 
 // printable: is this byte a glyph on the current page?
 func (a *App) printable(c int) bool {
+	if a.uni() {
+		return c >= 0x20 && c != 0x7F && c < 0x10000
+	}
 	if a.tt() {
 		return c < 0x80
 	}
@@ -451,6 +463,9 @@ func (a *App) printable(c int) bool {
 }
 
 func (a *App) charToByte(r rune) int {
+	if a.uni() {
+		return uniFromRune(r)
+	}
 	if a.tt() {
 		return ttFromRune(r)
 	}
@@ -480,6 +495,9 @@ func (a *App) charToByte(r rune) int {
 
 // runeOf is the character a byte of the page shows, as Unicode.
 func (a *App) runeOf(c int) rune {
+	if a.uni() {
+		return uniRune(c)
+	}
 	if a.c64() {
 		return petRune(c, a.lower())
 	}
@@ -510,7 +528,7 @@ func nextGen() int { genSeq++; return genSeq }
 
 func (a *App) snapshot() Snap {
 	d := a.doc.clone()
-	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order}
+	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode}
 }
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
@@ -564,6 +582,7 @@ func (a *App) restore(s Snap) {
 		a.sel, a.float = nil, nil
 	}
 	a.doc, a.cx, a.cy, a.gen, a.order = s.doc, s.cx, s.cy, s.gen, s.order
+	a.restoreUniMode(s.mode)
 	a.showCase()
 	a.dirty = a.gen != a.savedGen
 	a.inRun = false
@@ -765,6 +784,10 @@ func (a *App) paintSixel(gx, gy int, on bool) {
 
 // paintHalf: a cell holds two pixels, top and bottom.
 func (a *App) paintHalf(x, hy, colour int) {
+	if a.uni() {
+		a.uniPaintHalf(x, hy, colour)
+		return
+	}
 	y, bottom := hy>>1, hy&1
 	v := a.doc.get(x, y)
 	ch, fg, bg := cellCh(v), cellFg(v), cellBg(v)
@@ -825,6 +848,10 @@ func (a *App) floodFill(x, y int) {
 
 func (a *App) pick(x, y int) {
 	v := a.doc.get(x, y)
+	if a.uni() {
+		a.uniPick(v)
+		return
+	}
 	a.brush = cellCh(v)
 	if !a.atari() {
 		a.fg = cellFg(v)
@@ -836,7 +863,7 @@ func (a *App) pick(x, y int) {
 }
 
 func (a *App) setTool(t string) {
-	if t == "half" && !a.pc() && !a.tt() {
+	if t == "half" && !a.pc() && !a.tt() && !a.uni() {
 		t = "draw"
 	}
 	a.tool = t
@@ -873,7 +900,7 @@ func (a *App) setFg(i int) {
 		}
 		return
 	}
-	a.fg = i
+	a.fg, a.ufgOn = i, false
 }
 
 // fgNow is the colour typing gives: the brush's, or an Atari screen's text colour.
@@ -892,7 +919,7 @@ func (a *App) setBg(i int) {
 		}
 		return
 	}
-	a.bg = i
+	a.bg, a.ubgOn = i, false
 	if i > 7 && !a.ice {
 		a.msg("Backgrounds 8-15 need iCE colours (otherwise they blink on PC)")
 	}
@@ -1011,6 +1038,7 @@ func (a *App) swapColours() {
 		return
 	}
 	a.fg, a.bg = a.bg, a.fg
+	a.ufg, a.ubg, a.ufgOn, a.ubgOn = a.ubg, a.ufg, a.ubgOn, a.ufgOn
 }
 
 // toggleIce switches iCE colours (backgrounds 8-15 instead of blink) on Amiga and PC pages.
@@ -1121,7 +1149,13 @@ func (a *App) stamp(x0, y0 int, transparent bool) {
 	for y := 0; y < f.h; y++ {
 		for x := 0; x < f.w; x++ {
 			v := f.cells[y*f.w+x]
-			if transparent && isBlank(v) {
+			switch {
+			case f.uni && !a.uni(): // from a Unicode page: the nearest the page can show
+				v, _ = uniToPC(v, a.amiga(), &a.pal)
+			case !f.uni && a.uni():
+				v = pcToUni(v, false)
+			}
+			if transparent && ((a.uni() && uniBlank(v)) || (!a.uni() && isBlank(v))) {
 				continue
 			}
 			a.setCell(x0+x, y0+y, v) // a block below the last row adds rows, up to the page's limit
@@ -1138,7 +1172,7 @@ func (a *App) textBlock(text string) *Block {
 		w = max(w, utf8.RuneCountInString(l))
 	}
 	w = min(w, a.doc.cols)
-	b := &Block{w: w, h: len(lines), cells: make([]uint32, w*len(lines))}
+	b := &Block{w: w, h: len(lines), cells: make([]uint32, w*len(lines)), uni: a.uni()}
 	fillCells(b.cells, blank)
 	for y, l := range lines {
 		x := 0
@@ -1164,6 +1198,9 @@ func (a *App) textBlock(text string) *Block {
 
 func (a *App) reparse() {
 	a.frames, a.cur, a.restructured = nil, 0, false
+	if a.reparseUni() {
+		return
+	}
 	if a.reparseEditor() {
 		return
 	}
@@ -1256,6 +1293,9 @@ var seqExt = regexp.MustCompile(`(?i)\.(seq|pet)$`)
 // loadBytes reads a file into the current tab; as is "auto", "amiga", "pc" or "c64".
 func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.srcKind, a.ownFont, a.ownLower, a.ownPal = "", nil, nil, nil
+	if a.loadUni(b, name, path, as) { // Unicode pages: UTF-8 ANSI, durdraw, mIRC (uniformats.go)
+		return
+	}
 	if a.loadEditor(b, name, path, as) { // other editors' files (editorformats.go)
 		return
 	}
@@ -1584,7 +1624,10 @@ func (a *App) finishLoad(b []byte, name, path string, sauce *Sauce, fmtID string
 // and sets up its look (applyLook).
 func (a *App) applyMode() {
 	a.applyLook()
-	if a.tool == "half" && !a.pc() && !a.tt() { // Half on PC pages, Sixel on teletext
+	if a.uni() {
+		a.ice = true // terminals show bright backgrounds, never blink
+	}
+	if a.tool == "half" && !a.pc() && !a.tt() && !a.uni() { // Half on PC and Unicode pages, Sixel on teletext
 		a.setTool("draw")
 	}
 	if a.fset >= len(a.fkeys[a.mode]) {
@@ -1596,6 +1639,7 @@ func (a *App) applyMode() {
 // it may run for every page on show, every frame.
 func (a *App) applyLook() {
 	a.doc.glyph0 = a.screen()
+	a.doc.uni = a.uni()
 	a.setPalette()
 }
 
@@ -1606,6 +1650,9 @@ func (a *App) setMode(m string) {
 		return
 	}
 	a.endPlay()
+	if (m == "uni" || a.mode == "uni") && a.setModeUni(m) { // cells are converted (uni.go)
+		return
+	}
 	if m == "c64" && !a.hasC64 {
 		t := a.Tab
 		openC64Req(func() {
@@ -1828,6 +1875,11 @@ func (a *App) makeTab(mode string) *Tab {
 	if mode == "st" {
 		t.doc = newSTDoc(stResByID(t.stres))
 		t.saveFmt, t.name = "vt52", "untitled.vt"
+	}
+	if mode == "uni" {
+		t.doc.uni = true
+		t.saveFmt, t.ice = "uniansi", true
+		t.info.writeSauce = false // terminal art has none: cat would show it
 	}
 	if mode == "atari" {
 		t.doc = newAtariDoc()
@@ -2121,6 +2173,8 @@ func (a *App) transformBlock(b *Block, op int) *Block {
 			switch {
 			case op == invertBlock:
 				v = a.invertCell(v)
+			case a.uni():
+				v = uniWithCode(v, uniMirror(uniCode(v), op))
 			case mosaic && (c < 0x40 || c >= 0x60):
 				v = v&^255 | uint32(ttSixelFlip(c, op == flipV))
 			case a.tt():
@@ -2146,6 +2200,9 @@ func (a *App) invertCell(v uint32) uint32 {
 	switch {
 	case a.screen():
 		return v ^ 0x80
+	case a.uni():
+		fg, bg := uniColoursOf(v)
+		return uniRestyle(v, bg, fg)
 	}
 	fg, bg := cellFg(v), cellBg(v)
 	if (a.pc() || a.amiga()) && !a.ice {
@@ -2321,6 +2378,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 			out = withSauce(out, 1)
 		}
 		return out, nil
+	}
+	if out, ok, err := a.encodeUni(fmtID, d); ok { // uniformats.go
+		return out, err
 	}
 	switch fmtID {
 	case "ansi":
@@ -2514,7 +2574,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID]
+	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID] || a.uniOwn(fmtID)
 	if own && a.nFrames() > 1 && !framesFormats[fmtID] {
 		// One picture: written as an export, so the page is not taken for saved.
 		a.lastDir = filepath.Dir(path)
@@ -2527,7 +2587,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.path, a.name, a.saveFmt = path, filepath.Base(path), fmtID
 		a.source, a.sourceBin, a.forceCols = data, fmtID == "bin", 0
 		a.srcKind = map[string]string{"xbin": "xbin", "marq": "marq", "petmate": "petmate", "prg": "prg", "pcb": "pcb", "avt": "avt", "tti": "tti"}[fmtID]
-		if editorOwn[fmtID] {
+		if editorOwn[fmtID] || a.uniOwn(fmtID) {
 			a.srcKind = fmtID
 		}
 		a.markSaved()

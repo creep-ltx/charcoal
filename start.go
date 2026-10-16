@@ -44,6 +44,7 @@ func startTiles() []startTile {
 		{"C128", "c64", c128, "", 13, 16},
 		{"ZX Spectrum", "zx", "", "", 0, 8},
 		{"Teletext", "tt", "", "", 7, 8},
+		{"Unicode", "uni", "", "", 7, 16},
 	}
 }
 

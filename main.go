@@ -88,6 +88,7 @@ func main() {
 	switch {
 	case mode == "c64" && a.hasC64, mode == "st" && hasSTFont():
 	case mode == "pc", mode == "atari", mode == "zx", mode == "tt":
+	case mode == "uni":
 	default:
 		mode = "amiga"
 	}

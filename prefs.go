@@ -69,10 +69,12 @@ func loadPrefs() {
 		}
 	}
 	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper", "atari": "atari", "st": "st8x8", "zx": "zx", "tt": "zx"}
+	a.defFont["uni"] = "univga"
 	for k, v := range prefs.Font {
 		a.defFont[k] = v
 	}
 	a.defPalette = map[string]string{"amiga": "amiga", "pc": "vga", "c64": "c64", "atari": "atari", "st": "st", "zx": "zx", "tt": "teletext"}
+	a.defPalette["uni"] = "vga"
 	for k, v := range prefs.Palette {
 		a.defPalette[k] = v
 	}
@@ -85,7 +87,7 @@ func loadPrefs() {
 	a.defSTRes = stResByID(prefs.STRes).id
 	a.fkeys = defaultFkeys()
 	for _, m := range pageModes {
-		if f := prefs.Fkeys[m]; validFkeys(f) {
+		if f := prefs.Fkeys[m]; validFkeys(f) || (m == "uni" && validUniFkeys(f)) {
 			a.fkeys[m] = f
 		}
 	}

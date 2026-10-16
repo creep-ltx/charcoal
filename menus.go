@@ -115,6 +115,8 @@ func init() {
 			machine("PETSCII (Commodore)", "c64"),
 			machine("ZX Spectrum", "zx"),
 			machine("Teletext", "tt"),
+			machine("Unicode (terminals, IRC)", "uni"),
+			{label: "Convert to Unicode", action: "convert_unicode"},
 			menuSep,
 			{label: "iCE colours", action: "ice", tick: func() bool { return a.ice }},
 			{label: "9-pixel letter spacing", action: "ninepx", tick: func() bool { return a.pc() && a.ninePx() }},
@@ -123,6 +125,7 @@ func init() {
 			{label: "Default colours", action: "default_colours"},
 			{label: "Swap the colours", action: "swap_colours"},
 			{label: "Take the colours under the cursor", action: "take_colours"},
+			{label: "A 24-bit colour (Unicode)...", action: "uni_colour"},
 		}},
 		{"Draw", []menuItem{
 			tool("Type", "type"),

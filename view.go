@@ -23,6 +23,10 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 		a.drawTTCell(fb, px, py, z, cell, true)
 		return
 	}
+	if a.uni() {
+		a.drawUniCell(fb, px, py, z, v)
+		return
+	}
 	f, H := a.font(), a.cellH()
 	skip := 1
 	if H == 8 {
@@ -526,6 +530,10 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 				a.setMode(m)
 			}
 		}
+		if u.button(fl.place(buttonW("Uni")), "Uni", a.uni() && !a.start, "Unicode: any character, 256 and 24-bit colours; UTF-8 ANSI, durdraw .dur, mIRC. A PC or Amiga page is converted (undoable)") != nil {
+			a.start = false
+			a.setMode("uni")
+		}
 	}
 	var fontNames, fontIDs []string
 	cur := 0
@@ -946,9 +954,9 @@ func (a *App) pagePress(c *Click) {
 			break
 		}
 		hy := p.y*2 + p.half
-		col := a.fg
+		col := a.halfFg()
 		if c.button == 3 {
-			col = a.bg
+			col = a.halfBg()
 		}
 		if c.shift && a.last != nil {
 			line(a.last.x, a.last.y, p.x, hy, func(x, y int) { a.halfSym(x, y, col) })
@@ -1002,9 +1010,9 @@ func (a *App) pageMotion(mx, my int) {
 		a.last = &Hover{x: gx, y: gy}
 	case a.tool == "half":
 		hy := p.y*2 + p.half
-		col := a.fg
+		col := a.halfFg()
 		if a.button == 3 {
-			col = a.bg
+			col = a.halfBg()
 		}
 		if a.last != nil {
 			line(a.last.x, a.last.y, p.x, hy, func(x, y int) { a.halfSym(x, y, col) })
@@ -1118,12 +1126,16 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		v := a.doc.get(a.hover.x, a.hover.y)
 		c := cellCh(v)
 		x = fb.text(x, y, fmt.Sprintf("Mouse %d,%d: ", a.hover.x+1, a.hover.y+1), cText)
-		if a.printable(c) {
+		if a.uni() {
+			x = a.uniCellNote(fb, x, y, v) + 24
+		} else if a.printable(c) {
 			a.pageGlyph(fb, x, y, c)
 		}
-		x = fb.text(x+digitsW(2), y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
+		if !a.uni() {
+			x = fb.text(x+digitsW(2), y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
+		}
 	}
-	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum", "tt": "Teletext"}[a.mode]
+	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum", "tt": "Teletext", "uni": "Unicode"}[a.mode]
 	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, a.doc.rows), cText) + 24
 	name := filepath.Base(a.path) // the whole path is in the title bar and Info
 	if a.path == "" {
