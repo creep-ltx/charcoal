@@ -611,6 +611,15 @@ func TestLaySideFile(t *testing.T) {
 	if c.layers != nil {
 		t.Fatal("a changed file got its layers back")
 	}
+	// CharView shows the file as it is
+	os.WriteFile(p, data, 0o644)
+	viewer = &Viewer{}
+	v := restart(t, "pc")
+	v.openPath(p, "auto")
+	viewer = nil
+	if v.layers != nil {
+		t.Fatal("CharView took the layers")
+	}
 	// saved again with one layer: the side file goes
 	os.WriteFile(p, data, 0o644)
 	d := restart(t, "pc")

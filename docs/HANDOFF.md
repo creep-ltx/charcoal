@@ -1257,6 +1257,68 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   guest's floating block (PASTE_AS_SELECTION, ROTATE, FLIP) is passed on but not shown in CharEdit; idle/away
   status is shown but CharEdit never sends its own; SET_BG (C64 pages) ignored; no reconnect.
 
+## Layers (2026-10-16, branch r6-layers; design: docs/layers-design.md)
+
+- **The user's decisions (2026-10-16):** empty cells (blankAt) show the layers below, a black full block covers;
+  "black shows below" per layer; after a flat save the layers are kept beside the file (SHA-1 of the bytes);
+  layers and frames together later; 16M cells for all layers together, 64 layers at most; Pick = what is seen,
+  Copy = the current layer, Edit > Copy what is seen = the picture; hidden layers left out of flat saves and
+  REXPaint, with a message.
+- Model (`layers.go`): `Tab.layers []Layer` (doc, name, hidden, clear 0/1, keep: the file's IcyDraw flags and
+  colour, Playscii z), `Tab.lay`, `Tab.others` (view: 0 shown, 1 dim, 2 hidden). **nil = one layer = t.doc**, and
+  a list always has 2+ (`oneLayer` after delete/merge), so a page of one layer is the old page byte for byte.
+  **t.doc is always the live current layer**, `layers[lay].doc` stale (as frames); `goLayer` clones; layers not
+  current are never changed in place. Page fields (bg, border, ink, glyph0, uni) live on t.doc (`layerFields`).
+  The current layer is the page's height; the others may be shorter (missing rows are clear; `shrinkLayer` cuts
+  an upper layer's empty rows when it stops being current, never the bottom one's).
+- `flatten(ls, cur, d)` is the one merge; `t.seen()` = t.doc itself without layers. **`asSeen()`** puts the
+  flattened page in t.doc for a while (the live layer waits in layers[lay], `t.seeing`, `layerDoc` knows) and is
+  deferred at the top of `encodeFor` (so every writer and export), `playBytes`, `playPauses`, batch's animate (after
+  its load); `seen()` in Animate's previews, the draw order, party check, Save for the party (`encodeStage` drops
+  layers), work stages (`recordStage` flattens with the step's layer, `stageCand.lays` lazily). `shownAt` draws a
+  cell (`drawLayersRow` in drawPage; dim = `fb.blend` 150 toward `layerPaper`), the status line, the hover, Pick.
+- Editing: `newLayer(copied)`, `deleteLayer`, `moveLayer`, `mergeDown`, `mergeAll`, `toggleLayer`,
+  `toggleBlackClear`, `renameLayer`, `cycleOthers`; `layerRefused` (page type, frames, a drawing session, 64,
+  cells). Undo: `Snap.lay`, `Snap.lwhole` + `Snap.layers` (`pushLayersUndo`), `restore` goes to the edited layer,
+  `snapshotLike` makes the redo of the same kind. Structure: `withEveryFrame` calls `withEveryLayer` on a layered
+  page (W, machine width, crop, Unicode/TED conversions); `setRows` cuts every layer; rowscols' four ops run on
+  every layer through `everyLayerDo` (`Tab.layering` makes their own pushUndo a no-op). `maxRows` = what the other
+  layers leave of maxPageCells. `uniCompact` counts every layer and snapshot layer. No frames, Split, Animate as
+  frames, drawing sessions or page types without layers on a layered page (`layersNoFrames`).
+- UI (`layers_ui.go`): the panel section in Studio (`drawLayers`: rows top first, check box, name / rename field
+  `fieldLayer`, buttons, the others choice), Page menu group, Edit > Copy what is seen (`copySeen`), keys block
+  "Layers" in keys.go (Alt+Shift+N, Ctrl+Shift+PgUp/PgDn, Alt+Shift+Up/Down, Alt+Shift+M, Alt+Shift+E; the rest
+  menu only; `TestDefaultKeysHaveNoClashes` checks all presets).
+- Keeping (`layers_keep.go`): autosave `Lay`/`Layers` (cells one layer after another; a meta without them is one
+  layer). The side file `<data dir>/layers/<sha1 of the path>.json` (`writeLayersFile` after an own-format save in
+  a format that does not keep layers; `restoreLayersFile` in openPath): taken back only if the file has the SHA-1
+  written, the same page type and width. Cells are not compared: an .ata keeps no colours in cells, so the page
+  read differs from the layers' in bits that do not show.
+- Files (`layers_formats.go`): `layersKeptBy(fmt, mode)`: .icy (PC, Amiga), .xp (PC), .psci (PC, Amiga, ST; not
+  PETSCII/Atari: their one screen background makes a lone layer read back differently). Readers are unchanged;
+  `fileLayers` (from reparseEditor, never in CharView) reads each layer as the file's only one with the format's
+  own reader and keeps them only when `flatten` looks as the format's page (`layersKept`, `sameLook`), else the
+  page opens flat as before. IcyDraw: invisible cell = empty, a layer with transparent backgrounds = black shows
+  below; groups, chars/attributes modes, picture layers fall back. **IcyDraw's transparent background is not
+  "the background below"**: icy_engine gives it the colour of the lower half of the cell below (HalfBlock::from_char:
+  a space's bg, a full or lower half block's fg, an upper half's bg, fg when fg == bg, else 0), so the writer
+  writes the background as seen where that differs (`icyLowerColour`). CharEdit's own reader (`icyMerge`) takes the
+  cell's background below; left as it is (readers unchanged). REXPaint: pink = empty; hidden layers left out,
+  black-shows-below cells get the colour below, more than 9 layers: the lowest merged. Playscii: one frame,
+  empty = tile 0/0/0, black shows below = bg 0.
+- Tests (`layers_test.go`, helpers `layF*`): flatten per page type and mode, one layer = the doc, short layers,
+  every format of a two-layer page = its flat page's bytes, refusals, stages, edit/undo/redo across layers,
+  structure, limits, short layers cost, Unicode styles kept, drawing (pixels = the flat page; dim/hidden differ),
+  Pick and Copy what is seen, the panel, autosave (PC/Unicode/PETSCII), the side file (and a changed file opens
+  flat), .icy/.xp/.psci keep layers, REXPaint's leftovers, fallbacks, CharView, an Atari side file; FuzzParsers
+  "layers" (and seeds); env-gated `TestLayIcyDrawReads` (IcyDraw's engine dumps a layered .icy cell for cell as
+  seen: CHARCOAL_ICYMACH/CHARCOAL_ICYDIR as TestOthIcyExternal) and `TestLayRealFiles` (CHARCOAL_LAYER_FILES).
+  The big check reads pages as seen and counts files that keep their layers (none of its .icy/.xp/.psci have
+  more than one layer). Screenshots: /tmp/charcoal-layers/*.png.
+- Not done: layers with frames; lock (IcyDraw's lock bits are only written back); groups, offsets, text layers,
+  opacity; layers on Spectrum/CPC/MSX/MZ pages (their empty cell is not blank); .icy layers of PETSCII/Atari/ST
+  pages (flattened, kept beside the file); Playscii's PETSCII/Atari layers; a drawing session with layers.
+
 ## Keys and safety (2026-10-13, evening)
 
 - `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's

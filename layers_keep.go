@@ -112,7 +112,7 @@ func sameLook(x, y *Doc) bool {
 // restoreLayersFile takes back the layers of the file just opened (bytes b), if
 // they were kept for exactly these bytes and look as the page does.
 func (a *App) restoreLayersFile(path string, b []byte) {
-	if a.layers != nil || a.frames != nil || !a.layered() {
+	if a.layers != nil || a.frames != nil || !a.layered() || viewer != nil { // CharView shows the file as it is
 		return
 	}
 	f, ls, err := readLayersFile(layersSideFile(path))
