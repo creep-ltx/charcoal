@@ -640,7 +640,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | `testdata/playscii/hello1.psci` | Playscii's example art | MIT, `testdata/playscii/LICENSE-playscii.txt` |
 | `testdata/charpad` | c64lib's CharPad test projects (gradle-retro-assembler-plugin) | MIT, `testdata/charpad/SOURCE.txt` |
 | `testdata/durdraw` | durdraw's example art (cmang, indyz) and durdraw's own ANSI exports of it | BSD 3-clause, `testdata/durdraw/NOTICE.txt` |
-| The IGS interpreter's drawing (`igs.go`, `igs_vdi.go`: VDI lines, arcs, fills, patterns, text effects, blits) | ported from IcyDraw's engine (github.com/mkrueger/icy_tools, Mike Krüger), which follows EmuTOS's VDI | MIT or Apache-2.0 (used under MIT), `third_party/icy_tools-LICENSE-MIT.txt` |
+| The IGS interpreter's drawing (`igs.go`, `igs_vdi.go`: VDI lines, arcs, fills, patterns, text effects, blits) | ported from IcyDraw's engine (github.com/mkrueger/icy_tools, Mike Krüger); every table and routine from its source, nothing from EmuTOS's (GPL) code | MIT or Apache-2.0 (used under MIT), `third_party/icy_tools-LICENSE-MIT.txt` |
 | `testdata/igs/icydraw` | IcyDraw's IGS test scripts and its renders of them | MIT or Apache-2.0, `testdata/igs/icydraw/README` |
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE

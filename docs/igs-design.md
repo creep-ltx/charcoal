@@ -67,7 +67,7 @@ An IGS page is an Atari ST page (st.go) with a picture: `Tab.igs *igsLayer`.
 ## The interpreter (igs.go, igs_vdi.go)
 
 Ported from IcyDraw's engine (mkrueger/icy_tools, Apache-2.0/MIT: `icy_parser_core/src/igs`,
-`icy_engine/src/palette_screen_buffer/igs`), itself a port of EmuTOS's VDI (line widths and ends, arcs by
+`icy_engine/src/palette_screen_buffer/igs`; its code is named after GEM VDI's routines and names no other source; line widths and ends, arcs by
 the 1800-step sine table, polygon scan fill bottom to top, the fill patterns and hatches, polymarkers,
 GEM text effects). Differences: the parser looks at the whole file (a command letter chained after `:` must
 be followed by `>`, as IG's spec writes them, or by a space and a value, so `G#p>24,19:We all ...` prints

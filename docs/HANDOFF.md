@@ -527,7 +527,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   32000/4000 raw bytes after the command, ST planar, `planar`), X 12 palettes. `igsVM` runs commands into
   `pix` (registers); VT52 on the pixels (`vt52`, `putGlyph`, scrolling). Random values: fixed seed. A work budget
   (`igsWorkMax`, 40M; real files <= 18M) stops hostile files; the note says so.
-- `igs_vdi.go`: the port of IcyDraw's vdi_paint (EmuTOS VDI): Bresenham lines with masks (always replace mode,
+- `igs_vdi.go`: the port of IcyDraw's vdi_paint (icy_tools' own code, MIT; nothing from EmuTOS but the fonts, downloaded): Bresenham lines with masks (always replace mode,
   as IcyDraw), wide lines with the pen's quarter circle and arrow/round ends, polygon scan fill bottom-up,
   `igsCurve` (1800-step sine table), rounded boxes, flood fill, polymarkers, text (6x6/8x8/8x16, scale 2 above
   size 15; thickened/ghosted/skewed/underlined/outlined; 4 rotations), blits (logic ops masked to the planes).

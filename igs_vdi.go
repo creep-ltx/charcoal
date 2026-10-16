@@ -4,7 +4,7 @@ package main
 // rectangles, circles, ellipses, arcs and pie slices from VDI's 1800-step sine table, polygons filled
 // scan line by scan line from the bottom up, flood fill, polymarkers, text in the system fonts with GEM's
 // effects, and blits. Ported from IcyDraw's engine (mkrueger/icy_tools, Apache-2.0/MIT, vdi_paint/*.rs and
-// util.rs), which follows EmuTOS's VDI.
+// util.rs; its names are GEM VDI's routines). Every table here is icy_tools'.
 
 import (
 	"math"

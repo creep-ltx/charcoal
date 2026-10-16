@@ -5,7 +5,7 @@ package main
 // in a VT52 stream draw pixels with GEM VDI. This file reads the commands and runs them into a picture of
 // the ST's screen (register numbers per pixel); igs_vdi.go draws, igs_page.go puts the picture under an
 // Atari ST page's cells. Design: docs/igs-design.md. Ported from IcyDraw's engine (mkrueger/icy_tools,
-// Apache-2.0/MIT), itself from EmuTOS's VDI.
+// Apache-2.0/MIT, used under MIT); nothing is taken from EmuTOS's sources but its fonts, downloaded at run time.
 
 import (
 	"bytes"
