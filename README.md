@@ -55,7 +55,7 @@ Settings, keys and autosaves are kept in `%AppData%\Charcoal` on Windows,
 An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, the BBS colour codes of Mystic,
 Renegade, Synchronet, WWIV, Wildcat! and Celerity, XBin, iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii),
 Unicode terminal art (UTF-8 ANSI in 256 and 24-bit colours, durdraw) and IRC art (mIRC colour codes),
-Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens, Amstrad CPC
+Atari ATASCII, Atari ST VT52 and IGS, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens, Amstrad CPC
 text art (AMSCII) and teletext (BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA, EGA 8x14,
 VGA 8x8 (80x50) and the code pages 850 and 866 on a PC page (CP437), the C64's two character sets on a C64 page;
@@ -140,6 +140,13 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
 - **Atari ST page**: the ST's VT52 terminal in low (40x25, 16 colours), medium (80x25, 4) or high resolution
   (80x25, mono); each cell its own colours; `.vt` streams read and written, the resolution guessed from the pens
   and columns used. Font: EmuTOS's, downloaded on first use (GPL, so not built in), SHA-1 checked.
+  **IGS** (`.ig`, Instant Graphics and Sound, the ST BBS graphics language): the drawing is shown as the ST
+  draws it (lines, fills and patterns, VDI text, blits, palettes, loops; checked pixel for pixel against
+  IcyDraw's renders), as a picture under the page's cells; the resolution is the file's own or guessed from
+  where it draws. Type over it: empty cells show the picture, text is VT52 in the file's colours. Saving keeps
+  the drawing and its sounds, pauses and closing clear byte for byte and adds the text after the drawing (an
+  unchanged page saves as the same file). The drawing itself is not editable; sound is not played.
+  Design: docs/igs-design.md.
 - **Teletext page**: 40x25 cells of 7-bit codes in 12x20 cells like the SAA5050's; attributes (text/graphics
   colour, double height, flash, conceal, separated, hold, new/black background) act from their cell on, read
   left to right as the chip reads a row (set-at / set-after as in ETS 300 706 and edit.tf). **Codes** shows the
@@ -614,6 +621,9 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | `testdata/icydraw` | `testdata/alove`'s art as IcyDraw 0.6 saves it | as above |
 | `testdata/playscii/hello1.psci` | Playscii's example art | MIT, `testdata/playscii/LICENSE-playscii.txt` |
 | `testdata/durdraw` | durdraw's example art (cmang, indyz) and durdraw's own ANSI exports of it | BSD 3-clause, `testdata/durdraw/NOTICE.txt` |
+| The IGS interpreter's drawing (`igs.go`, `igs_vdi.go`: VDI lines, arcs, fills, patterns, text effects, blits) | ported from IcyDraw's engine (github.com/mkrueger/icy_tools, Mike Krüger), which follows EmuTOS's VDI | MIT or Apache-2.0 (used under MIT), `third_party/icy_tools-LICENSE-MIT.txt` |
+| `testdata/igs/icydraw` | IcyDraw's IGS test scripts and its renders of them | MIT or Apache-2.0, `testdata/igs/icydraw/README` |
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE
-project) and the EmuTOS font sources (GPL), for PETSCII and Atari ST pages.
+project) and the EmuTOS font sources (GPL; 8x8, 8x16 and, for IGS's small text, 6x6), for PETSCII and Atari ST
+pages.

@@ -865,7 +865,7 @@ func c64Why() string {
 
 func stWhy() string {
 	return "Atari ST pages need the ST's font. Atari's own is in the TOS ROM; EmuTOS, the free TOS (GPL), has " +
-		"its own version of it. Download it from EmuTOS now? (two small files, checked before they are used, kept in " +
+		"its own version of it. Download it from EmuTOS now? (three small files, checked before they are used, kept in " +
 		shownDir(appDataDir()) + ".) You can also do this later under Settings."
 }
 

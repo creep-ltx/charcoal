@@ -193,6 +193,7 @@ type Tab struct {
 	ref                 *RefImage   // the reference picture to trace over (refimage.go), nil: none
 	order               *drawOrder  // the order Save draws a stream file in (transitions.go); nil: row by row
 	cpcSet              cpcSetup    // an Amstrad CPC page's mode, inks and border (cpc.go)
+	igs                 *igsLayer   // an IGS file's picture under the cells and what saving keeps (igs_page.go)
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -438,6 +439,10 @@ func (a *App) setPalette() {
 	}
 	if a.ownPal != nil && a.paletteFor[a.mode] == "file" {
 		a.pal = *a.ownPal
+		return
+	}
+	if a.igsPage() { // the IGS file's colour registers
+		a.pal = a.igs.pal
 		return
 	}
 	p := paletteByID(a.paletteFor[a.mode])
@@ -1236,7 +1241,7 @@ func (a *App) reparse() {
 	if a.reparseUni() {
 		return
 	}
-	if a.reparseEditor() || a.reparseCPC() {
+	if a.reparseEditor() || a.reparseCPC() || a.reparseIGS() {
 		return
 	}
 	switch a.srcKind {
@@ -1336,6 +1341,10 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		return
 	}
 	if a.loadCPC(b, name, path, as) { // Amstrad CPC .bin and .dsk (cpc.go)
+		return
+	}
+	a.igs = nil
+	if a.loadIGS(b, name, path, as) { // Atari ST IGS (igs_page.go)
 		return
 	}
 	if what := notArt(b); what != "" && as == "auto" {
@@ -1847,6 +1856,9 @@ func newSTDoc(r STRes) *Doc {
 func (a *App) setSTRes(id string) {
 	r := stResByID(id)
 	a.endPlay()
+	if a.igsSetRes(id) { // an IGS page draws its picture again (igs_page.go)
+		return
+	}
 	a.stres, a.defSTRes = id, id
 	a.paletteFor["st"] = r.palette
 	a.setPalette()
@@ -2474,6 +2486,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	}
 	if out, ok, err := a.encodeCPC(fmtID, d); ok { // Amstrad CPC .bin and .dsk (cpc.go)
 		return out, err
+	}
+	if out, ok := a.encodeIGS(fmtID, d); ok { // Atari ST IGS (igs_page.go)
+		return out, nil
 	}
 	switch fmtID {
 	case "ansi":
