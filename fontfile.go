@@ -151,6 +151,8 @@ func parseFontFile(name string, b []byte, mode string, cur *Font) (up, low *Font
 	switch mode {
 	case "st", "tt":
 		return nil, nil, fmt.Errorf("an %s page keeps its own font", modeNames[mode])
+	case "uni":
+		return nil, nil, fmt.Errorf("a Unicode page draws with Unifont (and VGA)")
 	case "pc", "amiga":
 		var data []byte
 		var h, n int

@@ -996,3 +996,66 @@ func TestUniOwnFiles(t *testing.T) {
 		}
 	}
 }
+
+// A PC page converted to Unicode looks the same, pixel for pixel ("VGA + Unifont").
+func TestUniConvertedLooksTheSame(t *testing.T) {
+	b, err := os.ReadFile("testdata/alove/bs-alove.bin")
+	if err != nil {
+		t.Skip(err)
+	}
+	a := testApp(t, "pc")
+	a.loadBytes(b, "bs-alove.bin", "", "auto")
+	a.paletteFor["pc"] = "vga"
+	a.applyMode()
+	a.blink = true
+	before := a.renderDoc(a.doc, 1)
+	a.setMode("uni")
+	a.applyMode()
+	after := a.renderDoc(a.doc, 1)
+	if before.w != after.w || before.h != after.h {
+		t.Fatalf("%dx%d, then %dx%d", before.w, before.h, after.w, after.h)
+	}
+	for i := range before.px {
+		if before.px[i] != after.px[i] {
+			t.Fatalf("pixel %d,%d: %08X, then %08X", i%before.w, i/before.w, before.px[i], after.px[i])
+		}
+	}
+}
+
+// A PC page without iCE colours blinks; converted, those cells stand still on their dark background.
+func TestUniConvertBlink(t *testing.T) {
+	a := testApp(t, "pc")
+	a.applyMode()
+	a.ice = false
+	a.doc.set(0, 0, makeCell('B', 14, 9, 0))
+	a.dirty = true
+	a.setMode("uni")
+	if fg, bg := uniColoursOf(a.doc.get(0, 0)); fg != 14 || bg != 1 || !strings.Contains(a.message, "blinking") {
+		t.Errorf("blinking cell: %d/%d, said %q", fg, bg, a.message)
+	}
+}
+
+// The W field works on every Unicode file: an opened .dur and .irc get the new width too.
+func TestUniWidth(t *testing.T) {
+	b, err := os.ReadFile("testdata/durdraw/cm-eye.dur")
+	if err != nil {
+		t.Skip(err)
+	}
+	a := uniFApp(t)
+	uniFOpen(a, b, "cm-eye.dur")
+	a.setCols(100)
+	if a.doc.cols != 100 || a.frameDoc(1).cols != 100 {
+		t.Errorf("width %d, frame 2 %d", a.doc.cols, a.frameDoc(1).cols)
+	}
+	uniFOpen(a, []byte("\x034,2ab\n"), "x.irc")
+	a.setCols(10)
+	if a.doc.cols != 10 || uniCode(a.doc.get(1, 0)) != 'b' {
+		t.Errorf("irc width %d", a.doc.cols)
+	}
+	// Crop works on a Unicode page.
+	a.sel = &Sel{1, 0, 1, 0}
+	a.cropToSel()
+	if a.doc.cols != 1 || uniCode(a.doc.get(0, 0)) != 'b' {
+		t.Errorf("cropped: %d %q", a.doc.cols, uniRune(uniCode(a.doc.get(0, 0))))
+	}
+}

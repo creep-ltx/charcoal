@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -145,7 +146,10 @@ func (a *App) drawUniCharset(u *UI, x, y, cols int) Rect {
 	if u.button(Rect{x + bw + 4, y, bw, smallH}, ">", false, "The next block ("+keyName("uni_block_next")+")") != nil {
 		a.setUniBlock(a.uniBlock + 1)
 	}
-	fb.text(x+2*bw+12, y+2, fmt.Sprintf("%s (U+%04X)", blk.name, uniRune(max(blk.base, 0x20))), cText)
+	rs := []rune(blk.name)
+	label := string(rs[:fitText(rs, 32*8-2*bw-12)])
+	fb.text(x+2*bw+12, y+2, label, cText)
+	u.setHint(Rect{x + 2*bw + 12, y, textW(label), smallH}, fmt.Sprintf("U+%04X to U+%04X", uniRune(max(blk.base, 0x20)), uniRune(blk.base+255)))
 	top := y + uniHeaderH()
 	H, CW := 16, 8
 	cm := Rect{x, top, cols * CW, 256 / cols * H}
@@ -188,7 +192,7 @@ func (a *App) drawUniCharset(u *UI, x, y, cols int) Rect {
 			}
 		}
 	}
-	return Rect{x, y, max(cm.w, 2*bw+12+textW(blk.name)), cm.h + uniHeaderH()}
+	return Rect{x, y, max(cm.w, 2*bw+12+textW(label)), cm.h + uniHeaderH()}
 }
 
 // uniFkeys are the Unicode page's F-key sets: blocks, shades, lines, sextants, Braille.
@@ -223,38 +227,36 @@ func validUniFkeys(sets [][]int) bool {
 
 // ---------------------------------------------------------------- colours
 
-// drawUniColours draws xterm's colours 16-255 in w pixels from (x, y) and an
-// RGB button for 24-bit colours; it returns the y under them. Left click:
-// foreground, right: background.
-func (a *App) drawUniColours(u *UI, x, y, w int) int {
+// drawUniColours draws xterm's colours 16-255 and a button for 24-bit colours.
+// In the side panel (row) they go under the 16, w pixels wide, and it returns
+// the y under them; in the strip under the page (!row) they go in one band to
+// the right of the 16, and it returns the x after them. Left click: foreground,
+// right: background.
+func (a *App) drawUniColours(u *UI, x, y, w int, row bool) int {
 	fb := u.fb
-	cols := 18
-	if w >= 36*8 {
-		cols = 36
+	cols, cw, ch := 18, max(4, w/18), max(4, w/18)
+	if !row {
+		cols, cw, ch = 48, 4, 4
 	}
-	cw := max(4, w/cols)
-	rows := (240 + cols - 1) / cols
-	grid := Rect{x, y, cols * cw, rows * cw}
 	for i := 0; i < 240; i++ {
 		n := 16 + i
-		// The cube by its six red levels side by side: rows of green, columns of blue.
-		col, row := i%cols, i/cols
-		if n < 232 && cols == 18 {
+		col, r := i%cols, i/cols
+		if n < 232 && cols == 18 { // the cube by its six red levels: rows of green, columns of blue
 			k := n - 16
-			col, row = k/36%3*6+k%6, k/108*6+k/6%6
+			col, r = k/36%3*6+k%6, k/108*6+k/6%6
 		}
-		r := Rect{x + col*cw, y + row*cw, cw, cw}
-		fb.fill(r, 0xFF000000|xterm256(n))
+		cell := Rect{x + col*cw, y + r*ch, cw, ch}
+		fb.fill(cell, 0xFF000000|xterm256(n))
 		if a.ufgOn && a.ufg == n {
-			fb.frame(r, cHi)
+			fb.frame(cell.inset(-1), cHi)
 		}
 		if a.ubgOn && a.ubg == n {
-			fb.dashed(r, cOrange)
+			fb.dashed(cell.inset(-1), cOrange)
 		}
-		if u.hover(r) {
+		if u.hover(cell) {
 			u.hint = fmt.Sprintf("Colour %d: #%06X. Left: foreground, right: background", n, xterm256(n))
 		}
-		if c := u.take(r); c != nil {
+		if c := u.take(cell); c != nil {
 			if c.button == 3 {
 				a.setUniBg(n)
 			} else {
@@ -262,28 +264,53 @@ func (a *App) drawUniColours(u *UI, x, y, w int) int {
 			}
 		}
 	}
-	by := grid.y + grid.h + 6
-	if u.button(Rect{x, by, buttonW("24-bit..."), smallH}, "24-bit...", false, "Any colour: red, green and blue for the foreground or the background") != nil {
+	rows := (240 + cols - 1) / cols
+	bx, by := x, y+rows*ch+6
+	if !row {
+		bx, by = x+cols*cw+6, y
+	}
+	label := "24-bit..."
+	if u.button(Rect{bx, by, buttonW(label), smallH}, label, a.ufg&rgbFlag != 0 && a.ufgOn || a.ubg&rgbFlag != 0 && a.ubgOn,
+		"Any colour: red, green and blue for the foreground or the background ("+keyName("uni_colour")+")") != nil {
 		openUniColour()
+	}
+	if !row {
+		return bx + buttonW(label)
 	}
 	return by + smallH
 }
 
-// UniColourReq picks a 24-bit colour for the brush.
-type UniColourReq struct{ rgb [3]int }
+// UniColourReq picks a 24-bit colour for the brush: sliders, or the hex code typed.
+type UniColourReq struct {
+	rgb [3]int
+	hex Field
+}
 
 func openUniColour() {
 	c := colourRGB(a.uniFg(), &a.pal)
-	a.dialog = &UniColourReq{rgb: [3]int{int(c >> 16 & 255), int(c >> 8 & 255), int(c & 255)}}
+	d := &UniColourReq{rgb: [3]int{int(c >> 16 & 255), int(c >> 8 & 255), int(c & 255)}, hex: Field{max: 7}}
+	d.hex.enter = func() { d.setHex(); a.setUniFg(d.colour()); closeDialog() }
+	a.dialog = d
 }
 
 func (d *UniColourReq) colour() int {
 	return rgbColour(uint32(d.rgb[0])<<16 | uint32(d.rgb[1])<<8 | uint32(d.rgb[2]))
 }
 
+// setHex takes the typed code (#RRGGBB or RRGGBB, or #RGB) if it is one.
+func (d *UniColourReq) setHex() {
+	s := strings.TrimPrefix(strings.TrimSpace(d.hex.String()), "#")
+	if len(s) == 3 {
+		s = string([]byte{s[0], s[0], s[1], s[1], s[2], s[2]})
+	}
+	if v, err := strconv.ParseUint(s, 16, 32); err == nil && len(s) == 6 {
+		d.rgb = [3]int{int(v >> 16 & 255), int(v >> 8 & 255), int(v & 255)}
+	}
+}
+
 func (d *UniColourReq) draw(u *UI) {
 	fb := u.fb
-	in := u.window(centre(460, 230), "A colour of 16 million")
+	in := u.window(centre(460, 230), "24-bit colour")
 	for k, name := range []string{"Red", "Green", "Blue"} {
 		y := in.y + k*(gadH+8)
 		fb.text(in.x, y+3, name, cText)
@@ -293,7 +320,17 @@ func (d *UniColourReq) draw(u *UI) {
 	sw := Rect{in.x + in.w - 50, in.y, 50, 3*gadH + 16}
 	fb.fill(sw, 0xFF000000|uint32(d.rgb[0])<<16|uint32(d.rgb[1])<<8|uint32(d.rgb[2]))
 	fb.frame(sw, cEdgeDk)
-	fb.text(in.x, in.y+3*(gadH+8)+4, colourName(rgbFlag|d.colour()&0xFFFFFF), cDim)
+	hy := in.y + 3*(gadH+8) + 4
+	fb.text(in.x, hy+3, "Hex", cText)
+	if u.focus != &d.hex {
+		d.hex.set(colourName(rgbFlag | d.colour()&0xFFFFFF))
+	} else {
+		d.setHex()
+	}
+	u.field(Rect{in.x + 56, hy, textW("#DDDDDD") + 16, gadH}, &d.hex, "The colour as #RRGGBB (Return: the foreground)")
+	if n := d.colour(); n&rgbFlag == 0 {
+		fb.text(in.x+56+textW("#DDDDDD")+28, hy+3, fmt.Sprintf("xterm's %d", n), cDim)
+	}
 	switch buttonRow(u, in, "Foreground", "Background", "Cancel") {
 	case 0:
 		a.setUniFg(d.colour())

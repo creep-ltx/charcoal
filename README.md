@@ -53,7 +53,8 @@ Settings, keys and autosaves are kept in `%AppData%\Charcoal` on Windows,
 ## What it is
 
 An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw,
-IcyDraw, REXPaint, Playscii),
+IcyDraw, REXPaint, Playscii), Unicode terminal art (UTF-8 ANSI in 256 and 24-bit colours, durdraw) and IRC art
+(mIRC colour codes),
 Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens and teletext
 (BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA, EGA 8x14,
@@ -127,8 +128,8 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   (Altirra emulator, all-permissive licence, `fonts/AltirraOS-LICENSE.txt`), built in.
 - A page has a real height (H): a file opens as tall as it is, its empty lines at the end included; the page
   ends where the dark area starts; every row is saved. Enter or Down past the last row adds a row.
-- Pages for a machine's screen keep its width: PETSCII the machine's, Atari 38 or 40; only Amiga and PC pages
-  can be any width (W).
+- Pages for a machine's screen keep its width: PETSCII the machine's, Atari 38 or 40; only Amiga, PC and Unicode
+  pages can be any width (W).
 - **PETSCII page** (the Machine gadget): PET 40/80 columns (green, amber or white screen), VIC-20 (22x23, 8 text
   colours), C64 (40x25; Pepto or Colodore colours), C128 40 columns, C128 80 columns (VDC, RGBI colours). Each
   machine's own character set, upper/graphics and lower/upper, from VICE (first run or Settings, 18 KB, SHA-1
@@ -146,6 +147,22 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
 - **ZX Spectrum page**: the 32x24 screen, ink/paper/bright/flash per cell, the 48K ROM's font (built in: Amstrad
   allows passing the ROM on, `fonts/zx-spectrum-NOTICE.txt`) with the block graphics and UDGs. Saved as `.scr`
   (6912 bytes); a `.scr` opens with each 8x8 cell matched to a character (drawings get the nearest one).
+- **Unicode page** (Uni, for terminal and IRC artists): any width; any character GNU Unifont draws from the blocks
+  text art uses (full, half, quarter and eighth blocks, sextants and octants from Symbols for Legacy Computing,
+  Braille, box drawing, shades, shapes, arrows, symbols, Latin, Greek, Cyrillic), in the 16 colours, xterm's 256
+  or any 24-bit colour; italic and underline. The character table shows one block at a time (< >, the wheel,
+  Ctrl+Alt+PgUp / PgDn), typing takes any character it has, the colour panel has the 256 and a 24-bit
+  requester (sliders or `#RRGGBB`), Half paints half blocks in any colours, the Shape tool has single, double,
+  rounded and heavy lines, flips know Braille, sextants and the box pieces. Files: **UTF-8 ANSI** (`.ans`; SGR
+  30-37/90-97/40-47/100-107, 38/48;5;n, 38/48;2;r;g;b; a SAUCE record only when the width needs one), **durdraw
+  `.dur`** (gzipped JSON, formats 5-8, 16 and 256 colours, frames with their delays), **mIRC colour codes**
+  (`.irc`: ^C 0-98, ^D hex, ^B ^] ^_ ^V ^O; a warning when a line passes what IRC carries, about 450 bytes), web
+  page, PNG, GIF/APNG, plain UTF-8. A UTF-8 file opens on a Unicode page when it needs one (characters CP437
+  lacks, colours beyond 16, or durdraw's `.utf8.ans` name); Open as Unicode takes any ANSI. **Page > Convert to
+  Unicode** (or choosing Unicode for a PC or Amiga page) converts every frame exactly, as one undo step: the page
+  looks the same, pixel for pixel ("VGA + Unifont" draws CP437's characters in the VGA font). A PC page also
+  saves as mIRC text directly. Checked: every durdraw example opens cell for cell as durdraw's own ANSI export
+  shows it, and durdraw itself reads CharEdit's `.dur` files back as the page (`uni_ext_test.go`).
 - **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save; iCEDraw (.idf), ArtWorx (.adf) and
   TundraDraw (.tnd) open with their own fonts and colours and save (see Files for other editors). The same art
   in five formats (ansilove's test files, `testdata/alove`) gives the same page in all of them. PC attribute
@@ -442,7 +459,8 @@ Delete, Insert, Esc. The defaults, the PC ANSI editors' (Moebius, PabloDraw, The
 | Alt+F, Ctrl+K | fill the selection with the brush (nothing selected: Fill tool), crop to the selection (Amiga, PC) |
 | Ctrl+Home, Ctrl+End | top, bottom of the page |
 | Alt+Up / Alt+Down, Alt+Left / Alt+Right | delete / insert a row, delete / insert a column |
-| Alt+T, D, K, L, P, S, B | tools: Type, Draw, Colour, Fill, Pick, Select, Half (PC) / Sixel (teletext) |
+| Alt+T, D, K, L, P, S, B | tools: Type, Draw, Colour, Fill, Pick, Select, Half (PC, Unicode) / Sixel (teletext) |
+| Ctrl+Alt+PgUp / PgDn | Unicode page: the character table's previous / next block |
 | Ctrl+Up / Ctrl+Down, Ctrl+Left / Ctrl+Right | foreground -/+, background -/+ |
 | Ctrl+0-7, Alt+0-7 | foreground, background colour (again: the bright one) |
 | Alt+U, Ctrl+D, Ctrl+Shift+X, Ctrl+E | take the colours under the cursor, default colours, swap, iCE on/off |
@@ -548,6 +566,8 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | Atari 8-bit fonts | AltirraOS, from the Altirra emulator | all-permissive, `fonts/AltirraOS-LICENSE.txt` |
 | ZX Spectrum font | the 48K ROM's character set | © Amstrad, who allow passing it on, `fonts/zx-spectrum-NOTICE.txt` |
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |
+| Unicode page font (`fonts/unifont-art.hex.gz`) | GNU Unifont 17.0.05, Roman Czyborra, Paul Hardy et al. (unifoundry.com): the blocks text art uses, cut by `tools/unifont.sh` | SIL Open Font License 1.1 (Unifont is dual-licensed OFL / GPL-2+ with the font exception; used under the OFL), `fonts/unifont-NOTICE.txt` |
+| durdraw's colour numbers and file format (`uniformats.go`) | durdraw, Sam Foster (github.com/cmang/durdraw), read from its source; no code copied | BSD 3-clause |
 | PETSCII flip and turn tables (`cbmturn.go`) | Marq's PETSCII editor, Marq / Fit^L!T, tables by Dr. TerrorZ | WTFPL, `third_party/marq-petscii-LICENSE.txt` |
 | Petmate's file formats | Petmate, C. T. Lin | MIT, `third_party/petmate-LICENSE.txt` |
 | SDL2 (linked into the Windows and Mac programs) | libsdl.org, Sam Lantinga | zlib, `third_party/SDL2-LICENSE.txt` |
@@ -560,6 +580,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | Test files in `testdata/moebius` | written and read back by Moebius's own save and load code (github.com/blocktronics/moebius, `app/libtextmode`), run from a separate checkout by `tools/moebius/gen.js` and `check.js`; no Moebius code is copied | Moebius is Apache-2.0; the generated files are Charcoal's (MIT) |
 | `testdata/icydraw` | `testdata/alove`'s art as IcyDraw 0.6 saves it | as above |
 | `testdata/playscii/hello1.psci` | Playscii's example art | MIT, `testdata/playscii/LICENSE-playscii.txt` |
+| `testdata/durdraw` | durdraw's example art (cmang, indyz) and durdraw's own ANSI exports of it | BSD 3-clause, `testdata/durdraw/NOTICE.txt` |
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE
 project) and the EmuTOS font sources (GPL), for PETSCII and Atari ST pages.

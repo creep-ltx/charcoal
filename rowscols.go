@@ -20,7 +20,7 @@ func (a *App) emptyCell() uint32 {
 func (a *App) fixedHeight() bool { return a.zx() || a.tt() }
 
 // freeWidth: only Amiga and PC pages can be any width.
-func (a *App) freeWidth() bool { return a.amiga() || a.pc() }
+func (a *App) freeWidth() bool { return a.amiga() || a.pc() || a.uni() }
 
 func (a *App) fillRow(y int, v uint32) {
 	for x := 0; x < a.doc.cols; x++ {

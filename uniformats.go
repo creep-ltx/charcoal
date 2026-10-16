@@ -980,6 +980,7 @@ func (a *App) loadUni(b []byte, name, path, as string) bool {
 		}
 	case "mirc":
 		sauce = nil
+		a.paletteFor["uni"] = "mirc" // the 16 as mIRC shows them (its orange, its greys)
 	}
 	a.mode, a.srcKind, a.ice = "uni", kind, true
 	if kind != "uniansi" {
@@ -1031,6 +1032,12 @@ func (a *App) reparseUni() bool {
 	default:
 		a.doc, _ = parseUniArt(a.source, a.forceCols)
 	}
+	if n := a.forceCols; n > 0 && a.doc.cols != n { // the W field on a file that has its own width
+		a.doc = a.doc.withCols(n)
+		for i := range a.frames {
+			a.frames[i].doc = a.frames[i].doc.withCols(n)
+		}
+	}
 	a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
 	return true
 }
@@ -1042,6 +1049,9 @@ func (a *App) encodeUni(fmtID string, d *Doc) ([]byte, bool, error) {
 	case fmtID == "mirc":
 		if !d.uni && !a.uni() {
 			d = docToUni(d, a.amiga())
+			if !a.ice {
+				uniDropBlink(d)
+			}
 		}
 		out, longest, approx := writeMirc(d, &a.pal)
 		switch {

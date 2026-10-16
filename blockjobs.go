@@ -85,7 +85,7 @@ func (a *App) cancelMove() {
 // machine's screen keeps its size).
 func (a *App) cropToSel() {
 	if !a.freeWidth() {
-		a.msg("Only Amiga and PC pages can be cropped: a machine's screen keeps its size")
+		a.msg("Only Amiga, PC and Unicode pages can be cropped: a machine's screen keeps its size")
 		return
 	}
 	if a.sel == nil {

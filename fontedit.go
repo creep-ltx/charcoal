@@ -27,6 +27,10 @@ type FontEd struct {
 }
 
 func openFontEditor() {
+	if a.uni() {
+		a.msg("A Unicode page draws with Unifont (and VGA): fonts of 256 characters are for the other pages")
+		return
+	}
 	if a.st() || a.tt() {
 		a.msg("An " + modeNames[a.mode] + " page keeps its own font")
 		return
@@ -426,6 +430,10 @@ func (a *App) fontFilesNote() string {
 }
 
 func openFontRequester() {
+	if a.uni() {
+		a.msg("A Unicode page draws with Unifont (and VGA): fonts of 256 characters are for the other pages")
+		return
+	}
 	if a.st() || a.tt() {
 		a.msg("An " + modeNames[a.mode] + " page keeps its own font")
 		return

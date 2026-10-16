@@ -51,6 +51,7 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form); ROMs from VICE on first use |
 | ZX Spectrum | .scr (6912 bytes); 48K ROM font built in (Amstrad allows passing it on) |
 | Teletext | .tti .ep1, edit.tf links (.url), Mode 7 dumps; Bedstead font (CC0) built in; a .tti carousel opens as frames (one per subpage) and saving rewrites only changed subpages' OL 0-24 rows, every other line kept (teletext.go writeTTIFrames) |
+| Unicode (2026-10-16) | UTF-8 ANSI (256/24-bit SGR), durdraw .dur (frames), mIRC .irc (also written from PC pages), HTML; GNU Unifont's art blocks built in (OFL); see "Unicode page" below |
 
 CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide art shrunk to fit, m plays.
 
@@ -292,6 +293,54 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Not done: Large could churn less in the stream than in the GIF (kept as the full look on purpose); PETSCII /
   ATASCII / VT52 writers have no reprint trick (their moves are 1 byte anyway); the weight of a frame strip saved
   as a stream is not shown.
+
+## Unicode page (2026-10-16, branch r1-unicode; design: docs/unicode-design.md)
+
+- Mode `uni` ("Unicode", the Uni button, Page > Unicode / Convert to Unicode, a start tile). `uni.go` (cell,
+  style table, conversions, the font, mirror tables, list registration in `init`), `uniformats.go` (readers and
+  writers, `loadUni` first in loadBytes, `reparseUni` first in reparse, `encodeUni` before encodeFor's switch),
+  `uni_ui.go` (drawUniCell, character table by blocks, 256 grid + 24-bit requester, Half, setModeUni,
+  convertFromMachine, restoreUniMode).
+- **Cell**: character code in bits 0-7 + 18-25 (BMP; surrogates D800-D8FF = U+1FB00-1FBFF, D900-DCFF =
+  U+1CC00-1CFFF), style in bits 8-17 + 26-31 (16 bits). Styles < 256 = a PC cell's fg | bg<<4 (so ASCII PC cells
+  are already Unicode cells); >= 256 from `uniStyles`, one process-wide append-only table of {fg, bg, italic |
+  underline}, colours 0-255 or `rgbFlag|RRGGBB`. **Never** build a Unicode cell with makeCell beyond ASCII or put
+  italic/underline bits in it: use `uniCell(code, styleOf(fg, bg, flags))`, `uniRestyle`, `uniWithCode`.
+  `Doc.uni` (applyLook, clone, withCols) makes blankAt use `uniBlank`. `Snap.mode` lets undo bring the page type
+  back across a conversion. `Block.uni`: a block pasted between a PC and a Unicode page is converted (stamp).
+- `uniCompact` renumbers all tabs' docs, frames, undo/redo docs, float and clip when the table is 3/4 full,
+  only from loadUni (a safe point; skipped with a requester open or while playing). Full anyway: nearest style
+  with the same flags, `uniFullNote` in the status line. Tests must not flood the table with random 24-bit
+  colours (uniFColour uses 40 RGB values).
+- Brush: `a.fg/a.bg` stay 0-15 (other pages index the palette with them); `uniOpts` (ufg/ubg + on flags)
+  hold 256/24-bit colours; `setFg/setBg` (the 16) turn them off. `a.brush` and F-keys hold codes (> 255 on
+  Unicode pages; prefs validate with `validUniFkeys`). `halfFg/halfBg` give the Half tool full colours.
+- Terminal: `Term.uni` keeps 38/48;5 and ;2 colours exact (`uniSgr`, `fgX/bgX`), 90-97 are bright colours
+  (`hiFg`, ended by 30-37/39) and 40-47 end a 100-107 background, as terminals do (only on Unicode pages; PC
+  parsing unchanged). `putCode` puts a code. The writer uses 90-97/100-107, 38;5, 38;2, a reset + LF per row.
+- Detection: `.dur`/gzip with "DurMovie" -> dur; `.irc` or 2+ `^C<digit>` without ESC[ -> mirc (palette set to
+  mIRC's); UTF-8 that `needsUni` (a rune > 0xFF CP437 lacks, or 38/48;5;16+ / ;2) or a `.utf8.ans` name ->
+  uniansi. CP437-only UTF-8 (Moebius's .utf8ans exports) still opens as PC. New Unicode pages write no SAUCE
+  (terminal art; cat would show it) unless the width needs one.
+- durdraw (read from its source, verified by running it): 16-colour files fg = 1 + BIOS colour, bg BIOS 0-7
+  (8 = black, 9-16 durdraw's iCE order, which its export cannot write); 256-colour files fg 1-16 through
+  color_256_to_ansi_16, bg xterm (durdraw strips them; kept here); formats < 7 through its legacy tables;
+  v7 colorMap is [column][line]; non-printable characters become spaces; hold = delay > 0 ? delay : 1/framerate.
+  `testdata/durdraw`: 6 examples + durdraw's own `--export-ansi` output (TestUniDurdrawMatchesItsExport);
+  `CHARCOAL_DURDRAW=dir` compares more, `CHARCOAL_DURDRAW_SRC=checkout` has durdraw read CharEdit's .dur
+  (uni_ext_test.go; runs durdraw in script(1)).
+- mIRC: 0-15 map one to one onto the 16 (mircToAnsi; the mIRC palette shows them as mIRC does), 16-98 are
+  their RGB (modern.ircdocs.horse), 99 default; ^B is read and dropped (no bold bit); writer: two digits only
+  when a digit or comma follows, the longest line measured, warning past `ircLineMax` (450).
+- Font: `fonts/unifont-art.hex.gz` (5280 glyphs, 55 KB; `tools/unifont.sh` remakes it), parsed once
+  (`uniFont`), 16-wide glyphs squeezed; "VGA + Unifont" (`univga`, default) draws CP437's characters in the
+  VGA font (TestUniConvertedLooksTheSame: pixel-identical after converting). Missing glyph: a small box.
+- Tests: `uni_test.go` (cell, styles, conversions, all three formats round trip, real files, detection, editing,
+  flips, paste, autosave, style table compaction/full, HTML, drawing, Animate, own files), FuzzParsers has the
+  three readers. TestStartKeys now works for any number of tiles.
+- Not done: wide characters as two cells (CJK, emoji: not typable), Animate's draw orders in UTF-8 ANSI (frames
+  work), a Unicode page's own fonts (Load a font... loads a 256-glyph font), PC fonts other than VGA for
+  "VGA + Unifont", 9-pixel cells, CharView playing .dur frames.
 
 ## Keys and safety (2026-10-13, evening)
 

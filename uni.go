@@ -331,10 +331,14 @@ func (a *App) convertUni(to string) {
 		return
 	}
 	a.endPlay()
-	changed := 0
+	changed, blinking, ice := 0, 0, a.ice
 	a.withEveryFrame(func(d *Doc) *Doc {
 		if to == "uni" {
-			return docToUni(d, from == "amiga")
+			n := docToUni(d, from == "amiga")
+			if !ice {
+				blinking += uniDropBlink(n)
+			}
+			return n
 		}
 		n, c := docFromUni(d, to == "amiga", &a.pal)
 		changed += c
@@ -342,8 +346,7 @@ func (a *App) convertUni(to string) {
 	})
 	a.mode, a.saveFmt, a.source, a.srcKind = to, map[bool]string{true: "uniansi", false: "ansi"}[to == "uni"], nil, ""
 	a.ownFont, a.ownLower, a.ownPal = nil, nil, nil
-	if to == "uni" {
-		a.ice = true
+	if to == "uni" { // (a.ice stays: undo brings the PC page back as it was)
 		a.paletteFor["uni"] = a.paletteFor[from]
 		if from == "amiga" {
 			a.fontFor["uni"] = "unifont"
@@ -355,6 +358,8 @@ func (a *App) convertUni(to string) {
 	a.dirty = true
 	a.applyMode()
 	switch {
+	case to == "uni" && blinking > 0:
+		a.msg(fmt.Sprintf("Converted to a Unicode page; %d blinking cells stand still (terminals do not blink; %s undoes it)", blinking, keyName("undo")))
 	case to == "uni":
 		a.msg("Converted to a Unicode page (" + keyName("undo") + " undoes it)")
 	case changed > 0:
@@ -878,4 +883,23 @@ func uniDotsTurned(r rune, k int) (rune, bool) {
 		return rune(0x1FB00 + o - 1), true
 	}
 	return r, false
+}
+
+// uniDropBlink: a PC page without iCE colours blinks where the background is
+// 8-15; on a Unicode page (always bright backgrounds) those cells get the
+// background they show between blinks. It returns how many there were.
+func uniDropBlink(d *Doc) int {
+	n := 0
+	for i, v := range d.cells[:d.rows*d.cols] {
+		if p := uniPair(v); p < 256 && p>>4 > 7 {
+			d.cells[i] = uniWithPair(v, p&^0x80)
+			n++
+		} else if p >= 256 {
+			if fg, bg, fl := styleParts(p); bg > 7 && bg < 16 {
+				d.cells[i] = uniWithPair(v, styleOf(fg, bg&7, fl))
+				n++
+			}
+		}
+	}
+	return n
 }

@@ -217,8 +217,11 @@ func (a *App) drawColours(u *UI, x, y, perRow int) int {
 			}
 		}
 	}
-	if a.uni() { // the 256 and 24-bit colours
-		return a.drawUniColours(u, x, y+(15/perRow+1)*26-4, perRow*20-2)
+	if a.uni() && perRow < 16 { // the 256 and 24-bit colours: under the 16 in the panel, beside them in the strip
+		return a.drawUniColours(u, x, y+(15/perRow+1)*26-4, perRow*20-2, true)
+	}
+	if a.uni() {
+		a.drawUniColours(u, x+16*20+6, y+1, 0, false)
 	}
 	return y + (15/perRow+1)*26 - 8
 }

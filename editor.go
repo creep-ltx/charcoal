@@ -920,7 +920,7 @@ func (a *App) setBg(i int) {
 		return
 	}
 	a.bg, a.ubgOn = i, false
-	if i > 7 && !a.ice {
+	if i > 7 && !a.ice && !a.uni() { // a Unicode page's backgrounds never blink
 		a.msg("Backgrounds 8-15 need iCE colours (otherwise they blink on PC)")
 	}
 }
@@ -1624,9 +1624,6 @@ func (a *App) finishLoad(b []byte, name, path string, sauce *Sauce, fmtID string
 // and sets up its look (applyLook).
 func (a *App) applyMode() {
 	a.applyLook()
-	if a.uni() {
-		a.ice = true // terminals show bright backgrounds, never blink
-	}
 	if a.tool == "half" && !a.pc() && !a.tt() && !a.uni() { // Half on PC and Unicode pages, Sixel on teletext
 		a.setTool("draw")
 	}

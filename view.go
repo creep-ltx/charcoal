@@ -588,7 +588,7 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 		fontNames, fontIDs, cur = n2, id2, cur2
 	}
 	if len(fontNames) > 0 {
-		if !a.st() && !a.tt() { // fonts from files and the font editor (fontedit.go)
+		if !a.st() && !a.tt() && !a.uni() { // fonts from files and the font editor (fontedit.go)
 			fontNames = append(fontNames, "Load a font...", "Edit the font...")
 			fontIDs = append(fontIDs, "+load", "+edit")
 		}
@@ -1045,7 +1045,11 @@ func (a *App) pageRelease() {
 // ---------------------------------------------------------------- the bottom pane
 
 func (a *App) paneHeight() int {
-	return max(max(8*a.cellH(), 5*(smallH+4))+14, paneNeed)
+	chars := 8 * a.cellH()
+	if a.uni() {
+		chars += uniHeaderH() // the block switch above the characters
+	}
+	return max(max(chars, 5*(smallH+4))+14, paneNeed)
 }
 
 var smallH = lineH + 4

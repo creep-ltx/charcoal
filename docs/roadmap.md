@@ -97,8 +97,11 @@ against each platform's best editor. Each step says what it wins.
 - **Spectrum**: UDG/charset editing; attributes-only painting.
 - **Atari 8-bit**: the real OS ROM font when present, the 128-colour palette, custom fonts.
 - **Atari ST**: IGS (ST BBS graphics), ST/STE palettes.
-- **Terminals**: a UTF-8/Unicode page (blocks, Braille, 256/24-bit colour) for terminal artists (durdraw's
-  crowd), mIRC colour export.
+- [x] **Terminals** (2026-10-16, docs/unicode-design.md): a Unicode page (blocks, sextants and octants, Braille,
+  box drawing, any Unifont character; 16, 256 and 24-bit colours) for terminal artists (durdraw's crowd): UTF-8
+  ANSI and durdraw `.dur` (frames) read and written, mIRC colour codes read and written (also from a PC page),
+  HTML; PC/Amiga pages convert exactly in one undoable step. Later: wide (CJK, emoji) characters as two cells,
+  durdraw's own 16-colour iCE backgrounds checked in durdraw's screen (its export cannot write them).
 
 ## Later
 
