@@ -169,3 +169,12 @@ including Unicode 16's ☰-☷ and ⚊-⚏) become two cells, so files with them
 **If it grows, cut from the end**: 8 first (emoji and rare ideographs then read as `?`, as today), then 7
 (pasting and the input method still type wide characters), then 6 (a `.dur` writes wide characters as `?`).
 Steps 1-5 are the feature.
+
+## The user's decisions (2026-10-16)
+
+1. All of Unifont's wide glyphs are built in (+1.03 MB), loaded the first time a wide character is drawn.
+2. Emoji are Unifont's monochrome glyphs in the cell's colour.
+3. VS16 sequences (❤️) stay narrow, as glibc and xterm count them.
+4. The 76 wide characters the art subset already had become two cells (as terminals show them).
+5. Turn is refused for a block with wide characters, with a message.
+6. The 767-code table beyond the BMP is enough; when full, `?` and a note in the status line.
