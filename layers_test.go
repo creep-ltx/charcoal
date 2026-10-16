@@ -489,3 +489,32 @@ func TestLayPickAndCopySeen(t *testing.T) {
 		t.Fatal("Copy what is seen")
 	}
 }
+
+// The panel's layers: New on a page of one layer, then a row a layer; a click on a row works on it.
+func TestLayPanel(t *testing.T) {
+	a := testApp(t, "pc")
+	u := &UI{fb: &FB{}}
+	u.fb.resize(400, 400)
+	u.fb.clip = Rect{0, 0, 400, 400}
+	x, w := 10, 300
+	u.click = &Click{x: x + w - 5, y: 15, button: 1}
+	a.drawLayers(u, x, 10, w)
+	if a.nLayers() != 2 || a.lay != 1 {
+		t.Fatalf("New: %d layers", a.nLayers())
+	}
+	// rows: the top layer (1) first, then layer 0
+	u.click = &Click{x: x + checkW("") + 20, y: 10 + gadH + 2 + 5, button: 1}
+	a.drawLayers(u, x, 10, w)
+	if a.lay != 0 {
+		t.Fatalf("a click on the second row: layer %d", a.lay)
+	}
+	u.click = &Click{x: x + 5, y: 10 + 5, button: 1} // the top row's box: hide layer 1
+	a.drawLayers(u, x, 10, w)
+	if !a.layers[1].hidden {
+		t.Fatal("the box hides the layer")
+	}
+	u.click = nil
+	if y := a.drawLayers(u, x, 10, w); y <= 10+2*gadH {
+		t.Fatalf("the rows and buttons end at %d", y)
+	}
+}

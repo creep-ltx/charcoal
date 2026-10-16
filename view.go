@@ -1241,7 +1241,10 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		pos += fmt.Sprintf("  Frame %d/%d", a.cur+1, n)
 	}
 	if n := a.nLayers(); n > 1 {
-		pos += fmt.Sprintf("  Layer %d/%d %s", a.lay+1, n, a.layerName(a.lay))
+		pos += fmt.Sprintf("  Layer %d/%d", a.lay+1, n)
+		if name := a.layers[a.lay].name; name != "" {
+			pos += " " + name
+		}
 	}
 	pos += a.orderNote()
 	x = fb.text(x, y, pos, cText) + 24
