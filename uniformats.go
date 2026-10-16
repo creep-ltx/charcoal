@@ -220,12 +220,20 @@ func writeUniAnsi(d *Doc) []byte {
 	}
 	plain := pen{fg: 7, bg: 0}
 	out.WriteString("\x1b[0m")
-	for y := 0; y < d.rows; y++ {
-		cur := plain
+	ends, widest := make([]int, d.rows), 0
+	for y := range ends {
 		end := d.cols
 		for end > 0 && uniBlank(d.get(end-1, y)) {
 			end--
 		}
+		ends[y], widest = end, max(widest, end)
+	}
+	if widest < d.cols && d.rows > 0 {
+		ends[0] = d.cols // one row in full, so the lines give the page's width (no SAUCE record needed)
+	}
+	for y := 0; y < d.rows; y++ {
+		cur := plain
+		end := ends[y]
 		for x := 0; x < end; x++ {
 			v := d.get(x, y)
 			fg, bg, fl := styleParts(uniPair(v))
@@ -1067,7 +1075,9 @@ func (a *App) encodeUni(fmtID string, d *Doc) ([]byte, bool, error) {
 	case fmtID == "uniansi":
 		out := writeUniAnsi(d)
 		info := a.info
-		if w := uniLongestLine(string(out)); !info.writeSauce && d.cols != max(80, w) {
+		if !info.writeSauce && d.cols < 80 {
+			// A wider page shows its width by its lines (writeUniAnsi writes one in
+			// full); readers take a narrower one for 80 columns without the record.
 			info.writeSauce, a.info.writeSauce = true, true
 			a.msg(fmt.Sprintf("Saved with a SAUCE record: it is the only way to keep a width of %d", d.cols))
 		}

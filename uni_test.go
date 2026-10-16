@@ -263,7 +263,7 @@ func TestUniAnsiRoundTrip(t *testing.T) {
 }
 
 // Saved and opened again through the editor: auto-detected as a Unicode page,
-// the width kept (a SAUCE record when it is not the longest line's), the height kept.
+// the width kept (by a row in full; a SAUCE record only under 80 columns), the height kept.
 func TestUniAnsiSaveOpen(t *testing.T) {
 	a := uniFApp(t)
 	r := rand.New(rand.NewSource(2))
@@ -280,6 +280,9 @@ func TestUniAnsiSaveOpen(t *testing.T) {
 			t.Fatal(a.message)
 		}
 		b, _ := os.ReadFile(path)
+		if hasSauce := bytes.Contains(b, []byte("SAUCE00")); hasSauce != (cols < 80) {
+			t.Fatalf("width %d: SAUCE record %v (only under 80 columns)", cols, hasSauce)
+		}
 		uniFOpen(a, b, "a.ans")
 		if !a.uni() || a.srcKind != "uniansi" || a.saveFmt != "uniansi" {
 			t.Fatalf("width %d: opened as %s/%s/%s", cols, a.mode, a.srcKind, a.saveFmt)

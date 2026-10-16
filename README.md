@@ -156,7 +156,8 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   Ctrl+Alt+PgUp / PgDn), typing takes any character it has, the colour panel has the 256 and a 24-bit
   requester (sliders or `#RRGGBB`), Half paints half blocks in any colours, the Shape tool has single, double,
   rounded and heavy lines, flips know Braille, sextants and the box pieces. Files: **UTF-8 ANSI** (`.ans`; SGR
-  30-37/90-97/40-47/100-107, 38/48;5;n, 38/48;2;r;g;b; a SAUCE record only when the width needs one), **durdraw
+  30-37/90-97/40-47/100-107, 38/48;5;n, 38/48;2;r;g;b; no SAUCE record, as durdraw: the lines give the width, so only a page under 80
+  columns gets one), **durdraw
   `.dur`** (gzipped JSON, formats 5-8, 16 and 256 colours, frames with their delays), **mIRC colour codes**
   (`.irc`: ^C 0-98, ^D hex, ^B ^] ^_ ^V ^O; a warning when a line passes what IRC carries, about 450 bytes), web
   page, PNG, GIF/APNG, plain UTF-8. A UTF-8 file opens on a Unicode page when it needs one (characters CP437

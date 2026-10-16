@@ -321,8 +321,10 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   parsing unchanged). `putCode` puts a code. The writer uses 90-97/100-107, 38;5, 38;2, a reset + LF per row.
 - Detection: `.dur`/gzip with "DurMovie" -> dur; `.irc` or 2+ `^C<digit>` without ESC[ -> mirc (palette set to
   mIRC's); UTF-8 that `needsUni` (a rune > 0xFF CP437 lacks, or 38/48;5;16+ / ;2) or a `.utf8.ans` name ->
-  uniansi. CP437-only UTF-8 (Moebius's .utf8ans exports) still opens as PC. New Unicode pages write no SAUCE
-  (terminal art; cat would show it) unless the width needs one.
+  uniansi. CP437-only UTF-8 (Moebius's .utf8ans exports) still opens as PC (and saves as UTF-8 again: see "UTF-8
+  files ..." above). Unicode pages write no SAUCE (terminal art; cat would show it; durdraw writes none): a page
+  wider than its longest line gets its first row in full so the lines give the width; only a page under 80
+  columns needs the record (readers take 80 at least). The user's choices, 2026-10-16.
 - durdraw (read from its source, verified by running it): 16-colour files fg = 1 + BIOS colour, bg BIOS 0-7
   (8 = black, 9-16 durdraw's iCE order, which its export cannot write); 256-colour files fg 1-16 through
   color_256_to_ansi_16, bg xterm (durdraw strips them; kept here); formats < 7 through its legacy tables;
