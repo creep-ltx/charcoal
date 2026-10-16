@@ -94,6 +94,8 @@ func defaultFkeys() map[string][][]int {
 		"cpc":   cpcFkeys,
 		"vd":    ttFkeys,
 		"mt":    mtFkeys,
+		"msx":   msxFkeys,
+		"mz":    mzFkeys,
 	}
 }
 
@@ -126,6 +128,7 @@ type Snap struct {
 	cpc    *cpcSetup // a CPC page's inks and mode as they were (nil on other pages)
 	mach   string    // a PETSCII page's machine: undoing a move to or from the Plus/4 brings its colours back
 	vic    *vicSetup // a C64 page's text mode and $D022-$D024 as they were (nil on other pages)
+	msx    *msxSetup // an MSX page's screen mode and colours as they were (nil on other pages)
 }
 type Play struct {
 	bytes []byte
@@ -198,6 +201,7 @@ type Tab struct {
 	ref                 *RefImage   // the reference picture to trace over (refimage.go), nil: none
 	order               *drawOrder  // the order Save draws a stream file in (transitions.go); nil: row by row
 	cpcSet              cpcSetup    // an Amstrad CPC page's mode, inks and border (cpc.go)
+	msxSet              msxSetup    // an MSX page's screen mode and colours (msx.go)
 	vic                 vicSetup    // a C64 page's text mode (multicolour, ECM) and $D022-$D024 (c64x.go)
 	igs                 *igsLayer   // an IGS file's picture under the cells and what saving keeps (igs_page.go)
 }
@@ -280,6 +284,9 @@ func (a *App) cellW() int {
 	if a.cpc() {
 		return a.cpcCellW()
 	}
+	if a.msx() {
+		return a.msxCellW()
+	}
 	return 8
 }
 
@@ -356,6 +363,12 @@ func (a *App) cellH() int {
 	if a.cpc() {
 		return a.cpcCellH()
 	}
+	if a.msx() {
+		return a.msxCellH()
+	}
+	if a.mz() {
+		return 8
+	}
 	if a.tt() {
 		return ttH
 	}
@@ -396,6 +409,12 @@ func (a *App) cell(ch int) uint32 {
 	if a.mt() {
 		return mtCellOf(ch, a.fg, a.bg, a.mtAttr)
 	}
+	if a.msx() { // the screen's colours (msx.go)
+		return makeCell(ch, 0, 0, 0)
+	}
+	if a.mz() { // 256 and up: the second set (mz.go)
+		return mzCell(ch, a.fg, a.bg)
+	}
 	if a.zx() {
 		return zxCell(ch, a.fg, a.bg, a.fg > 7 || a.bg > 7, a.flash)
 	}
@@ -424,7 +443,7 @@ func (a *App) brushCell() uint32 {
 	if a.tt() {
 		return makeCell(a.brush&0x7F, 0, 0, 0)
 	}
-	if a.zx() || a.mt() {
+	if a.zx() || a.mt() || a.msx() || a.mz() {
 		return a.cell(a.brush)
 	}
 	if a.atari() {
@@ -496,6 +515,12 @@ func (a *App) setPalette() {
 	if a.mt() && p != minitelPalette && p.id != "custom" {
 		p = minitelGreyPalette
 	}
+	if a.msx() && p != msx1Palette && p != msx2Palette && p.id != "custom" {
+		p = msx1Palette
+	}
+	if a.mz() && p.id != "custom" {
+		p = mzPalette
+	}
 	if a.st() && p.id != "custom" { // the ST's colours are the resolution's
 		p = paletteByID(a.res().palette)
 	}
@@ -520,8 +545,11 @@ func (a *App) printable(c int) bool {
 	if a.zx() {
 		return c >= 32 && c < 165
 	}
-	if a.screen() || a.cpc() {
+	if a.screen() || a.cpc() || a.msx() {
 		return true
+	}
+	if a.mz() {
+		return c >= 0 && c < 512
 	}
 	if a.amiga() {
 		return !(c < 0x20 || (c >= 0x7F && c < 0xA0))
@@ -544,6 +572,12 @@ func (a *App) charToByte(r rune) int {
 	}
 	if a.cpc() {
 		return cpcFromRune(r)
+	}
+	if a.msx() {
+		return msxFromRune(r)
+	}
+	if a.mz() {
+		return mzFromRune(r)
 	}
 	if a.c64() {
 		return petFromRune(r, a.lower())
@@ -583,6 +617,12 @@ func (a *App) runeOf(c int) rune {
 	if a.cpc() {
 		return cpcRune(c)
 	}
+	if a.msx() {
+		return msxRune(c)
+	}
+	if a.mz() {
+		return mzRune(c)
+	}
 	if a.tt() {
 		return ttRune(c)
 	}
@@ -607,7 +647,7 @@ func nextGen() int { genSeq++; return genSeq }
 
 func (a *App) snapshot() Snap {
 	d := a.doc.clone()
-	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine}
+	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine, msx: a.msxSnap()}
 }
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
@@ -669,6 +709,10 @@ func (a *App) restore(s Snap) {
 	if s.vic != nil && a.c64() {
 		a.vic = *s.vic
 	}
+	if s.msx != nil && a.msx() {
+		a.msxSet = *s.msx
+		a.msxBrushColours()
+	}
 	if a.c64() && s.mach != "" && s.mach != a.machine && hasROM(machineByID(s.mach).family) {
 		lower := a.lower()
 		a.machine = s.mach
@@ -708,9 +752,9 @@ func (a *App) doRedo() {
 // teletext page 25, every other page as many as the page size limit allows.
 func (a *App) maxRows() int {
 	switch {
-	case a.zx(), a.vd():
+	case a.zx(), a.vd(), a.msx():
 		return 24
-	case a.tt(), a.cpc(), a.mt():
+	case a.tt(), a.cpc(), a.mt(), a.mz():
 		return 25
 	}
 	return maxRowsFor(a.doc.cols)
@@ -967,7 +1011,14 @@ func (a *App) pick(x, y int) {
 		a.mtPick(v)
 		return
 	}
+	if a.msx() {
+		a.msxPick(v)
+		return
+	}
 	a.brush = cellCh(v)
+	if a.mz() {
+		a.brush = mzChar(v)
+	}
 	if !a.atari() {
 		a.fg = cellFg(v)
 	}
@@ -1011,6 +1062,10 @@ func (a *App) toolKey(t string) {
 
 // setFg sets the brush's colour; on an Atari page, the text colour of the whole screen.
 func (a *App) setFg(i int) {
+	if a.msx() { // the screen's colours, or the brush's group's (msx.go)
+		a.msxSetColour(false, i)
+		return
+	}
 	if a.atari() {
 		if a.doc.ink != i {
 			a.pushUndo()
@@ -1030,6 +1085,10 @@ func (a *App) fgNow() int {
 }
 
 func (a *App) setBg(i int) {
+	if a.msx() {
+		a.msxSetColour(true, i)
+		return
+	}
 	if a.screen() { // one background for the whole screen
 		if a.doc.bg != i {
 			a.pushUndo()
@@ -1057,7 +1116,7 @@ func (a *App) nColours(bg bool) int {
 	switch {
 	case a.tt():
 		return 0
-	case a.mt():
+	case a.mt(), a.mz():
 		return 8
 	case a.st():
 		return a.res().colours
@@ -1174,6 +1233,14 @@ func (a *App) defaultColours() {
 		a.fg, a.bg = 0, 7 // black ink on white paper, as at start-up
 	case a.cpc():
 		a.fg, a.bg = 1, 0 // pen 1 on paper 0, as at start-up
+	case a.msx(): // COLOR 15,4,4 (msx.go)
+		if s := newMSXSetup(a.msxSet.mode); s != a.msxSet {
+			a.pushUndo()
+			a.msxSet = s
+		}
+		a.msxBrushColours()
+	case a.mz():
+		a.fg, a.bg = 7, 1 // white on blue, as the monitor starts
 	case a.ted(): // black on a light screen, white on a dark one
 		a.fg, a.flash = map[bool]int{true: 0x00, false: 0x71}[a.doc.bg>>4&7 >= 4 && a.doc.bg&15 != 0], false
 	case a.c64():
@@ -1191,6 +1258,12 @@ func (a *App) defaultColours() {
 func (a *App) swapColours() {
 	if why := a.colourKeyRefused(false); why != "" {
 		a.msg(why)
+		return
+	}
+	if a.msx() { // the screen's (or the group's) colours change places
+		fg, bg := a.fg, a.bg
+		a.msxSetColour(false, bg)
+		a.msxSetColour(true, fg)
 		return
 	}
 	a.fg, a.bg = a.bg, a.fg
@@ -1357,7 +1430,7 @@ func (a *App) reparse() {
 	if a.reparseUni() {
 		return
 	}
-	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseVideotex() || a.reparseAtari8() || a.reparseZXTap() || a.reparseTED() {
+	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseVideotex() || a.reparseAtari8() || a.reparseZXTap() || a.reparseTED() || a.reparseMSX() || a.reparseMZ() {
 		return
 	}
 	switch a.srcKind {
@@ -1463,6 +1536,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		return
 	}
 	if a.loadAtari8(b, name, path, as) || a.loadZXTap(b, name, path, as) { // Atari .xex/.atr, Spectrum .tap (atari8.go, zxtap.go)
+		return
+	}
+	if a.loadMSX(b, name, path, as) || a.loadMZ(b, name, path, as) { // MSX .rom/.bin, MZ-700 .mzf (msx.go, mz.go)
 		return
 	}
 	a.igs = nil
@@ -1883,7 +1959,7 @@ func (a *App) applyMode() {
 // applyLook sets up how the current tab's page is drawn and nothing else, so
 // it may run for every page on show, every frame.
 func (a *App) applyLook() {
-	a.doc.glyph0 = a.screen()
+	a.doc.glyph0 = a.screen() || a.mz() // the MZ-700's character 0 is the digit 0 (mz.go)
 	a.doc.uni = a.uni()
 	a.setPalette()
 }
@@ -1929,6 +2005,14 @@ func (a *App) setMode(m string) {
 	if m == "mt" || a.mode == "mt" {
 		a.fg, a.bg = 7, 0
 	}
+	if m == "msx" {
+		a.msxEnsure()
+	}
+	if m == "mz" {
+		a.fg, a.bg = 7, 1
+	} else if a.mode == "mz" {
+		a.fg, a.bg = 7, 0
+	}
 	was := a.mode
 	a.mode = m
 	switch {
@@ -1954,7 +2038,11 @@ func (a *App) setMode(m string) {
 			a.doc = newMTDoc()
 		case m == "vd":
 			a.doc = newVDDoc()
-		case was == "cpc" || was == "mt" || was == "vd":
+		case m == "msx":
+			a.doc = newMSXDoc(a.msxSet.mode)
+		case m == "mz":
+			a.doc = newMZDoc()
+		case was == "cpc" || was == "mt" || was == "vd" || was == "msx" || was == "mz":
 			a.doc = newDoc(80, 25)
 		case was == "c64" || was == "atari" || was == "st" || was == "zx" || was == "tt":
 			a.doc = newDoc(80, 25)
@@ -1963,7 +2051,7 @@ func (a *App) setMode(m string) {
 		if m == "cpc" {
 			fmtID = "cpcbin"
 		}
-		if f, ok := map[string]string{"mt": "vdt", "vd": "vdcpt"}[m]; ok {
+		if f, ok := map[string]string{"mt": "vdt", "vd": "vdcpt", "msx": "msxrom", "mz": "mzf"}[m]; ok {
 			fmtID = f
 		}
 		if fmtID == "" {
@@ -1973,7 +2061,7 @@ func (a *App) setMode(m string) {
 		if m == "cpc" {
 			ext = ".bin"
 		}
-		if e, ok := map[string]string{"mt": ".vdt", "vd": ".cpt"}[m]; ok {
+		if e, ok := map[string]string{"mt": ".vdt", "vd": ".cpt", "msx": ".rom", "mz": ".mzf"}[m]; ok {
 			ext = e
 		}
 		a.saveFmt = fmtID
@@ -2074,7 +2162,7 @@ func (a *App) setSTRes(id string) {
 func (a *App) setRows(n int) {
 	a.endPlay()
 	n = max(1, min(a.maxRows(), n))
-	if n == a.doc.rows || a.zx() || a.tt() || a.cpc() || a.mt() { // a Spectrum screen is 24 rows, a teletext page and a CPC screen 25
+	if n == a.doc.rows || a.zx() || a.tt() || a.cpc() || a.mt() || a.msx() || a.mz() { // a Spectrum screen is 24 rows, a teletext page and a CPC screen 25
 		return
 	}
 	a.pushUndo()
@@ -2094,7 +2182,7 @@ func (a *App) setRows(n int) {
 func (a *App) setCols(n int) {
 	a.endPlay()
 	n = max(8, min(1000, n))
-	if n == a.doc.cols || a.c64() || a.st() || a.zx() || a.tt() || a.cpc() || a.mt() || (a.atari() && n != 38 && n != 40) {
+	if n == a.doc.cols || a.c64() || a.st() || a.zx() || a.tt() || a.cpc() || a.mt() || a.msx() || a.mz() || (a.atari() && n != 38 && n != 40) {
 		return // a machine's screen has the width it has
 	}
 	if a.source != nil && !a.dirty && !a.splitPage() {
@@ -2181,6 +2269,15 @@ func (a *App) makeTab(mode string) *Tab {
 	if mode == "vd" {
 		t.doc = newVDDoc()
 		t.saveFmt, t.name = "vdcpt", "untitled.cpt"
+	}
+	if mode == "msx" {
+		t.msxSet = newMSXSetup(0)
+		t.doc = newMSXDoc(0)
+		t.saveFmt, t.name = "msxrom", "untitled.rom"
+	}
+	if mode == "mz" {
+		t.doc = newMZDoc()
+		t.saveFmt, t.name = "mzf", "untitled.mzf"
 	}
 	return t
 }
@@ -2708,6 +2805,12 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	if out, ok, err := a.encodeCPC(fmtID, d); ok { // Amstrad CPC .bin and .dsk (cpc.go)
 		return out, err
 	}
+	if out, ok, err := a.encodeMSX(fmtID, d); ok { // MSX .rom and .bin (msx.go)
+		return out, err
+	}
+	if out, ok, err := a.encodeMZ(fmtID, d); ok { // MZ-700 .mzf (mz.go)
+		return out, err
+	}
 	if out, ok, err := a.encodeAtari8(fmtID, d); ok { // Atari .xex and .atr (atari8.go)
 		return out, err
 	}
@@ -3048,7 +3151,7 @@ func (a *App) play() {
 		a.stopPlay(true)
 		return
 	}
-	if (a.source != nil && a.sourceBin && !a.dirty) || a.zx() || a.tt() && !a.vd() || a.cpc() {
+	if (a.source != nil && a.sourceBin && !a.dirty) || a.zx() || a.tt() && !a.vd() || a.cpc() || a.msx() || a.mz() {
 		a.msg("This file has no codes to play: it is a picture of the screen")
 		return
 	}

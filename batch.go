@@ -1238,6 +1238,8 @@ func headlessApp() {
 	a.hasC64 = loadC64Fonts()
 	loadSTFonts()
 	loadAtariROMFonts()
+	loadMSXROMFont()
+	loadMZROMFonts()
 	loadPrefs()
 	a.focusTab(a.newTab("amiga"))
 }

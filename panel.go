@@ -76,9 +76,13 @@ func (a *App) drawCharset(u *UI, x, y, cols int) Rect {
 	}
 	fb := u.fb
 	CW, H := a.cellW(), a.cellH()
-	cm := Rect{x, y, cols * CW, 256 / cols * H}
+	n := 256
+	if a.mz() {
+		n = 512 // both character sets (mz.go)
+	}
+	cm := Rect{x, y, cols * CW, n / cols * H}
 	fb.fill(cm, cPaper)
-	for c := 0; c < 256; c++ {
+	for c := 0; c < n; c++ {
 		px, py := cm.x+(c%cols)*CW, cm.y+(c/cols)*H
 		switch {
 		case a.tt() && c >= 128:
@@ -87,6 +91,8 @@ func (a *App) drawCharset(u *UI, x, y, cols int) Rect {
 			}
 		case a.ted(): // black or white on the screen colour
 			a.drawCell(fb, px, py, 1, tedCell(c, map[int]int{0: 0x00, 1: 0x71}[a.previewFg()]))
+		case a.mz() || a.msx():
+			a.drawCell(fb, px, py, 1, a.previewCell(c))
 		case a.printable(c):
 			a.drawCell(fb, px, py, 1, makeCell(c, a.previewFg(), 0, 0))
 		default:
@@ -98,6 +104,9 @@ func (a *App) drawCharset(u *UI, x, y, cols int) Rect {
 	if u.hover(cm) {
 		a.charHover = (u.my-cm.y)/H*cols + (u.mx-cm.x)/CW
 		u.hint = fmt.Sprintf("Character %d (0x%02X). Click: brush (types it with Type). Right click: put it on the active F-key.", a.charHover, a.charHover)
+		if a.mz() {
+			u.hint = mzCharHint(a.charHover) + ". Click: brush (types it with Type). Right click: put it on the active F-key."
+		}
 		if a.tt() {
 			k := a.charHover & 0x7F
 			what := fmt.Sprintf("code %d (0x%02X)", k, k)
@@ -197,10 +206,13 @@ func (a *App) drawColours(u *UI, x, y, perRow int) int {
 	if a.atari() { // the 128 colours and the three registers (gtia.go)
 		return a.drawAtariColours(u, x, y, perRow)
 	}
+	if a.msx() { // the screen's colours, or the brush's group's (msx.go)
+		return a.drawMSXColours(u, x, y, perRow)
+	}
 	fb := u.fb
 	n := 16
-	if a.mt() {
-		n = 8 // the Minitel's eight (minitel.go)
+	if a.mt() || a.mz() {
+		n = 8 // the Minitel's eight (minitel.go), the MZ-700's (mz.go)
 	}
 	for i := 0; i < n; i++ {
 		r := Rect{x + i%perRow*20, y + i/perRow*26, 18, 18}
@@ -228,9 +240,12 @@ func (a *App) drawColours(u *UI, x, y, perRow int) int {
 		if a.mt() {
 			u.setHint(r, fmt.Sprintf("Colour %d: %s. Left: colour, right: background (of mosaics, and of the zone a space starts)", i, mtColourNames[i]))
 		}
+		if a.mz() {
+			u.setHint(r, fmt.Sprintf("Colour %d: %s. Left: foreground, right: background", i, mzColourNames[i]))
+		}
 		if c := u.take(r); c != nil {
 			switch {
-			case c.shift:
+			case c.shift && !a.mz():
 				openColour(i)
 			case c.button == 3:
 				a.setBg(i)

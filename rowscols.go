@@ -16,12 +16,18 @@ func (a *App) emptyCell() uint32 {
 		return cpcBlank()
 	case a.mt():
 		return mtBlank
+	case a.msx():
+		return msxBlank()
+	case a.mz():
+		return mzCell(32, a.fg, a.bg)
 	}
 	return blank
 }
 
 // fixedHeight: a Spectrum screen and a teletext page have the rows they have.
-func (a *App) fixedHeight() bool { return a.zx() || a.tt() || a.cpc() || a.igsPage() || a.mt() }
+func (a *App) fixedHeight() bool {
+	return a.zx() || a.tt() || a.cpc() || a.igsPage() || a.mt() || a.msx() || a.mz()
+}
 
 // freeWidth: only Amiga and PC pages can be any width.
 func (a *App) freeWidth() bool { return a.amiga() || a.pc() || a.uni() }

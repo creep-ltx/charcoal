@@ -58,6 +58,8 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | Minitel (2026-10-16) | .vdt (Videotex stream; screens a clear ends become frames); Bisson's Minitel font (CC0) built in; see "Minitel and Viewdata pages" |
 | Viewdata (2026-10-16) | a teletext page of 24 rows: .cpt streams (.car carousels as frames), 960-byte .bin frames, Telstar .json frames, and .tti / edit.tf |
 | Plus/4, C16 (2026-10-16) | a PETSCII model: Marq's Plus/4 .prg and .c, .d64, TED Screen Editor .scrn (+ .proj), Petmate9 c16 screens, .seq; TED colours and flash; see "Plus/4 and C16 pages" |
+| MSX (2026-10-16) | SCREEN 0 (40x24), SCREEN 1 (32x24, colours per 8 characters), MSX2 WIDTH 80; .rom cartridge and BLOAD .bin (both read back), Playscii .psci; C-BIOS fonts (BSD) built in; see "MSX and Sharp MZ-700 pages" |
+| Sharp MZ-700 (2026-10-16) | 40x25, two character sets, 8 colours per cell; .mzf (CharEdit's, and other pictures that copy to $D000/$D800); a public domain look-alike of the first set built in, Sharp's ROM when found |
 | Unicode (2026-10-16) | UTF-8 ANSI (256/24-bit SGR), durdraw .dur (frames), mIRC .irc (also written from PC pages), HTML; GNU Unifont's art blocks built in (OFL); see "Unicode page" below |
 
 CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide art shrunk to fit, m plays.
@@ -837,6 +839,80 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   phase; Spectrum bright black = black.
 - Not done: flash on the Spectrum (not in the movie), C128/VIC-20/PET programs (x128/xvic/xpet not installed),
   Plus/4 (another helper's area), a real machine, Altirra itself.
+
+## MSX and Sharp MZ-700 pages (2026-10-16, branch r4-msxmz)
+
+- **MSX** (`msx.go`): page type "msx" (`a.msx()`). `Tab.msxSet msxSetup` = mode (0 SCREEN 0 40x24, 1 SCREEN 1
+  32x24, 2 SCREEN 0 WIDTH 80), fg/bg (SCREEN 0: the whole screen; border = bg), border (SCREEN 1's backdrop),
+  `ct [32]byte` (SCREEN 1's colour table, fg<<4|bg per 8 characters). **A cell holds only its character**
+  (`makeCell(ch, 0, 0, 0)`): `drawMSXCell` takes the colours from the setup (`msxSetup.colours(ch)`; colour 0 =
+  transparent = the backdrop, `a.msxRGB`), so cells are blank to `blankAt` and the colours cannot drift. `setFg`/
+  `setBg` (keys, Swap, the Colours) go to `msxSetColour`: the screen's pair in SCREEN 0, the brush character's
+  group in SCREEN 1, undoable (`Snap.msx`, also in frames.go's snapshot); `msxBrushColours` keeps `a.fg/a.bg` as
+  the brush shows. Cells 6x8 (SCREEN 0, the glyph's left 6 pixels as the TMS9918 shows), 8x8, 6x16 (80
+  columns, pixels half as wide). 24 rows fixed. Palettes `msx1` (MAME's TMS9918 table, R. Nabet's from TI's data
+  book; *verified* equal to MAME's screenshots) and `msx2` (openMSX's V9938_PALETTE, 3-bit GRB levels); the
+  Palette gadget lists only those two.
+- **Font**: C-BIOS 0.29a's three sets (`fonts/msx-cbios*.font`, BSD, made by `tools/msxmz-fonts.py` from
+  font_us/jp/br.asm). Microsoft's MSX ROM font may not be shipped: `loadMSXROMFont` (main, headlessApp) adds
+  "MSX (BIOS ROM)" from `msx.rom`/`msx1.rom`/`msx2.rom` in the data folder (32 KB, CGTABL at 0x0004). An own font
+  (2048 bytes in `parseFontFile`, or the font editor) is carried by the programs; C-BIOS's sets and the ROM's
+  are not (`msxProgramFont`): a real MSX shows its own ROM font then.
+- **Files**: `.rom` (16 KB, "AB", INIT 0x4010) and `.bin` (BLOAD: FE start end exec, at 0x9000; a key returns
+  to BASIC on a cleared SCREEN 0). Same program (`msxProgram`): ERAFNK; FORCLR/BAKCLR/BDRCLR (SCREEN 0: BDRCLR =
+  bg, since C-BIOS's CHGCLR takes BDRCLR where MSX BASIC's takes BAKCLR); LINL40 (40/80) + INITXT or LINL32 +
+  INIT32; CHGCLR; LDIRVM of the own font to (CGPBAS), the names to (NAMBAS), SCREEN 1's colours to (T32COL);
+  then `JR $` (cartridge) or KILBUF/CHGET/INITXT/RET (.bin). After it "CharEdit MSX", a version byte, mode, fg,
+  bg, border, flags (bit 0 own font), the names, the 32-byte colour table (always), the font: how
+  `readMSXProgram` reads it back. Other people's .rom/.bin are not read (`loadMSX` returns false on auto).
+  Playscii `msx` charset = codes 32-255 then 0-31 (`psciMSXIndex`), `msx` palette = 15 colours in Playscii's own
+  order (`psciMSXColours`, matched to the MSX2 palette); reading picks the mode by width and the commonest
+  colours (per group in SCREEN 1). Open as MSX: text, code 1 + 0x40-0x5F for 0-31 (`msxText`), saved as UTF-8.
+- **Sharp MZ-700** (`mz.go`): page type "mz". Cells: character + fg + bg (0-7, colour code = G4 R2 B1), and
+  `mzSet2` (1<<20) for the second character set. **Display code 0x00 (space) and 0x20 (the digit 0) change
+  places inside CharEdit** (`mzCode`, an involution used for fonts, files and runes), so the space is 32 as
+  everywhere; `Doc.glyph0` is set on MZ pages (`applyLook`) so the digit 0 is not empty. The brush and F-keys
+  hold 0-511 (256+ = second set): `mzCell`, `mzChar`, `validMZFkeys` (prefs.go accepts them), the character
+  table shows 512 (panel.go `drawCharset`). Empty cell: space, white on blue (the monitor's $71).
+- **Font**: Sharp's CG ROM is copyrighted (MAME needs it, nobody may ship it). Built in: Russell Marks's public
+  domain look-alike of the first set (mz700em's font.txt, in github.com/mkoeppe/mz800em; `fonts/mz700-NOTICE.txt`);
+  the second set is drawn as its code in a box (`mzHexFont`). `loadMZROMFonts` finds `mz700fon.int` (or `.jpn`)
+  in the data folder, ~/.mame/roms, /usr/share/mame/roms, as a file or in `mz700.zip`, and adds "MZ-700 (Sharp
+  ROM)" with its second set (`mzROMSet2`; MAME's layout: 512 glyphs, the low bit the leftmost pixel). Own fonts
+  and the font editor are refused (the MZ-700 has no programmable characters).
+- **Files**: `.mzf` (`writeMZF`): header (1, name ended by 0x0D, size, load = start = $1200), program `DI; LD
+  HL,codes; LD DE,$D000; LD BC,1000; LDIR; LD HL,attrs; LD DE,$D800; ...; JR $`, "CharEdit MZ-700", 1000 display
+  codes, 1000 attributes (bit 7 set 2, 6-4 fg, 2-0 bg). `readMZScreen`: our mark, or any program that names
+  $D000 and $D800 within 12 bytes of an LD HL/DE/BC of an address with 1000 bytes in the file (z88dk's memcpy
+  pushes, LDIR): pixelrat's "Princess" (Demodulation 2021, from demodulation.retroscene.org) opens. Open as
+  Sharp MZ-700: UTF-8/Latin-1 text. UTF-8 export (`encodeMZ`) keeps the second set (Legacy Computing code
+  points, from Wikipedia's Sharp MZ character set, European tables). Pictures 320x200, no border.
+- **Glue**: init() in each file (fonts, palettes before Custom, pageModes, modeOrder, modeNames, openAs,
+  modeNoStream, editorOwn, formats after cpcdsk); editor.go: Tab/Snap fields, cellW/H, cell, brushCell,
+  setPalette, printable, charToByte, runeOf, snapshot/restore, maxRows, pick, setFg/setBg, nColours,
+  defaultColours, swapColours, reparse/load/encode chains, setMode, makeTab, setRows/setCols, play, applyLook's
+  glyph0; view.go (drawCell, labels, Screen gadget, palette list, status line), panel.go, uni_ui.go
+  (previewCell, charLabel), anim.go (openMSX's 320x240 border), cpc.go's borderPx, frames, rowscols, strip,
+  effects, shapes (MSX box lines 17 16 18 19 1A 1B), fontfile/fontedit, streams, menus, start (tiles), main,
+  batch, autosave (`msxAutosave`), prefs, editorformats (psci), dialogs (help), fuzz_test.
+- **Tests** (`msx_test.go`, `mz_test.go`, helpers `msxF*`/`mzF*`): fonts, runes, palettes, typing, colours and
+  undo, every program (3 modes x own font x .rom/.bin) run in a small Z80 (`msxFZ80`) with a model of the BIOS
+  and compared pixel for pixel with the page; editor round trips (.rom, .bin, .psci); Playscii charset;
+  Open as text; picture sizes; autosave; ROM font detection; MZ: quarter-block bit order, second set,
+  pick, .mzf run in the Z80 (video RAM byte for byte), round trip, other programs (memcpy and LDIR forms;
+  `CHARCOAL_MZ_FILES=dir` opens real .mzf files and writes PNGs), text and UTF-8, ROM fonts.
+  **Emulators** (CHARCOAL_EMU=1): `TestEmuMSX` runs the cartridges in MAME's hb10p (MSX1) and phc23 (MSX2) with
+  C-BIOS as their BIOS (`tools/emucheck/get-msx-roms.sh`; MAME warns "WRONG CHECKSUMS" and runs it): SCREEN 0,
+  SCREEN 1, own fonts and WIDTH 80 are CharEdit's PNG pixel for pixel, and MAME's RGB equals msx1Palette.
+  `TestEmuMZ` runs the .mzf in MAME's mz700 with a stand-in monitor ROM written by the test (copies the .mzf to
+  $1200 and jumps; Sharp's monitor may not be shipped) and a CG ROM of CharEdit's font: pixel for pixel, RGB too.
+  `TestMSXMZSamples` (`CHARCOAL_MSXMZ_SAMPLES=dir`) writes sample files.
+- **Not done**: other people's MSX .rom/.bin/.dsk/.cas (no known text-art format; the 2025 MSX ASCII piece was
+  not found as a file), a .dsk with the .bin, an MSX BASIC listing, MSX2 blink attributes, sprites; the
+  monitor's own loading of the .mzf on a real MZ-700 (MAME ran it through the stand-in monitor), the MZ-700
+  "Character Graphics Editor"'s files (a Japanese Windows tool seen in a Shadow Party 2024 entry's work stages;
+  not found), Playscii's "sharp" charset (another layout), flips of second-set characters (they use the first
+  set's mirror table), the 2nd set's look without Sharp's ROM (codes in boxes).
 
 ## Keys and safety (2026-10-13, evening)
 

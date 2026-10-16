@@ -118,6 +118,8 @@ func init() {
 			machine("Amstrad CPC", "cpc"),
 			machine("Minitel", "mt"),
 			machine("Viewdata", "vd"),
+			machine("MSX", "msx"),
+			machine("Sharp MZ-700", "mz"),
 			machine("Unicode (terminals, IRC)", "uni"),
 			{label: "Convert to Unicode", action: "convert_unicode"},
 			menuSep,

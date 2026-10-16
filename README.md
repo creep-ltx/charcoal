@@ -1,7 +1,7 @@
 # Charcoal
 
 Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer, for text art on every
-platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum, Amstrad CPC, teletext, Viewdata and Minitel, each with its real font, colours
+platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum, Amstrad CPC, MSX, Sharp MZ-700, teletext, Viewdata and Minitel, each with its real font, colours
 and file formats.
 
 ![CharEdit with a PC ANSI by Platinum](docs/screenshots/hero.png)
@@ -56,7 +56,7 @@ An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, the BBS c
 Renegade, Synchronet, WWIV, Wildcat! and Celerity, XBin, iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii),
 Unicode terminal art (UTF-8 ANSI in 256 and 24-bit colours, durdraw) and IRC art (mIRC colour codes),
 Atari ATASCII, Atari ST VT52 and IGS, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens, Amstrad CPC
-text art (AMSCII), teletext (BBC Micro Mode 7, Ceefax), Viewdata (Prestel, Telstar) and Minitel (Videotex `.vdt`), drawn with the real bitmap fonts: Topaz
+text art (AMSCII), MSX (SCREEN 0 and 1), Sharp MZ-700, teletext (BBC Micro Mode 7, Ceefax), Viewdata (Prestel, Telstar) and Minitel (Videotex `.vdt`), drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA, EGA 8x14,
 VGA 8x8 (80x50) and the code pages 850 and 866 on a PC page (CP437), the C64's two character sets on a C64 page;
 or a font of your own, drawn in its font editor.
@@ -217,6 +217,33 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   CPC's text codes. All 2024 AMSCII Compo entries open. Pictures (`.png`, GIF, APNG) are 768x544 in every mode,
   the size and place of Caprice Forever's screenshots that the compos use, so a saved PNG matches the other
   entries' pixel for pixel. Typing `^` gives the caret (0xA0; the CPC's 0x5E is an up arrow).
+- **MSX page**: the MSX's text screens (the **Screen** gadget): SCREEN 0, 40x24 characters of 6x8 pixels in two
+  colours for the whole screen; SCREEN 1, 32x24 of 8x8 with a colour pair for each group of 8 characters (0-7,
+  8-15, ...) and a border; the MSX2's SCREEN 0 WIDTH 80 (cells 6x16: its pixels are half as wide). A cell is a
+  character only: the colours are the screen's, as on the machine, so in SCREEN 1 a typed letter takes its
+  group's colours. Colours (the TMS9918's 15 and transparent, which shows the border): left click is the
+  foreground, right click the background, of the screen in SCREEN 0 or of the brush character's group in
+  SCREEN 1; middle click the border (SCREEN 1). Palettes: MSX1 (TMS9918, as MAME has it) and MSX2 (V9938). The
+  font is C-BIOS's (international, Japanese, Brazilian; BSD licence, `fonts/msx-cbios-NOTICE.txt`), since
+  Microsoft's MSX BIOS may not be passed on; put an MSX BIOS ROM in CharEdit's data folder as `msx.rom` and
+  its font is offered too ("MSX (BIOS ROM)"). An own font (2048 bytes, or the font editor) goes into the files.
+  Saved as a **cartridge** (`.rom`, 16 KB: runs on any MSX and in emulators on C-BIOS) or a **BLOAD file**
+  (`.bin`: `BLOAD"ART.BIN",R` from MSX BASIC; a key goes back to BASIC): a small program that sets the screen up
+  through the BIOS (ERAFNK, INITXT/INIT32, CHGCLR) and copies the page, the colour table and an own font into
+  the VRAM (LDIRVM). Both open again. Playscii `.psci` with its `msx` charset and palette is read and written.
+  Pictures are openMSX's size: 320x240 (640x480 at 80 columns), the backdrop round the screen. Open as MSX
+  reads text (code 1 + a letter for the characters 0-31, as MSX BASIC prints them).
+- **Sharp MZ-700 page** (MZ): the MZ-700's 40x25 screen, each cell a character of either of its two sets with a
+  foreground and a background of the 8 colours. The character table shows both sets (512 characters; the
+  second from 256 on); typing gives the first set (Sharp's display codes: letters, digits, lower case). The
+  font: Sharp's character ROM may not be passed on, so the first set is Russell Marks's public domain
+  look-alike (`fonts/mz700-NOTICE.txt`) and the second set's characters show their code in a box; with Sharp's
+  ROM (`mz700fon.int`, 4096 bytes) in CharEdit's data folder or MAME's `roms` (`mz700.zip`), CharEdit draws
+  both sets with it ("MZ-700 (Sharp ROM)"). Saved as a **tape file** (`.mzf`: load it with the monitor's `L`,
+  or in an emulator): a program at $1200 that copies the display codes to $D000 and the attributes to $D800.
+  Opens CharEdit's `.mzf` and other `.mzf` pictures that copy two 1000-byte blocks there (as the Demodulation
+  2021 entry "Princess" does). Pictures are the screen, 320x200. UTF-8 text keeps the second set's characters
+  (Unicode's Symbols for Legacy Computing). Open as Sharp MZ-700 reads text.
 - **Minitel page** (MT): the Minitel's 40x25 screen (row 0 is its status row) in 8x10 cells, as the STUM 1B
   (the Minitel's specification) describes it. A cell is a letter (G0, the G2 signs £ § ← ↑ → ↓ ° ± ÷ ¼ ½ ¾ Œ œ ß
   and the accented letters à â ä è é ê ë î ï ô ö ù û ü ç) in a colour, or a mosaic of 2x3 blocks (the character
@@ -332,7 +359,7 @@ evens out colours that do not show when it saves and writes NUL as a space; an A
 80 columns; Playscii and REXPaint files cannot hold a font (CharEdit keeps a page's own font for the file, as
 for `.ans`). Not done: PabloDraw and TheDraw have no files of their own beyond ANSI/BIN/XBin (TheDraw's `.tdf`
 are fonts); ACiDDraw saves ANSI; Moebius saves ANSI/BIN/XBin with SAUCE; IcyDraw's PETSCII, ATASCII and other
-non-PC pages; Playscii's other charsets (Apple II, CPC, MSX, ZX81 "speccy" ...).
+non-PC pages; Playscii's other charsets (Apple II, ZX81 "speccy", "sharp" ...).
 
 ## Frames and animation
 
@@ -653,7 +680,9 @@ The files that run on a machine were run in emulators (`emu_test.go`, `tools/emu
 `.prg`/`.d64` (every mode, own sets, both cases) in VICE, Atari `.xex`/`.atr` (38/40 columns, ROM and own font,
 800XL and 800) in atari800, Spectrum `.tap` in Fuse, Amstrad CPC `.bin` on a `.dsk` (modes 0-2) in MAME. Each
 emulator's screen is CharEdit's PNG export pixel for pixel, border included (the colours as each emulator's
-palette has them).
+palette has them). MSX cartridges (SCREEN 0, SCREEN 1, own fonts, and 80 columns on an MSX2) ran in MAME on
+C-BIOS, and MZ-700 `.mzf` files in MAME's mz700 with a stand-in monitor that loads them (`msx_test.go`,
+`mz_test.go`): the same, colours by RGB too.
 
 ## Files
 
@@ -675,6 +704,7 @@ palette has them).
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
 | `gtia.go`, `atari8.go`, `zxtap.go` | Atari GTIA colours and the colour registers; the Atari `.xex`/`.atr` and the OS ROM's font; the Spectrum `.tap` (`mach_test.go` runs the Atari program in a small 6502 with a model of ANTIC and compares its screen with the PNG export pixel for pixel) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
+| `msx.go`, `mz.go` | MSX pages (screens, colours, the `.rom`/`.bin` programs, Playscii's msx charset) and Sharp MZ-700 pages (two character sets, the `.mzf`); `tools/msxmz-fonts.py` makes their fonts (`msx_test.go`, `mz_test.go` run the programs in a small Z80) |
 | `minitel.go`, `minitel_ui.go`, `viewdata.go` | Minitel pages (the screen, a small Minitel that reads `.vdt`, the `.vdt` writer) and Viewdata pages (streams, 960-byte frames, Telstar frames); the editor's side of both (`minitel_test.go`, `viewdata_test.go`) |
 | `keys.go` | the table of actions and their default keys, the keys file, the help's key list |
 | `rowscols.go`, `blockjobs.go` | insert/delete rows and columns; fill, move and crop a block |
@@ -702,6 +732,8 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | Atari GTIA colours (`gtia.go`) | the model and measured numbers of atari800's palette generator (`colours_ntsc.c`, `colours_pal.c`, github.com/atari800/atari800): luma steps, colour delays, PAL delay table; written anew from its description, no code taken | facts (numbers); atari800 itself is GPL-2+ |
 | ZX Spectrum font | the 48K ROM's character set | © Amstrad, who allow passing it on, `fonts/zx-spectrum-NOTICE.txt` |
 | Amstrad CPC font | the CPC firmware ROM's character set (the same in the 464, 664 and 6128) | © Amstrad; Amstrad has kindly given its permission for its copyrighted material to be redistributed but Amstrad retains its copyright, `fonts/amstrad-cpc-NOTICE.txt` |
+| MSX fonts (`fonts/msx-cbios*.font`) | C-BIOS 0.29a's character sets (international by Eric Boon, Japanese, Brazilian), cbios.sourceforge.net | BSD 2-clause, `fonts/msx-cbios-NOTICE.txt` |
+| Sharp MZ-700 font (`fonts/mz700-rjm.font`) | Russell Marks's hand-drawn MZ-700-like set from mz700em (1996), kept in github.com/mkoeppe/mz800em | public domain, `fonts/mz700-NOTICE.txt` |
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |
 | Minitel font (`minitel_font.go`) | Minitel-Canvas's Minitel font, Frédéric Bisson (github.com/Zigazou/Minitel-Canvas), drawn into 8x10 cells by `tools/minitel-font.py` | CC0, `fonts/minitel-NOTICE.txt` |
 | Unicode page font (`fonts/unifont-art.hex.gz`) | GNU Unifont 17.0.05, Roman Czyborra, Paul Hardy et al. (unifoundry.com): the blocks text art uses, cut by `tools/unifont.sh` | SIL Open Font License 1.1 (Unifont is dual-licensed OFL / GPL-2+ with the font exception; used under the OFL), `fonts/unifont-NOTICE.txt` |

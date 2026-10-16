@@ -1,0 +1,10 @@
+mz700-rjm.font: an MZ-700-like character set (the first of the MZ-700's two sets,
+display codes 0-255) drawn by hand by Russell Marks for his mz700em emulator (1996) and
+put in the public domain by him: "`mz700fon.dat' is the character font data; this is
+not from the MZ700, but put together by hand (by me) - it's public domain" (README-700
+of mz700em, kept in github.com/mkoeppe/mz800em as font.txt). Made by tools/msxmz-fonts.py.
+
+Sharp's own character ROM (mz700fon.int, 4096 bytes: both sets) is Sharp's copyright and
+is not passed on with CharEdit. When it is found on the computer (CharEdit's data folder,
+or MAME's mz700 set), CharEdit draws MZ-700 pages with it instead; without it, the second
+set's characters are drawn as their code in a box.

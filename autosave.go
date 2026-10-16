@@ -60,6 +60,7 @@ type autosaveMeta struct {
 	Order        *drawOrder      `json:"draw_order,omitempty"` // the order Save draws a stream file in
 	UniPairs     [][3]int        `json:"uni_pairs,omitempty"`  // a Unicode page's styles 256 and up: fg, bg, italic|underline (uni.go)
 	CPC          *cpcAutosave    `json:"cpc,omitempty"`        // an Amstrad CPC page's mode, inks and border
+	MSX          *msxAutosave    `json:"msx,omitempty"`        // an MSX page's screen mode and colours (msx.go)
 	VIC          *vicSetup       `json:"vic,omitempty"`        // a C64 page's text mode and $D022-$D024 (c64x.go)
 }
 
@@ -120,6 +121,9 @@ func writeAutosave(t *Tab) error {
 	}
 	if t.mode == "cpc" {
 		m.CPC = &cpcAutosave{Mode: t.cpcSet.mode, Inks: t.cpcSet.ink, Border: t.cpcSet.border}
+	}
+	if t.mode == "msx" {
+		m.MSX = t.msxAutosave()
 	}
 	if t.mode == "c64" {
 		v := t.vic
@@ -296,6 +300,9 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	}
 	if m.CPC != nil {
 		a.cpcSet = m.CPC.setup()
+	}
+	if m.MSX != nil {
+		a.msxSet = m.MSX.setup()
 	}
 	if m.VIC != nil && m.VIC.Mode >= 0 && m.VIC.Mode <= vicECM {
 		a.vic = *m.VIC
