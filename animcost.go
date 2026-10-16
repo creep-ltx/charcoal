@@ -254,7 +254,7 @@ func (a *App) playPauses(b []byte) []pause {
 	if !bytes.Equal(out, b) {
 		return nil
 	}
-	return ps
+	return board.waited(ps)
 }
 
 // stepLine sends Play's bytes the line has carried by now at bps (telnet:

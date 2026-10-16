@@ -86,7 +86,7 @@ func bbsFPage(r *rand.Rand, kind string, cols, rows int) *Doc {
 			ch = byte(32 + r.Intn(224))
 		}
 		attr := r.Intn(256)
-		if kind == "celerity" {
+		if kind == "celerity" || kind == "renegade" {
 			attr &= 0x7F // no code for bit 7
 		}
 		if r.Intn(3) > 0 && i > 0 { // runs of one colour, as in art

@@ -387,6 +387,9 @@ func (d *AnimReq) draw(u *UI) {
 		fb.text(px+colAfter(48, "Make"), y+3, why, cHi)
 	} else {
 		ext := map[string]string{"ansi": ".ans", "seq": ".seq", "ata": ".ata", "vt52": ".vt"}[a.pageStreamFormat()]
+		if f := a.animFormat(a.pageStreamFormat()); f != a.pageStreamFormat() {
+			ext = "file (" + bbsCodeName[f] + ")" // brdcodes.go
+		}
 		items := []string{"the draw order of the saved " + ext, "frames"}
 		if isEffect(d.pat) {
 			items[0] = "the saved " + ext + ", frame by frame"

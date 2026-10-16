@@ -21,8 +21,13 @@ import (
 	"strings"
 )
 
-// pause: wait ms after the stream's first at bytes.
-type pause struct{ at, ms int }
+// pause: wait ms after the stream's first at bytes. spread: one of a draw
+// order's even pauses (every n cells), not a frame's hold: a board that waits
+// only whole seconds may gather those into fewer, longer waits (boardswhole.go).
+type pause struct {
+	at, ms int
+	spread bool
+}
 
 // bbsBoard is one BBS's way of pausing a displayed file.
 type bbsBoard struct {
@@ -40,6 +45,9 @@ type bbsBoard struct {
 	colours  string                       // the board's colour codes, written for ANSI's (boardcolours.go)
 	// paceFn: a board that paces its own way (the C64 boards, c64bbs.go).
 	paceFn func(b *bbsBoard, stream []byte, ps []pause) []byte
+	// whole: the board waits whole seconds only (boardswhole.go): each hold is
+	// rounded to the nearest second, at least one.
+	whole bool
 }
 
 func (b *bbsBoard) shows(fmtID string) bool { return strings.Contains(b.formats, " "+fmtID+" ") }
@@ -165,6 +173,9 @@ func boardsFor(fmtID string) []*bbsBoard {
 // units turns the pauses' ms into the board's units, carrying what rounding
 // leaves over to the next pause, so the whole file waits as long as asked.
 func (b *bbsBoard) units(ps []pause) []int {
+	if b.whole {
+		return b.wholeUnits(ps)
+	}
 	out := make([]int, len(ps))
 	total, given := 0, 0
 	for i, p := range ps {
@@ -177,13 +188,22 @@ func (b *bbsBoard) units(ps []pause) []int {
 }
 
 // pace writes stream with the board's delay codes at the pauses (in order of at).
-func (b *bbsBoard) pace(stream []byte, ps []pause) []byte {
+func (b *bbsBoard) pace(stream []byte, ps []pause) []byte { return b.paceIn("", stream, ps) }
+
+// paceIn is pace for a file in BBS colour codes of kind (bbscodes.go; "" none):
+// the stream's colours are written in those codes instead of the board's own,
+// and the art's characters that would start one are escaped (codesEscape).
+func (b *bbsBoard) paceIn(kind string, stream []byte, ps []pause) []byte {
 	if b.paceFn != nil {
 		return b.paceFn(b, stream, ps)
 	}
 	us := b.units(ps)
 	// The board's colour codes for the SGRs (nil: the colours stay ANSI).
 	cc := boardColourer(b.colours, stream)
+	var track *sgrColours // the colours, for a code written again after an escaped character
+	if kind != "" {
+		cc, track = boardColourer(kind, stream), &sgrColours{kind: kind, fg: 7, attr: -1}
+	}
 	var pieces []string // codes and the art's bytes (escaped): a board must never cut one in two
 	if b.head != "" {
 		pieces = append(pieces, b.head)
@@ -198,6 +218,9 @@ func (b *bbsBoard) pace(stream []byte, ps []pause) []byte {
 	}
 	for i := 0; i < len(stream); i++ {
 		flush(i)
+		if track != nil {
+			track.code(stream, i)
+		}
 		if cc != nil {
 			if n, code := cc.code(stream, i); n > 0 {
 				if len(code) > 0 {
@@ -218,6 +241,12 @@ func (b *bbsBoard) pace(stream []byte, ps []pause) []byte {
 		}
 		if e := ""; b.escape != nil {
 			if e = b.escape(c); e != "" {
+				pieces = append(pieces, e)
+				continue
+			}
+		}
+		if kind != "" {
+			if e := codesEscape(kind, stream, i, cc, track); e != "" {
 				pieces = append(pieces, e)
 				continue
 			}
@@ -322,6 +351,9 @@ func (a *App) animatedSave(fmtID string) bool {
 	if fmtID == "imageseq" { // a .seq with Image BBS's codes (c64bbs.go)
 		fmtID = "seq"
 	}
+	if isBBSCodes(fmtID) { // a file in a board's colour codes (brdcodes.go)
+		return a.animatedCodes(fmtID, a.pageBoard())
+	}
 	return streamFormats[fmtID] && (a.orderedSave(fmtID) || a.nFrames() > 1)
 }
 
@@ -365,6 +397,9 @@ func (a *App) copyBoards(fmtID string) []*bbsBoard {
 	if fmtID == "imageseq" { // a .seq with Image BBS's codes (c64bbs.go)
 		fmtID = "seq"
 	}
+	if isBBSCodes(fmtID) { // copies in the file's colour codes, with each board's pauses (brdcodes.go)
+		fmtID = "ansi"
+	}
 	if a.order == nil || a.order.Copies == "" {
 		return nil
 	}
@@ -401,7 +436,7 @@ func pacedNote(id string, ps []pause) string {
 		return ""
 	}
 	total := 0
-	for _, p := range ps {
+	for _, p := range b.waited(ps) {
 		total += p.ms
 	}
 	return fmt.Sprintf("; %s pauses, %.1f s in all", b.name, float64(total)/1000)

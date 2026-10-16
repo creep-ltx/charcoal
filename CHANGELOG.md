@@ -15,6 +15,22 @@ Each version's section is also its release page on GitHub. Newest first.
 - IcyDraw `.icy` files of PETSCII, Atari and Atari ST pages keep their layers (before, they were put together).
 - Drawing on a **hidden layer** is refused with a short message, as in IcyDraw (you would not see what you draw);
   Select and Pick still work.
+- **FAME, CNet and Image BBS 1.2 (whole seconds)** in Save for board, Animate and Animate a folder: these boards
+  can only wait whole seconds (FAME `~W`, CNet's `{W}`, Image's `£W`), so each frame's hold becomes the nearest
+  whole second (at least one), and the play times shown are what the board really waits.
+- **Animated files in a board's colour codes:** a menu in pipe codes, Synchronet Ctrl-A, WWIV, Wildcat!,
+  Celerity or Telegard codes, given a draw order or an effect, is saved as its animation in those same codes
+  (with your board's pauses). Animate a folder does the same: such files keep their codes and their names,
+  instead of becoming `.ans` files in ANSI colours.
+- **PCBoard `@X00` and `@XFF`:** a `.pcb` with both is read as PCBoard reads it (`@X00` keeps the colour, `@XFF`
+  brings it back); with only one of them it is a colour, as before. A save never writes both.
+- **Telegard** `` `0E ``-style colour codes are read and written (Open as *PC: Telegard `XY*, Save as).
+- **Mystic's theme colours `|T0`-`|T9`** show in the board's default colours instead of as text, and are saved
+  back as the same codes for the cells drawn in them. **Renegade pipe codes** (Open as and Save as) read its
+  user colours `^0`-`^9` the same way.
+- **DirArt: the disk's header line is part of the art.** A DirArt disk opens with the disk's name (shown
+  reversed, as the C64 lists it) as the first row, the files below it, and saves it back. **Changed:** a DirArt
+  disk opens one row taller. Pages without a header row (new ones, Marq's and Petmate9's) save as before.
 
 ## 0.1b13 (2026-10-16)
 

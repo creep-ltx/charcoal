@@ -31,6 +31,7 @@ func boardColourer(kind string, stream []byte) *sgrColours {
 		return nil
 	}
 	c := &sgrColours{kind: kind, fg: 7, attr: -1}
+	sim := *c // PCBoard: @X00 saves the colour and @XFF restores it, so those two have no code: ANSI stays
 	for i := 0; i < len(stream); i++ {
 		if n, ps, ok := sgrAt(stream, i); n > 0 {
 			if !ok {
@@ -40,6 +41,9 @@ func boardColourer(kind string, stream []byte) *sgrColours {
 				if !c.knows(p) {
 					return nil
 				}
+			}
+			if sim.code(stream, i); kind == "pcb" && (sim.attr == 0x00 || sim.attr == 0xFF) {
+				return nil
 			}
 			i += n - 1
 		}
@@ -81,7 +85,7 @@ func (c *sgrColours) knows(p int) bool {
 	case p == 0, p == 1, p == 22, p >= 30 && p <= 37, p == 39, p >= 40 && p <= 47, p == 49:
 		return true
 	case p == 5, p == 25:
-		return c.kind != "pipe" // Mystic 1.10 eats |24-|31: a blinking file keeps ANSI
+		return c.kind != "pipe" && c.kind != "celerity" && c.kind != "renegade" // Mystic 1.10 eats |24-|31, Celerity has none: a blinking file keeps ANSI
 	}
 	return false
 }

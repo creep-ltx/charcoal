@@ -143,6 +143,7 @@ func modelPCB(file []byte) (out []byte, ms int, err error) {
 	if !bytes.HasPrefix(file, []byte("@POFF@")) {
 		return nil, 0, fmt.Errorf("no @POFF@ first")
 	}
+	attr, saved := 0x07, 0x07 // @X00 keeps the colour, @XFF brings it back
 	for pos := 0; pos < len(file); {
 		if file[pos] == '\n' { // a LF left over at the start of a line
 			pos++
@@ -176,7 +177,16 @@ func modelPCB(file []byte) (out []byte, ms int, err error) {
 				continue
 			}
 			if len(rest) >= 4 && rest[0] == '@' && rest[1] == 'X' && isUpperHex(rest[2]) && isUpperHex(rest[3]) {
-				out = append(out, cbbsSGR(upperHexVal(rest[2])<<4|upperHexVal(rest[3]))...)
+				switch v := upperHexVal(rest[2])<<4 | upperHexVal(rest[3]); v {
+				case 0x00:
+					saved = attr
+				case 0xFF:
+					attr = saved
+					out = append(out, cbbsSGR(attr)...)
+				default:
+					attr = v
+					out = append(out, cbbsSGR(attr)...)
+				}
 				p += 3
 				continue
 			}
@@ -348,6 +358,14 @@ func shown(id string, stream []byte) []byte {
 		if i := bytes.IndexByte(stream, 26); i >= 0 {
 			return stream[:i]
 		}
+	case "cnet": // Ctrl-Q and Ctrl-Y start its codes: the art's are spaces (boardswhole.go)
+		out := bytes.Clone(stream)
+		for i, c := range out {
+			if c == 0x11 || c == 0x19 {
+				out[i] = ' '
+			}
+		}
+		return out
 	}
 	return stream
 }
@@ -380,7 +398,7 @@ func checkPaced(t *testing.T, id string, stream []byte, ps []pause, what string)
 	for i, u := range b.units(ps) {
 		if ps[i].at <= cut {
 			units += u
-			asked += ps[i].ms
+			asked += b.waited(ps)[i].ms // whole seconds on some boards (boardswhole.go)
 		}
 	}
 	if ms != units*b.unit {
@@ -457,7 +475,7 @@ func TestBBSPausesAmiExpress(t *testing.T) {
 	a.info.writeSauce = true
 	a.order = &drawOrder{Pattern: "scramble", Every: 3, Pause: 20}
 	stream, ps := a.writeOrderedPaced("ansi", a.doc, true)
-	ps = append(ps, pause{len(stream) / 2, 45000})
+	ps = append(ps, pause{at: len(stream) / 2, ms: 45000})
 	file := checkPaced(t, "amiexpress", stream, ps, "tildes")
 	if !bytes.HasPrefix(file, []byte("~NS|")) {
 		t.Fatalf("starts %q", file[:8])
@@ -503,7 +521,7 @@ func TestBBSPauseUnits(t *testing.T) {
 	b := boardByID("mystic")
 	ps := make([]pause, 40)
 	for i := range ps {
-		ps[i] = pause{i, 40}
+		ps[i] = pause{at: i, ms: 40}
 	}
 	total := 0
 	for _, u := range b.units(ps) {

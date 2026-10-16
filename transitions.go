@@ -1155,14 +1155,14 @@ func (a *App) writeOrderedPaced(fmtID string, d *Doc, sauce bool) ([]byte, []pau
 			if i == 0 && p == patShine {
 				ms = max(hold, 400) // the picture a moment before the light comes (as the frames)
 			}
-			ps = append(ps, pause{at, ms})
+			ps = append(ps, pause{at: at, ms: ms})
 		}
 		return out, ps
 	}
 	out, offs := writeDrawSteps(fmtID, d, a.drawSteps(d, a.order), a.streamOpts(sauce))
 	every, ms := a.order.pacing()
 	for i := every - 1; i < len(offs)-1; i += every {
-		ps = append(ps, pause{offs[i], ms})
+		ps = append(ps, pause{at: offs[i], ms: ms, spread: true})
 	}
 	return out, ps
 }

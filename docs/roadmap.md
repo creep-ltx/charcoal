@@ -93,6 +93,8 @@ against each platform's best editor. Each step says what it wins.
 - [x] BBS colour codes (2026-10-16, bbscodes.go): pipe codes (Mystic, Renegade, WWIV 5), Synchronet Ctrl-A,
   WWIV hearts, Wildcat! @XX@, Celerity |x read (also mixed with ANSI) and written; Open as lists PCBoard, Avatar
   and each of them. "Save for board X" writes the board's own colour codes too (2026-10-16, see Step 5).
+  [x] Telegard's `XY codes, Mystic's |T0-|T9 and Renegade's ^0-^9 in the boards' default colours (kept as codes),
+  PCBoard's @X00/@XFF save/restore (2026-10-16, brdcodes.go, pcformats.go).
 - [x] More PC fonts (done 2026-10-14): EGA 8x14, VGA50 8x8 (80x50), code pages 850 and 866; SAUCE font names
   honoured on opening and written on saving (IBM VGA, IBM EGA, IBM VGA50, IBM EGA43, IBM VGA 850 ...). Not yet:
   other code pages' 8x8/8x14 sets (Moebius's names open in the CP437 font of the same size and are kept on save), the 4:3 aspect above.
@@ -128,6 +130,7 @@ against each platform's best editor. Each step says what it wins.
   - [x] **DirArt** (2026-10-16, dirart.go): a 16-column DirArt page; a `.d64` whose directory listing is the page
     (DEL entries), written over the disk it came from (its programs kept); any `.d64` without a screen program
     opens as one; Marq's and Petmate9's DirArt read. `LOAD"$",8` + `LIST` in VICE shows the page.
+    [x] The disk's header line as the page's first row (2026-10-16, dirarthead.go; checked in VICE).
   - [x] **Plus/4, C16, C116 (TED)** (done 2026-10-16, ted.go, ted_formats.go): a PETSCII model with the TED's
     121 colours (hue x luminance grid in the Colours, the wheel for luminance) and flash per cell, screen and
     border colours, the ROM's characters from VICE; VICE's computed palette (identical to xplus4's screenshots),
@@ -168,11 +171,13 @@ against each platform's best editor. Each step says what it wins.
 
 - [x] **BBS boards** (2026-10-16, boardcolours.go): "Save for board X" (bbspause.go) writes the board's own colour
   codes as well as its pauses: Mystic pipe codes, Synchronet Ctrl-A, PCBoard @X (the user said yes, 2026-10-16);
-  a stream with a colour the board has no code for (blink on Mystic) keeps ANSI.
+  a stream with a colour the board has no code for (blink on Mystic) keeps ANSI. [x] Files in a board's colour
+  codes are animated in those codes, also by Animate a folder (2026-10-16, brdcodes.go).
 - [x] **C64 BBS graphics** (2026-10-16, c64bbs.go): pauses in animated .seq files for Image BBS (£S, tenths) and
   C*Base (Ctrl-P, ~1/30 s), each board's own characters escaped and its line reading respected; .seq files with
-  Image BBS's £ codes read (colours, clear, reverse) and saved back with them. Later: Image's whole-second £W and
-  Color 64 (open questions to the user), C-Net/DMBBS/Centipede codes (not found), a run on a real board.
+  Image BBS's £ codes read (colours, clear, reverse) and saved back with them. [x] Whole-second boards (2026-10-16,
+  boardswhole.go): FAME ~W, CNet {W} and Image 1.2's £W, marked "(whole seconds)". Later: Color 64 (open question
+  to the user), C-Net 64/DMBBS/Centipede codes (not found), a run on a real board.
 
 - [x] **The rest of other editors' files** (2026-10-16, icymach.go, psciown.go, othformats.go, petmate9.go,
   skypix.go): IcyDraw's PETSCII (every Commodore model), ATASCII and ST pages read and written (IcyDraw's engine
