@@ -481,7 +481,10 @@ func parseDur(b []byte) (*durArt, error) {
 					break
 				}
 				code, _ := uniCodeOf(r)
-				if !unicode.IsPrint(r) { // as durdraw: what is not printable is a space
+				if unicode.IsControl(r) || r == 0xAD || uniInvisible(r) {
+					// As durdraw: what does not print is a space. Not unicode.IsPrint: its
+					// tables are Go's version's, and Go 1.24 does not know Unicode 16's
+					// octants (U+1CD00...), so the same file read differently per build.
 					code = ' '
 				}
 				d.cells[y*w+x] = uniCell(code, 7)

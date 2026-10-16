@@ -126,10 +126,10 @@ func TestIGSIcyDrawPictures(t *testing.T) {
 		t.Fatalf("%d test files", len(files))
 	}
 	for _, f := range files {
-		if strings.Contains(f, "font_sizes") && !fontsOK {
-			continue
-		}
 		b, _ := os.ReadFile(f)
+		if !fontsOK && (strings.Contains(f, "font_sizes") || bytes.Contains(b, []byte("W>"))) {
+			continue // text needs the ST fonts (a download; CI has none)
+		}
 		pf, err := os.Open(strings.TrimSuffix(f, ".ig") + ".png")
 		if err != nil {
 			t.Fatal(err)
