@@ -1365,6 +1365,8 @@ type psciPage struct {
 	lower         bool
 	pal           [16]uint32 // the page's colours (cell order)
 	ice           bool
+	own           *psciOwn // a PC page's own Playscii charset and palette (psciown.go)
+	stPal         string   // an ST page's Playscii palette (its file's; psciown.go)
 }
 
 // psciNearest is the Playscii colour (1..) nearest to c.
@@ -1420,12 +1422,18 @@ func writePsci(docs []*Doc, holds []int, p psciPage) (out []byte, missed int) {
 				fg, bg = bg, fg
 			}
 			return psciTile{Char: float64(ch & 127), Fg: float64(fg), Bg: float64(bg)}
+		case "st": // pens as the nearest colours of the palette (psciown.go)
+			cols := psciPaletteColours(p.stPal)
+			return psciTile{Char: float64(ch), Fg: float64(psciPenColour(p.pal, cellFg(v), cols)), Bg: float64(psciPenColour(p.pal, cellBg(v), cols))}
 		case "amiga":
 			idx := psciAmigaIndex(ch)
 			if idx < 0 {
 				idx, missed = 0, missed+1
 			}
 			return psciTile{Char: float64(idx), Fg: float64(cellFg(v) + 1), Bg: float64(shownBg(v, p.ice) + 1)}
+		}
+		if p.own != nil && p.own.pal != nil {
+			return psciTile{Char: float64(ch), Fg: float64(p.own.index[cellFg(v)]), Bg: float64(p.own.index[shownBg(v, p.ice)])}
 		}
 		return psciTile{Char: float64(ch), Fg: float64(cellFg(v) + 1), Bg: float64(shownBg(v, p.ice) + 1)}
 	}
@@ -1438,10 +1446,18 @@ func writePsci(docs []*Doc, holds []int, p psciPage) (out []byte, missed int) {
 		}
 	case "atari":
 		f.Charset, f.Palette = "atari", "atari"
+	case "st":
+		f.Charset, f.Palette = "atari_st", p.stPal
 	case "amiga":
 		f.Charset, f.Palette = "amiga_topaz", "ansi"
 	default:
 		f.Charset, f.Palette = "dos", "ansi"
+		if p.own != nil { // the file's own charset and palette, by number as read (psciown.go)
+			f.Charset = p.own.charset
+			if p.own.pal != nil {
+				f.Palette = p.own.palette
+			}
+		}
 	}
 	for i, d := range docs {
 		hold := 100
@@ -1469,13 +1485,19 @@ func isPsci(b []byte) bool {
 
 // psciArt is a Playscii file read: its frames as pages of one type.
 type psciArt struct {
-	mode    string // "pc", "amiga", "c64" or "atari"
+	mode    string // "pc", "amiga", "c64", "atari" or "st"
+	stres   string // an ST page's resolution
 	machine string // a Commodore page's machine
 	lower   bool
 	docs    []*Doc
 	holds   []int
 	note    string
 	cpc     *cpcSetup // a CPC page's screen (cpc.go)
+	// Playscii's own charsets and palettes (psciown.go): what a PC page keeps, and
+	// the pictures to fetch first.
+	own                    *psciOwn
+	need                   []string
+	ownCharset, ownPalette string
 }
 
 // parsePsci reads a Playscii file; layers are put together (by z, visible only).
@@ -1512,6 +1534,9 @@ func parsePsci(b []byte) (*psciArt, error) {
 	case "commodore_pet":
 		art.mode, art.machine = "c64", "pet"
 		glyph = func(i int) (int, bool) { return psciPETIndex(i & 127), i < 128 }
+	case "atari_st": // the ST's font: glyph i is character i (psciown.go)
+		art.mode, art.stres = "st", psciSTRes(&f)
+		glyph = func(i int) (int, bool) { return i & 255, i >= 0 && i < 256 }
 	case "c64_petscii", "c64_edscii", "jpetscii":
 		art.mode, art.machine = "c64", "c64"
 		t := psciC64Sets[cs]
@@ -1544,19 +1569,44 @@ func parsePsci(b []byte) (*psciArt, error) {
 			}
 		}
 	default:
+		if s, ok := psciSets[cs]; ok { // a set of Playscii's: the page's own font (psciown.go)
+			art.mode, art.own = "pc", &psciOwn{charset: cs, palette: f.Palette, font: psciCharsetFont(cs)}
+			n := min(256, s.cols*s.rows)
+			glyph = func(i int) (int, bool) { return i & 255, i >= 0 && i < n }
+			if art.own.font == nil {
+				unknownCharset = cs
+			}
+			break
+		}
 		// A charset of a machine CharEdit has no page for: opened as a PC page with
 		// the glyph numbers as characters, never refused.
 		art.mode, unknownCharset = "pc", cs
 		glyph = func(i int) (int, bool) { return i & 255, i < 256 }
 	}
+	art.ownCharset, art.ownPalette, art.need = f.Charset, f.Palette, psciMissing(f.Charset, f.Palette)
 	// colour: a Playscii colour (1..) as the page's colour number.
 	pal, known := psciPalettes[f.Palette]
+	if !known { // one of Playscii's palettes fetched (psciown.go)
+		pal = psciPaletteColours(f.Palette)
+		known = pal != nil
+	}
+	if art.mode == "pc" && known && f.Palette != "ansi" && f.Palette != "ega" { // the page's own colours
+		if art.own == nil {
+			art.own = &psciOwn{charset: f.Charset, palette: f.Palette}
+		}
+		psciOwnColours(art.own, pal, &f)
+	}
 	pageCols := map[string][16]uint32{"pc": paletteByID("vga").colors, "amiga": paletteByID("vga").colors, "atari": atariPalette.colors}
+	if art.mode == "st" {
+		pageCols["st"] = paletteByID(stResByID(art.stres).palette).colors
+	}
 	colour := func(i int) int {
 		if i <= 0 {
 			return 0
 		}
 		switch {
+		case art.own != nil && art.own.pal != nil:
+			return art.own.colour[i]
 		case !known:
 			return (i - 1) & 15
 		case art.mode == "c64" && (f.Palette == "c64_original" || f.Palette == "c64_pepto"):
@@ -1693,6 +1743,9 @@ func parsePsci(b []byte) (*psciArt, error) {
 			for i, v := range d.cells {
 				d.cells[i] = makeCell(cellCh(v), 1, 0, 0)
 			}
+		}
+		if art.mode == "st" { // the resolution's width
+			d = d.withCols(stResByID(art.stres).cols)
 		}
 		art.docs = append(art.docs, d)
 		art.holds = append(art.holds, int(math.Round(math.Min(math.Max(fr.Delay, 0), 3600)*1000)))
@@ -1839,12 +1892,16 @@ func (a *App) loadEditor(b []byte, name, path, as string) bool {
 			})
 			return true
 		}
+		if a.psciNeeds(art, b, name, path, as) || a.psciMachineSetup(art, b, name, path, as) { // Playscii's pictures to fetch first, the ST font (psciown.go)
+			return true
+		}
 		note = art.note
 		a.srcKind, a.ownFont, a.ownLower, a.ownPal = "", nil, nil, nil
 		a.mode, a.ice = art.mode, true
 		if art.mode == "c64" {
 			a.screenMachine(art.machine)
 		}
+		a.psciOwnSetup(art.own)
 	case "pet", "pmjson":
 		if as != "auto" && as != "c64" {
 			return false
@@ -2014,7 +2071,7 @@ func (a *App) encodeEditor(fmtID string, d *Doc) (out []byte, ok bool, err error
 			}
 		}
 		var missed int
-		out, missed = writePsci(docs, holds, psciPage{mode: a.mode, machine: a.machine, lower: a.lower(), pal: a.pal, ice: a.ice})
+		out, missed = writePsci(docs, holds, psciPage{mode: a.mode, machine: a.machine, lower: a.lower(), pal: a.pal, ice: a.ice, own: a.psciOwnOf(), stPal: a.psciSTPalette()})
 		if missed > 0 {
 			a.msg(fmt.Sprintf("%d cells have characters Playscii's charset has not: written as spaces", missed))
 		}

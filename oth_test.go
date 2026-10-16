@@ -5,8 +5,18 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"image"
+	"image/color"
 	"image/png"
+	"math/bits"
 	"math/rand"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -487,4 +497,341 @@ func TestOthIcyRender(t *testing.T) {
 		checked++
 	}
 	t.Logf("%d pages drawn alike", checked)
+}
+
+// ---------------------------------------------------------------- Playscii's own charsets and palettes
+
+// othFPNG is a PNG of the picture.
+func othFPNG(t *testing.T, img image.Image) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// othFFakeSet registers a made-up Playscii charset (16 x 4 glyphs of 7 x 8, glyph i's rows
+// are i, i+1, ...) and palette (20 colours) and puts their pictures where fetched ones go.
+func othFFakeSet(t *testing.T) (glyphs []byte, colours []uint32) {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, 16*7, 4*8))
+	for i := 0; i < 64; i++ {
+		for r := 0; r < 8; r++ {
+			v := byte(i+r) << 1 // 7 pixels wide: bit 0 never set
+			glyphs = append(glyphs, v)
+			for b := 0; b < 7; b++ {
+				c := color.NRGBA{0, 0, 0, 255}
+				if v&(0x80>>b) != 0 {
+					c = color.NRGBA{200, 100, 50, 255}
+				}
+				img.Set(i%16*7+b, i/16*8+r, c)
+			}
+		}
+	}
+	set := othFPNG(t, img)
+	pimg := image.NewNRGBA(image.Rect(0, 0, 20, 2))
+	for x := 0; x < 20; x++ {
+		c := uint32(x*12+3)<<16 | uint32(255-x*10)<<8 | uint32(x*7)
+		colours = append(colours, c)
+		for y := 0; y < 2; y++ {
+			pimg.Set(x, y, color.NRGBA{uint8(c >> 16), uint8(c >> 8), uint8(c), 255})
+		}
+	}
+	pal := othFPNG(t, pimg)
+	sum := func(b []byte) string { s := sha1.Sum(b); return hex.EncodeToString(s[:]) }
+	psciSets["zzfake"] = psciSet{"Fake", 16, 4, sum(set)}
+	psciPaletteFiles["zzpal"] = sum(pal)
+	t.Cleanup(func() { delete(psciSets, "zzfake"); delete(psciPaletteFiles, "zzpal") })
+	for rel, b := range map[string][]byte{"charsets/zzfake.png": set, "palettes/zzpal.png": pal} {
+		os.MkdirAll(filepath.Dir(psciFilePath(rel)), 0o755)
+		if err := os.WriteFile(psciFilePath(rel), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return glyphs, colours
+}
+
+// othFPsci is a Playscii file of one frame and layer: tiles as (char, fg, bg).
+func othFPsci(charset, palette string, w int, tiles [][3]int) []byte {
+	var ts []string
+	for _, tl := range tiles {
+		ts = append(ts, fmt.Sprintf(`{"char":%d,"fg":%d,"bg":%d,"xform":0}`, tl[0], tl[1], tl[2]))
+	}
+	return []byte(fmt.Sprintf(`{"active_frame":0,"active_layer":0,"camera":[0,0,0],"charset":%q,"palette":%q,"width":%d,"height":%d,`+
+		`"frames":[{"delay":0.1,"layers":[{"z":0,"visible":1,"name":"l","tiles":[%s]}]}]}`, charset, palette, w, len(tiles)/w, strings.Join(ts, ",")))
+}
+
+// A Playscii file in one of Playscii's sets CharEdit has no page for opens on a PC page
+// with the set as its font and the palette as its colours (the 16 the art uses most of
+// a bigger one); Ctrl+S writes the same charset, palette, glyphs and colours.
+func TestOthPsciOwnSet(t *testing.T) {
+	a := testApp(t, "pc")
+	glyphs, colours := othFFakeSet(t)
+	r := rand.New(rand.NewSource(45))
+	var tiles [][3]int
+	for i := 0; i < 8*5; i++ { // colours 1-12 much, 13-20 once each at most
+		fg, bg := 1+r.Intn(12), 1+r.Intn(12)
+		if i < 8 {
+			bg = 13 + i
+		}
+		tiles = append(tiles, [3]int{r.Intn(64), fg, bg})
+	}
+	src := othFPsci("zzfake", "zzpal", 8, tiles)
+	path := filepath.Join(t.TempDir(), "own.psci")
+	os.WriteFile(path, src, 0o644)
+	a.loadBytes(src, "own.psci", path, "auto")
+	if a.mode != "pc" || a.srcKind != "psci" {
+		t.Fatalf("opened as %s (%s): %s", a.mode, a.srcKind, a.message)
+	}
+	f := a.ownInUse()
+	if f == nil || f.rows() != 8 {
+		t.Fatalf("no own font: %v", f)
+	}
+	for c := 0; c < 64; c++ {
+		for row := 0; row < 8; row++ {
+			if f.row(c, row) != glyphs[c*8+row] {
+				t.Fatalf("glyph %d row %d: %02x, want %02x", c, row, f.row(c, row), glyphs[c*8+row])
+			}
+		}
+	}
+	if a.ownPal == nil || a.paletteFor["pc"] != "file" {
+		t.Fatal("no own colours")
+	}
+	a.setPalette()
+	for i, tl := range tiles {
+		v := a.doc.cells[i]
+		if cellCh(v) != tl[0] || a.pal[cellFg(v)]&0xFFFFFF != colours[tl[1]-1] {
+			t.Fatalf("tile %d %v opened as %08x (fg %06x)", i, tl, v, a.pal[cellFg(v)])
+		}
+	}
+	a.doc.set(0, 0, makeCell(5, cellFg(a.doc.cells[0]), cellBg(a.doc.cells[0]), 0))
+	a.dirty = true
+	a.save(false)
+	b, _ := os.ReadFile(path)
+	var back psciFile
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.Charset != "zzfake" || back.Palette != "zzpal" {
+		t.Fatalf("saved as %s / %s", back.Charset, back.Palette)
+	}
+	for i, tl := range back.Frames[0].Layers[0].Tiles {
+		want := tiles[i]
+		if i == 0 {
+			want[0] = 5
+		}
+		if int(tl.Char) != want[0] || int(tl.Fg) != want[1] || want[2] <= 12 && int(tl.Bg) != want[2] {
+			t.Fatalf("tile %d saved as %+v, was %v", i, tl, want)
+		}
+		if want[2] > 12 && colours[int(tl.Bg)-1] != a.pal[cellBg(a.doc.cells[i])]&0xFFFFFF {
+			t.Fatalf("tile %d: background saved as %d", i, int(tl.Bg))
+		}
+	}
+}
+
+// A set that is not here yet is asked for, fetched (checked by SHA-1) and then the file opens with it.
+func TestOthPsciFetch(t *testing.T) {
+	a := testApp(t, "pc")
+	othFFakeSet(t)
+	set, _ := os.ReadFile(psciFilePath("charsets/zzfake.png"))
+	pal, _ := os.ReadFile(psciFilePath("palettes/zzpal.png"))
+	os.RemoveAll(filepath.Join(appDataDir(), "playscii"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/charsets/zzfake.png":
+			w.Write(set)
+		case "/palettes/zzpal.png":
+			w.Write(pal)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	old := psciURL
+	psciURL = func(rel string) string { return srv.URL + "/" + rel }
+	t.Cleanup(func() { psciURL = old })
+	src := othFPsci("zzfake", "zzpal", 2, [][3]int{{1, 2, 3}, {4, 5, 6}})
+	a.loadBytes(src, "f.psci", "", "auto")
+	req, ok := a.dialog.(*FontReq)
+	if !ok {
+		t.Fatalf("no question asked: %T %s", a.dialog, a.message)
+	}
+	if !strings.Contains(req.why, `"zzfake"`) || !strings.Contains(req.why, `"zzpal"`) {
+		t.Fatalf("the question: %s", req.why)
+	}
+	if err := req.fetch(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := req.load(); err != nil {
+		t.Fatal(err)
+	}
+	a.dialog = nil
+	req.after()
+	if a.mode != "pc" || a.ownInUse() == nil || a.ownPal == nil {
+		t.Fatalf("not opened with the set: %s", a.message)
+	}
+	// A wrong file from the server is refused.
+	os.RemoveAll(filepath.Join(appDataDir(), "playscii"))
+	set[len(set)-5] ^= 1
+	if err := fetchPsci([]string{"charsets/zzfake.png"}); err == nil {
+		t.Fatal("a changed picture was taken")
+	}
+}
+
+// Playscii's real pictures (CHARCOAL_PLAYSCII: a Playscii checkout, by default the one in
+// ~/.cache/charcoal-others): every set CharEdit knows gives a font whose letters are drawn,
+// every palette its colours; the SHA-1s are the files'.
+func TestOthPsciRealPictures(t *testing.T) {
+	dir := os.Getenv("CHARCOAL_PLAYSCII")
+	if dir == "" {
+		h, _ := os.UserHomeDir()
+		dir = filepath.Join(h, ".cache/charcoal-others/playscii")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "charsets")); err != nil {
+		t.Skip("no Playscii checkout in", dir)
+	}
+	testApp(t, "pc")
+	for rel := range psciRelAll() {
+		b, err := os.ReadFile(filepath.Join(dir, rel))
+		if err != nil {
+			t.Fatalf("%s: %v", rel, err)
+		}
+		if !sha1Is(b, psciSum(rel)) {
+			t.Fatalf("%s: SHA-1 is not the table's", rel)
+		}
+		os.MkdirAll(filepath.Dir(psciFilePath(rel)), 0o755)
+		os.WriteFile(psciFilePath(rel), b, 0o644)
+	}
+	for name, s := range psciSets {
+		f := psciCharsetFont(name)
+		if f == nil {
+			t.Fatalf("%s: no font", name)
+		}
+		// The letter A: the place .char gives it.
+		chars, _ := os.ReadFile(filepath.Join(dir, "charsets", name+".char"))
+		at := othFCharIndex(string(chars), 'A')
+		if at < 0 {
+			t.Fatalf("%s: no A in its map", name)
+		}
+		set := 0
+		for r := 0; r < f.rows(); r++ {
+			set += bits.OnesCount8(f.row(at, r))
+		}
+		if set < 6 {
+			t.Fatalf("%s: A (glyph %d of %dx%d) has %d pixels", name, at, s.cols, s.rows, set)
+		}
+	}
+	for name := range psciPaletteFiles {
+		if p := psciPaletteColours(name); len(p) < 2 {
+			t.Fatalf("palette %s: %d colours", name, len(p))
+		}
+	}
+	if p := psciPaletteColours("speccy"); len(p) != 15 {
+		t.Fatalf("speccy: %d colours (Playscii's log says 15)", len(p))
+	}
+	// A picture in the ZX81's set: opened with it, saved back with it.
+	a := testApp(t, "pc")
+	for rel := range psciRelAll() {
+		b, _ := os.ReadFile(filepath.Join(dir, rel))
+		os.MkdirAll(filepath.Dir(psciFilePath(rel)), 0o755)
+		os.WriteFile(psciFilePath(rel), b, 0o644)
+	}
+	src := othFPsci("speccy", "speccy", 3, [][3]int{{38, 2, 1}, {39, 3, 4}, {40, 15, 5}})
+	a.loadBytes(src, "zx81.psci", "", "auto")
+	if a.ownInUse() == nil || cellCh(a.doc.cells[0]) != 38 {
+		t.Fatalf("zx81: %s", a.message)
+	}
+	// Playscii's own art: all of it opens; new.psci (dos, ansi-240) with the 16 colours it uses.
+	files, _ := filepath.Glob(filepath.Join(dir, "*", "*.psci"))
+	more, _ := filepath.Glob(filepath.Join(dir, "games", "*", "*", "*.psci"))
+	for _, f := range append(files, more...) {
+		b, _ := os.ReadFile(f)
+		art, err := parsePsci(b)
+		if err != nil || len(art.need) > 0 {
+			t.Fatalf("%s: %v %v", f, err, art.need)
+		}
+		if filepath.Base(f) == "new.psci" && (art.own == nil || art.own.pal == nil || art.own.palette != "ansi-240") {
+			t.Fatalf("new.psci: %+v", art.own)
+		}
+	}
+	t.Logf("%d of Playscii's files open", len(files)+len(more))
+}
+
+// othFCharIndex is the place of a character in a Playscii .char map (charset.py).
+func othFCharIndex(text string, want rune) int {
+	var lines []string
+	for _, l := range strings.Split(text, "\n") {
+		if !strings.HasPrefix(l, "//") {
+			lines = append(lines, l)
+		}
+	}
+	i := 0
+	for _, l := range lines[2:] {
+		for _, c := range strings.TrimRight(l, "\r") {
+			if c == want {
+				return i
+			}
+			i++
+		}
+	}
+	return -1
+}
+
+// Playscii's ST font opens on an ST page: low for 40 columns, high for two colours, medium else.
+func TestOthPsciAtariST(t *testing.T) {
+	for _, c := range []struct {
+		w     int
+		cols  [][2]int
+		stres string
+	}{{40, [][2]int{{2, 1}}, "stlow"}, {80, [][2]int{{2, 1}, {1, 2}}, "sthigh"}, {80, [][2]int{{2, 1}, {3, 4}}, "stmed"}} {
+		var tiles [][3]int
+		for i := 0; i < c.w*2; i++ {
+			fb := c.cols[i%len(c.cols)]
+			tiles = append(tiles, [3]int{65 + i%26, fb[0], fb[1]})
+		}
+		art, err := parsePsci(othFPsci("atari_st", "ansi", c.w, tiles))
+		if err != nil || art.mode != "st" || art.stres != c.stres {
+			t.Fatalf("%d columns: %v %s %s", c.w, err, art.mode, art.stres)
+		}
+		d := art.docs[0]
+		if d.cols != stResByID(c.stres).cols || cellCh(d.cells[1]) != 66 {
+			t.Fatalf("%s: %d columns, %08x", c.stres, d.cols, d.cells[1])
+		}
+		pens := paletteByID(stResByID(c.stres).palette).colors
+		// ANSI red (2) on black (1): the ST's nearest pens.
+		if c.stres == "stlow" && (pens[cellFg(d.cells[0])]&0xFFFFFF != 0xFF0000 || pens[cellBg(d.cells[0])]&0xFFFFFF != 0) {
+			t.Fatalf("pens %d on %d", cellFg(d.cells[0]), cellBg(d.cells[0]))
+		}
+	}
+}
+
+// An ST page from Playscii saves back in the ST's font and its file's palette, and reads back the same.
+func TestOthPsciAtariSTSave(t *testing.T) {
+	a := testApp(t, "pc")
+	withFonts(t, true)
+	var tiles [][3]int
+	for i := 0; i < 40*4; i++ {
+		tiles = append(tiles, [3]int{i & 255, 1 + i%16, 1 + i/16%16})
+	}
+	src := othFPsci("atari_st", "ansi", 40, tiles)
+	path := filepath.Join(t.TempDir(), "st.psci")
+	os.WriteFile(path, src, 0o644)
+	a.loadBytes(src, "st.psci", path, "auto")
+	if a.mode != "st" || a.stres != "stlow" {
+		t.Fatalf("opened as %s %s: %s", a.mode, a.stres, a.message)
+	}
+	want := a.doc.clone()
+	a.dirty = true
+	a.save(false)
+	b, _ := os.ReadFile(path)
+	art, err := parsePsci(b)
+	if err != nil || art.mode != "st" || !strings.Contains(string(b), `"atari_st"`) || !strings.Contains(string(b), `"ansi"`) {
+		t.Fatalf("saved: %v %s", err, b[:min(len(b), 200)])
+	}
+	for i, v := range want.cells[:want.cols*want.rows] {
+		if w := art.docs[0].cells[i]; w != v {
+			t.Fatalf("cell %d %08x came back %08x", i, v, w)
+		}
+	}
 }
