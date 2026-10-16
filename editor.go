@@ -1566,9 +1566,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		if r := guessSTRes(b); r != "" {
 			a.stres = r
 		}
-	case a.codes != "" && !bytes.Contains(b, []byte("\x1b[")):
-		// Codes only: saved in them again. With ANSI escapes too, the file stays
-		// ANSI (the codes' colours become ANSI's); Save as offers the codes.
+	case a.codes != "":
+		// Saved in its codes again, also when it has ANSI escapes too (a Mystic
+		// file often has both): the board shows the codes; Save as has ANSI.
 		a.saveFmt = a.codes
 	case binary:
 		a.saveFmt = "bin"

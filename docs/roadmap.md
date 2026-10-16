@@ -115,6 +115,9 @@ against each platform's best editor. Each step says what it wins.
   HTML; PC/Amiga pages convert exactly in one undoable step. Later: wide (CJK, emoji) characters as two cells,
   durdraw's own 16-colour iCE backgrounds checked in durdraw's screen (its export cannot write them).
 
+- **BBS boards**: "Save for board X" (bbspause.go) writes the board's own colour codes as well as its pauses:
+  Mystic pipe codes, Synchronet Ctrl-A, PCBoard @X (the user said yes, 2026-10-16).
+
 ## Later
 
 - Collaboration in Moebius's protocol (IcyDraw and Moebius speak it).

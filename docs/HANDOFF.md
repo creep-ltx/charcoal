@@ -359,6 +359,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## BBS colour codes (2026-10-16, branch r1-bbscodes)
 
+- **The user's decisions (2026-10-16):** a file mixing codes and ANSI saves back in its codes; bit 7 as `|24`-`|31`
+  (the save counts cells Mystic 1.10 / Renegade will not show: `bbsLoss.bright`); a literal `|` as `|PI` (Mystic
+  first); detection stays strict (3+ codes; Open as for short files); "Save for board X" writing the board's own
+  colour codes: wanted, on the roadmap.
+
 - `bbscodes.go`: five kinds, ids = format ids = Open as values (`bbsCodeIDs`): `pipe` (|00-|31, |CL, |PI),
   `ctrla` (Synchronet Ctrl-A), `wwiv` (Ctrl-C hearts, |nn, |#n), `wildcat` (@BF@, @CLS@), `celerity` (|k..|W,
   |S). Reading: `codeTerm` wraps the PC `Term` and takes each kind's codes out of the byte stream before the
@@ -378,9 +383,8 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   hex digits or CLS, Celerity `|` before a code letter: the same colours written again right after it
   (`force`); Ctrl-A ☺ -> Ctrl-A A, 0x1A -> Ctrl-A z. Loss (`bbsLoss`): Celerity has no bit 7, WWIV cannot write ♥
   (a heart + printable byte is always a code there): spaces; the save's message says how many.
-- **Loading** (`loadBytes`): `bbsCodesKind` after the PCBoard/Avatar check, or Open as a kind. Codes only ->
-  `saveFmt` = the kind; with ANSI escapes too -> saveFmt stays ansi (the file stays viewable anywhere) and the
-  status line says Save as has the codes. Ctrl-A E sets the page's iCE. Save in another own format clears
+- **Loading** (`loadBytes`): `bbsCodesKind` after the PCBoard/Avatar check, or Open as a kind. `saveFmt` = the
+  kind, also with ANSI escapes in the file (the user's choice 2026-10-16: a Mystic file keeps its pipe codes). Ctrl-A E sets the page's iCE. Save in another own format clears
   `Tab.codes` (writeOut). Open as now also lists PCBoard and Avatar; the C64 entry is skipped (not cut off) when
   the ROMs are missing (`shown` in dialogs.go).
 - **Detection** rules (checked on the big check's 8479 files: only 13 WWIV ANSIs from 1990 with real hearts are

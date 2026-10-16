@@ -187,8 +187,9 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
 - **BBS colour codes** (PC pages, open and save): the codes boards turn into ANSI for their callers, as sysops
   keep menus and screens in them. Found by their bytes (and `.msg` / `.bbs` endings), also in files that mix
   them with ANSI escapes (common on Mystic); **Open as** picks one for any file, **Save as** writes each with the
-  shortest codes. A file of codes only saves back in them; one with ANSI escapes too saves as ANSI (Save as has
-  the codes). A board's code CharEdit cannot show (a pause, the caller's name, `|PO`, Ctrl-A `P`) stays on the
+  shortest codes. A file saves back in its codes, also one with ANSI escapes too (Save as has ANSI). Pipe codes
+  write bright backgrounds and blink as `|24`-`|31` (WWIV, Synchronet and IcyDraw show them, Mystic 1.10 and
+  Renegade do not: the save says how many cells), a `|` as Mystic's `|PI`. A board's code CharEdit cannot show (a pause, the caller's name, `|PO`, Ctrl-A `P`) stays on the
   page as text and is written back as it came, so it still works on the board.
 
   | Format | Codes | Read as |

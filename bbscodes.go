@@ -471,6 +471,7 @@ func (c *codeTerm) celerity(b []byte) int {
 type bbsLoss struct {
 	blink  int // cells with bit 7 (Celerity has no code for it)
 	hearts int // ♥ (Ctrl-C) characters written as spaces (WWIV reads them as colour codes)
+	bright int // pipe-code cells with bit 7, written |24-|31 (Mystic 1.10 and Renegade do not show it)
 }
 
 // writeBBSCodes gives the page in kind's codes: a code where the colours
@@ -514,6 +515,9 @@ func writeBBSCodes(kind string, d *Doc, clear, ice bool) ([]byte, bbsLoss) {
 			if kind == "celerity" && a&0x80 != 0 {
 				a &^= 0x80
 				loss.blink++
+			}
+			if kind == "pipe" && a&0x80 != 0 && (ice || cellCh(v) != 32) { // (blink on a space shows nothing)
+				loss.bright++
 			}
 			if a != attr {
 				out = appendCodes(kind, out, attr, a, ice)
@@ -638,6 +642,9 @@ func (l bbsLoss) note(kind string) string {
 	var parts []string
 	if l.blink > 0 {
 		parts = append(parts, fmt.Sprintf("%d blinking / bright-background cells lost it (%s have no code for it)", l.blink, bbsCodeName[kind]))
+	}
+	if l.bright > 0 {
+		parts = append(parts, fmt.Sprintf("%d cells have a bright background or blink: written |24-|31, which WWIV, Synchronet and IcyDraw show and Mystic 1.10 and Renegade do not", l.bright))
 	}
 	if l.hearts > 0 {
 		parts = append(parts, fmt.Sprintf("%d ♥ became spaces (WWIV reads Ctrl-C as a colour code)", l.hearts))
