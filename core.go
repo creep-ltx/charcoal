@@ -1264,12 +1264,18 @@ type attrs struct {
 //
 // With keep1A, a 0x1A character is written as itself: a SAUCE record will mark
 // where the art ends, so it cannot be taken for the end of the file.
+//
+// keep1A[2] writes the file for today's terminals, as Moebius's UTF-8 export
+// does: every character in UTF-8 (☺ ○ ◙ ← too: in UTF-8 they cannot be taken for
+// controls), every row in full and ended by LF, so the lines give the width
+// without a SAUCE record (fromUtf8 reads it back).
 func writeAnsi(d *Doc, amiga, colours, clear bool, keep1A ...bool) []byte {
 	raw1A := len(keep1A) > 0 && keep1A[0]
 	rawCtl := len(keep1A) > 1 && keep1A[1] && !amiga // keep1A[1]: 0x00, 0x07, 0x08, 0x09 as they are
+	utf := len(keep1A) > 2 && keep1A[2]
 	var out []byte
 	nl := "\r\n"
-	if amiga {
+	if amiga || utf {
 		nl = "\n"
 	}
 	cur := attrs{fg: 7}
@@ -1286,6 +1292,9 @@ func writeAnsi(d *Doc, amiga, colours, clear bool, keep1A ...bool) []byte {
 	rows := d.rows // the whole page, empty rows at the end too
 	for y := 0; y < rows; y++ {
 		last := d.lastCol(y)
+		if utf {
+			last = d.cols - 1
+		}
 		for x := 0; x <= last; x++ {
 			v := d.get(x, y)
 			if colours {
@@ -1320,6 +1329,17 @@ func writeAnsi(d *Doc, amiga, colours, clear bool, keep1A ...bool) []byte {
 				}
 			}
 			ch := byte(cellCh(v))
+			if utf {
+				switch {
+				case !amiga:
+					out = utf8.AppendRune(out, cp437[ch])
+				case ch < 0x20 || (ch >= 0x7F && ch < 0xA0):
+					out = append(out, ' ')
+				default:
+					out = utf8.AppendRune(out, rune(ch)) // Latin-1
+				}
+				continue
+			}
 			// Bytes a terminal would take as controls cannot be stored as glyphs:
 			// art editors (Moebius, PabloDraw) write ○ ◘ • and character 0 as they
 			// are, but a BBS terminal tabs, backs up and beeps on them. Only a file
@@ -1341,7 +1361,7 @@ func writeAnsi(d *Doc, amiga, colours, clear bool, keep1A ...bool) []byte {
 			}
 			out = append(out, ch)
 		}
-		if last < d.cols-1 {
+		if last < d.cols-1 || utf {
 			out = append(out, nl...)
 		}
 	}

@@ -119,7 +119,9 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
 - **PC page**: CP437 in the VGA font, CRLF line ends, blink or iCE colours, half-block painting, `.bin` files.
 - Both: cursor movement, erase, insert/delete lines and characters, save/restore cursor, SyncTERM's font switch
   (`CSI 0;n SP D`), SAUCE read and written (width, font name, title, author, group, iCE flag). Amiga or PC is guessed
-  from SAUCE and the bytes; "Open as" overrides. UTF-8 text files are read too.
+  from SAUCE and the bytes; "Open as" overrides. UTF-8 files are read too, and Save writes them in UTF-8 again
+  ("ANSI in UTF-8, for terminals": every row in full and ended by LF, no SAUCE record, as Moebius's UTF-8 export
+  and durdraw write them), so a terminal artist's file stays readable with `cat`.
 - **Atari page**: ATASCII (`.ata`, and `.txt` files recognised by their bytes): inverse characters, one
   background and one text colour for the screen, border; EOL line ends, ESC before control characters, cursor
   moves for animations. Width 38 (the screen editor's margins) or 40 (terminals) is guessed: a 39-40 character
@@ -212,7 +214,7 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
 - Undo/redo, play at modem speed; dropping a file on the window opens it.
 - **Safety**: pages with changes are kept aside every two minutes and offered back after a crash; saving over a
   file keeps the old one as `name.bak` (Settings); the Open requester lists the last 10 files.
-- **Save as**: ANSI, plain text, UTF-8, PC `.bin`, **XBin** (`.xb`, font and palette inside, so it looks the same in
+- **Save as**: ANSI, ANSI in UTF-8 (for terminals), plain text, UTF-8, PC `.bin`, **XBin** (`.xb`, font and palette inside, so it looks the same in
   any viewer; opens again too), PETSCII `.seq`, a **C64 program** (`.prg`: LOAD and RUN on a C64 or in VICE, a key
   in Petmate's form, so Petmate and Marq's PETSCII editor open it too; any .prg in that form opens), the **C array** of Marq's PETSCII editor and Petmate (`.c`), a
   **Petmate workspace** (`.petmate`), **PNG**

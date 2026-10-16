@@ -343,6 +343,18 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   work), a Unicode page's own fonts (Load a font... loads a 256-glyph font), PC fonts other than VGA for
   "VGA + Unifont", 9-pixel cells, CharView playing .dur frames.
 
+## UTF-8 files on PC and Amiga pages are saved in UTF-8 (2026-10-16, on next)
+
+- Before: a UTF-8 ANSI whose characters all fit CP437 opened as a PC page (right), but Ctrl+S wrote it in CP437,
+  so `cat` in a terminal showed garbage (*verified* on 0.1b7). Now `loadBytes` turns saveFmt "ansi" into "ansiutf8"
+  and "text" into "utf8" when the file was read as UTF-8 (`fromUTF8`).
+- "ansiutf8" = `writeAnsi(..., keep1A[2]=true)`: every cell as its CP437 (or Latin-1) character in UTF-8, control
+  glyphs too (☺ ○ ◙ ← cannot be taken for controls in UTF-8, so nothing becomes a space), every row in full and
+  ended by LF, colours as 1;3x/4x like the ANSI save, **no SAUCE** (durdraw's ANSI save writes none - *read* in its
+  saveAnsiFile; Moebius's UTF-8 export has none - its test files): the lines give the width. Moebius's UTF-8 test
+  files round-trip cell for cell (TestMoebiusRoundTrip), `utf8save_test.go` pins the save format.
+- Not done: a multi-frame page in ansiutf8 writes the shown frame only (the ANSI stream writers are CP437).
+
 ## BBS colour codes (2026-10-16, branch r1-bbscodes)
 
 - `bbscodes.go`: five kinds, ids = format ids = Open as values (`bbsCodeIDs`): `pipe` (|00-|31, |CL, |PI),

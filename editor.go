@@ -1554,6 +1554,11 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	default:
 		a.saveFmt = "ansi"
 	}
+	if fromUTF8 { // a file for today's terminals is saved for them again, not in CP437
+		if f, ok := map[string]string{"ansi": "ansiutf8", "text": "utf8"}[a.saveFmt]; ok {
+			a.saveFmt = f
+		}
+	}
 	if a.codes != "" {
 		a.msg(bbsOpenNote(a.codes, a.saveFmt))
 		if a.codes == "ctrla" && ctrlaUsesIce(b) {
@@ -2344,6 +2349,7 @@ type Format struct{ id, name, ext, modes string }
 
 var formats = []Format{
 	{"ansi", "ANSI (.ans)", ".ans", "amiga pc"},
+	{"ansiutf8", "ANSI in UTF-8, for terminals (.ans)", ".ans", "amiga pc"},
 	{"text", "Plain text, no colours (.asc)", ".asc", "amiga pc"},
 	{"seq", "PETSCII stream (.seq)", ".seq", "c64"},
 	{"ata", "ATASCII (.ata)", ".ata", "atari"},
@@ -2472,6 +2478,10 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	switch fmtID {
 	case "ansi":
 		return withSauce(writeAnsi(d, am, true, info.clear, info.writeSauce, info.writeSauce && a.rawCtl), 1), nil
+	case "ansiutf8":
+		// No SAUCE record: a terminal would show it, and durdraw and Moebius's UTF-8
+		// export write none either; the lines give the width.
+		return writeAnsi(d, am, true, info.clear, false, false, true), nil
 	case "text":
 		return withSauce(writeAnsi(d, am, false, false, info.writeSauce, info.writeSauce && a.rawCtl), 0), nil
 	case "seq":
