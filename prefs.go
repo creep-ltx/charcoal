@@ -70,11 +70,13 @@ func loadPrefs() {
 	}
 	a.defFont = map[string]string{"amiga": "topaz1p", "pc": "vga", "c64": "c64upper", "atari": "atari", "st": "st8x8", "zx": "zx", "tt": "zx"}
 	a.defFont["uni"] = "univga"
+	a.defFont["mt"], a.defFont["vd"] = "minitel", "zx"
 	for k, v := range prefs.Font {
 		a.defFont[k] = v
 	}
 	a.defPalette = map[string]string{"amiga": "amiga", "pc": "vga", "c64": "c64", "atari": "atari", "st": "st", "zx": "zx", "tt": "teletext"}
 	a.defPalette["uni"] = "vga"
+	a.defPalette["mt"], a.defPalette["vd"] = "minitelgrey", "teletext"
 	for k, v := range prefs.Palette {
 		a.defPalette[k] = v
 	}

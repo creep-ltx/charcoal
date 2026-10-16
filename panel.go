@@ -12,13 +12,16 @@ import "fmt"
 func (a *App) drawTools(u *UI, x, y, w, cols int) int {
 	i := 0
 	for _, t := range tools {
-		if t.id == "half" && !a.pc() && !a.tt() && !a.uni() {
+		if t.id == "half" && !a.pc() && !a.tt() && !a.uni() && !a.mt() {
 			continue
 		}
 		r := Rect{x + (i%cols)*(w+4), y + (i/cols)*(smallH+4), w, smallH}
 		name, hint := t.name, t.hint
 		if t.id == "half" && a.tt() {
 			name, hint = "Sixel", "Sixels: left sets, right clears one of a cell's 2x3 graphics pixels (the row needs a graphics colour to its left)"
+		}
+		if t.id == "half" && a.mt() {
+			name, hint = "Sixel", "Mosaic blocks: left sets one of a cell's 2x3 blocks in the colour, right clears it"
 		}
 		if u.button(r, name, a.tool == t.id, hint) != nil {
 			a.start = false
@@ -47,6 +50,9 @@ func (a *App) drawTools(u *UI, x, y, w, cols int) int {
 	}
 	if a.zx() {
 		a.flash = toggle("Flash", a.flash, "Flash: new cells swap ink and paper twice a second")
+	}
+	if a.mt() {
+		a.drawMTToggles(toggle) // minitel_ui.go
 	}
 	if a.tt() {
 		a.showCodes = toggle("Codes", a.showCodes, "Show the attribute codes' names in their cells (T text colour, G graphics colour, D double, F flash ...)")
@@ -181,7 +187,11 @@ func (a *App) drawColours(u *UI, x, y, perRow int) int {
 		return a.drawCPCColours(u, x, y, perRow)
 	}
 	fb := u.fb
-	for i := 0; i < 16; i++ {
+	n := 16
+	if a.mt() {
+		n = 8 // the Minitel's eight (minitel.go)
+	}
+	for i := 0; i < n; i++ {
 		r := Rect{x + i%perRow*20, y + i/perRow*26, 18, 18}
 		fb.fill(r, a.pal[i])
 		fb.frame(r, cEdgeDk)
@@ -204,6 +214,9 @@ func (a *App) drawColours(u *UI, x, y, perRow int) int {
 			fb.fill(Rect{r.x + 4, r.y + r.h + 3, r.w - 8, 2}, cHi)
 		}
 		u.setHint(r, fmt.Sprintf("Colour %d: #%06X. Left: %s, right: %s, Shift+click: change it", i, a.pal[i]&0xFFFFFF, fgName, bgName))
+		if a.mt() {
+			u.setHint(r, fmt.Sprintf("Colour %d: %s. Left: colour, right: background (of mosaics, and of the zone a space starts)", i, mtColourNames[i]))
+		}
 		if c := u.take(r); c != nil {
 			switch {
 			case c.shift:
@@ -226,7 +239,7 @@ func (a *App) drawColours(u *UI, x, y, perRow int) int {
 	if a.uni() {
 		a.drawUniColours(u, x+16*20+6, y+1, 0, false)
 	}
-	return y + (15/perRow+1)*26 - 8
+	return y + ((n-1)/perRow+1)*26 - 8
 }
 
 // drawBrush draws the brush, the Swap button and the brush's numbers at

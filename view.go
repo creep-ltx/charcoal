@@ -27,6 +27,10 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 		a.drawUniCell(fb, px, py, z, v)
 		return
 	}
+	if a.mt() { // a Minitel cell on its own (minitel.go)
+		a.drawMTCell(fb, px, py, z, mtCellAlone(v), true)
+		return
+	}
 	f, H := a.font(), a.cellH()
 	skip := 1
 	if H == 8 {
@@ -154,6 +158,21 @@ func (a *App) paintCells(fb *FB, x0, y0, z int, get func(x, y int) uint32, w, h 
 			row := ttDecode(d, y, a.ttBlack())
 			for x := 0; x < w; x++ {
 				a.drawTTCell(fb, x0+x*ttW*z, y0+y*ttH*z, z, row[x], false)
+			}
+		}
+		return
+	}
+	if a.mt() { // Minitel rows too: a letter's background comes from its zone
+		d := newDoc(w, h)
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				d.cells[y*w+x] = get(x, y)
+			}
+		}
+		for y := 0; y < h; y++ {
+			row := mtDecode(d, y)
+			for x := 0; x < w; x++ {
+				a.drawMTCell(fb, x0+x*mtW*z, y0+y*mtH*z, z, row[x], false)
 			}
 		}
 		return
@@ -519,7 +538,7 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			a.setMode(modeOrder[i])
 		})
 	} else {
-		modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti. CPC: Amstrad CPC, .bin. Uni: Unicode (terminals, IRC; a PC or Amiga page is converted, undoably), UTF-8 ANSI, .dur, .irc."
+		modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti. CPC: Amstrad CPC, .bin. MT: Minitel, .vdt. VD: Viewdata (Prestel, Telstar), .cpt, .bin, Telstar .json. Uni: Unicode (terminals, IRC; a PC or Amiga page is converted, undoably), UTF-8 ANSI, .dur, .irc."
 		for _, m := range modeOrder {
 			label := modeNames[m]
 			if m == "cpc" {
@@ -536,6 +555,9 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			}
 			if m == "tt" {
 				label = "TT"
+			}
+			if m == "mt" || m == "vd" {
+				label = map[string]string{"mt": "MT", "vd": "VD"}[m]
 			}
 			if u.button(fl.place(buttonW(label)), label, a.mode == m && !a.start, modeHint) != nil {
 				a.start = false
@@ -640,10 +662,11 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 		fl.gap()
 	}
 	switch {
-	case a.tt():
-		r := fl.place(textW("40 x 25") + 8)
-		fb.text(r.x+4, r.y+3, "40 x 25", cText)
-		u.setHint(r, "A teletext page")
+	case a.tt() || a.mt():
+		size := fmt.Sprintf("40 x %d", a.maxRows())
+		r := fl.place(textW(size) + 8)
+		fb.text(r.x+4, r.y+3, size, cText)
+		u.setHint(r, map[string]string{"tt": "A teletext page", "vd": "A Viewdata frame", "mt": "A Minitel screen: row 0 is the status row"}[a.mode])
 	case a.zx():
 		r := fl.place(textW("32 x 24") + 8)
 		fb.text(r.x+4, r.y+3, "32 x 24", cText)
@@ -816,6 +839,13 @@ func (a *App) drawPage(u *UI, id string) {
 			}
 			continue
 		}
+		if a.mt() { // so is a Minitel row: its zones
+			row := mtDecode(a.doc, y)
+			for x := x0; x < x1; x++ {
+				a.drawMTCell(fb, ox+x*colPx, oy+y*rowPx, z, row[x], a.showCodes)
+			}
+			continue
+		}
 		for x := x0; x < x1; x++ {
 			a.drawCell(fb, ox+x*colPx, oy+y*rowPx, z, a.doc.get(x, y))
 		}
@@ -854,10 +884,13 @@ func (a *App) drawPage(u *UI, id string) {
 	if a.hover != nil && a.float == nil && a.tool != "type" && a.tool != "select" && a.playing == nil && viewer == nil {
 		r := cell(a.hover.x, a.hover.y, 1, 1)
 		halfTool := a.tool == "half" || (a.tool == "shape" && a.styleNow() == "half")
-		if halfTool && a.tt() { // the sixel under the mouse
+		if halfTool && (a.tt() || a.mt()) { // the sixel under the mouse
 			r.w /= 2
 			r.x += a.hover.sx * r.w
 			top := []int{0, 6, 14, 20}
+			if a.mt() {
+				top = []int{0, 3, 7, 10}
+			}
 			r.y, r.h = r.y+top[a.hover.sy]*z, (top[a.hover.sy+1]-top[a.hover.sy])*z
 		} else if halfTool {
 			r.h /= 2
@@ -962,7 +995,7 @@ func (a *App) pagePress(c *Click) {
 		}
 	case "half":
 		a.pushUndo()
-		if a.tt() { // teletext: sixels on (left) or off (right)
+		if a.tt() || a.mt() { // teletext and Minitel: sixels on (left) or off (right)
 			gx, gy := p.x*2+p.sx, p.y*3+p.sy
 			if c.shift && a.last != nil {
 				line(a.last.x, a.last.y, gx, gy, func(x, y int) { a.sixelSym(x, y, c.button != 3) })
@@ -1020,7 +1053,7 @@ func (a *App) pageMotion(mx, my int) {
 		a.shapeMotion(p)
 	case a.selecting:
 		a.sel.x1, a.sel.y1 = p.x, p.y
-	case a.tool == "half" && a.tt():
+	case a.tool == "half" && (a.tt() || a.mt()):
 		gx, gy := p.x*2+p.sx, p.y*3+p.sy
 		on := a.button != 3
 		if a.last != nil {
@@ -1158,7 +1191,7 @@ func (a *App) drawStatus(u *UI, r Rect) {
 			x = fb.text(x+digitsW(2), y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 		}
 	}
-	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum", "tt": "Teletext", "uni": "Unicode"}[a.mode]
+	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum", "tt": "Teletext", "uni": "Unicode", "mt": "Minitel", "vd": "Viewdata"}[a.mode]
 	if a.cpc() {
 		set = fmt.Sprintf("Amstrad CPC mode %d", a.cpcSet.mode)
 	}

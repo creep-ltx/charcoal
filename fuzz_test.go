@@ -61,6 +61,14 @@ func FuzzParsers(f *testing.F) {
 		f.Add(out)
 		f.Add([]byte("\x04\x00\x1c\x01\x02\x02\x1f\x05\x05\x01\x01\x19A12345678\x1a\x01\x02\x03\x04\x0b\x0bX"))
 	}
+	{ // Minitel and Viewdata (minitel.go, viewdata.go)
+		d := newMTDoc()
+		d.cells[45] = makeCell('A', 3, 0, mtDW|mtDH)
+		f.Add(mtWrite(d))
+		f.Add([]byte("\x0c\x1f\x42\x45\x1b\x41H\x19\x42e\x0e\x1b\x54\x7f\x12\x43\x1b[2;5H\x1b[3P\x1f\x40\x41AB\x0a\x1f\x23 x\x1f\x41\x41"))
+		f.Add(writeVDStream(newVDDoc(), true))
+		f.Add([]byte(`{"pid": {}, "content": {"data": "\u001bAx\r\ny", "type": "rawV"}}`))
+	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		check := func(name string, run func() []*Doc) {
 			start := time.Now()
@@ -146,6 +154,16 @@ func FuzzParsers(f *testing.F) {
 			return nil
 		})
 		check("cpc stream", func() []*Doc { c := newCPCScreen(); c.print(b, false); return one(c.d) })
+		check("vdt", func() []*Doc { return parseVDT(b) })
+		if pages := parseVDT(b); len(pages) > 0 { // whatever a stream shows, CharEdit's stream shows it again
+			p := pages[len(pages)-1]
+			if back := parseVDT(mtWrite(p)); len(back) != 1 || mtFDiff(mtFull(p), back[0]) != "" {
+				t.Fatalf("vdt written again: %s", mtFDiff(mtFull(p), back[len(back)-1]))
+			}
+		}
+		check("viewdata stream", func() []*Doc { return parseVDStream(b) })
+		check("viewdata bin", func() []*Doc { return one(parseVDBin(b)) })
+		check("telstar", func() []*Doc { d, _ := parseTelstar(b); return one(d) })
 		for _, mode := range []string{"pc", "c64", "atari", "st"} {
 			docs, holds, _ := splitStream(b, mode, 40, false, stResolutions[0], true, 14400)
 			total := 0

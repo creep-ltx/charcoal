@@ -213,6 +213,15 @@ func (a *App) mirrorCell(v uint32, fx, fy bool) uint32 {
 	if a.tt() || (!fx && !fy) {
 		return v
 	}
+	if a.mt() && mtMosaic(v) { // a mosaic's blocks mirrored
+		if fx {
+			v = v&^255 | uint32(ttSixelFlip(cellCh(v), false))
+		}
+		if fy {
+			v = v&^255 | uint32(ttSixelFlip(cellCh(v), true))
+		}
+		return v
+	}
 	if a.uni() {
 		c := uniCode(v)
 		if fx {
@@ -293,7 +302,7 @@ func (a *App) shadeSteps() []int {
 		return []int{32, '.', ':', '+', '#', 0x8F} // the full block graphic
 	case "cpc":
 		return []int{32, 0x90, 0xCF, 0x8F} // the dot, the checkerboard, the full block
-	case "tt":
+	case "tt", "vd", "mt":
 		return nil
 	}
 	return []int{32, '.', ':', '+', '#'} // Amiga, ST
@@ -401,7 +410,7 @@ func (a *App) shapeStyles() ([]string, []string) {
 		return []string{"brush", "single"}, []string{"Brush", "Box lines"}
 	case a.uni():
 		return []string{"brush", "single", "double", "round", "heavy", "half"}, []string{"Brush", "Single lines", "Double lines", "Rounded lines", "Heavy lines", "Half blocks"}
-	case a.tt():
+	case a.tt(), a.mt():
 		return []string{"brush", "half"}, []string{"Brush", "Sixels"}
 	}
 	return []string{"brush"}, []string{"Brush"}
@@ -420,7 +429,7 @@ func (a *App) styleNow() string {
 // cells (PC) or sixels (teletext).
 func (a *App) shapeUnits(p Hover) (int, int) {
 	if a.styleNow() == "half" {
-		if a.tt() {
+		if a.tt() || a.mt() {
 			return p.x*2 + p.sx, p.y*3 + p.sy
 		}
 		return p.x, p.y*2 + p.half
@@ -459,7 +468,7 @@ func (a *App) drawShapeTo(x, y int) {
 	erase := f[2] == 3
 	pts := shapePoints(a.shape, f[0], f[1], x, y, a.shapeFill)
 	switch {
-	case style == "half" && a.tt():
+	case style == "half" && (a.tt() || a.mt()):
 		for _, p := range pts {
 			a.sixelSym(p.x, p.y, !erase)
 		}

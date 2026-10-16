@@ -473,6 +473,9 @@ func (a *App) convertFromMachine() {
 		n.uni = true
 		for i, v := range d.cells[:d.rows*d.cols] {
 			r := runeOf(cellCh(v))
+			if from == "mt" { // a Minitel mosaic is its blocks
+				r = mtRune(mtBrushOf(v))
+			}
 			if r < 0x20 {
 				r = ' '
 			}
@@ -510,8 +513,8 @@ func (a *App) restoreUniMode(m string) {
 	}
 	a.mode = m
 	a.saveFmt = map[bool]string{true: "uniansi", false: "ansi"}[m == "uni"]
-	if m == "c64" || m == "atari" || m == "st" || m == "zx" || m == "tt" {
-		a.saveFmt = map[string]string{"c64": "seq", "atari": "ata", "st": "vt52", "zx": "scr", "tt": "tti"}[m]
+	if m == "c64" || m == "atari" || m == "st" || m == "zx" || m == "tt" || m == "mt" || m == "vd" {
+		a.saveFmt = map[string]string{"c64": "seq", "atari": "ata", "st": "vt52", "zx": "scr", "tt": "tti", "mt": "vdt", "vd": "vdcpt"}[m]
 	}
 	a.applyMode()
 }

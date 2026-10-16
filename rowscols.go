@@ -14,12 +14,14 @@ func (a *App) emptyCell() uint32 {
 		return makeCell(0x20, 0, 0, 0)
 	case a.cpc():
 		return cpcBlank()
+	case a.mt():
+		return mtBlank
 	}
 	return blank
 }
 
 // fixedHeight: a Spectrum screen and a teletext page have the rows they have.
-func (a *App) fixedHeight() bool { return a.zx() || a.tt() || a.cpc() }
+func (a *App) fixedHeight() bool { return a.zx() || a.tt() || a.cpc() || a.mt() }
 
 // freeWidth: only Amiga and PC pages can be any width.
 func (a *App) freeWidth() bool { return a.amiga() || a.pc() || a.uni() }

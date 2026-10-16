@@ -1,0 +1,4 @@
+minitel_font.go is generated (tools/minitel-font.py) from Minitel.sfd of Minitel-Canvas
+(https://github.com/Zigazou/Minitel-Canvas, commit 92f912a, 2014), the Minitel's characters drawn by
+Frédéric Bisson, dedicated to the public domain (CC0 1.0 Universal, the repository's LICENSE).
+Changed here: 0x7E is drawn as the STUM 1B's table shows it (a bar at the top), 0x7F as the full block.

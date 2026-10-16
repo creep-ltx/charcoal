@@ -87,7 +87,7 @@ func main() {
 	mode := prefs.Mode // the last page type, if it can be had without a download
 	switch {
 	case mode == "c64" && a.hasC64, mode == "st" && hasSTFont():
-	case mode == "pc", mode == "atari", mode == "zx", mode == "tt", mode == "cpc":
+	case mode == "pc", mode == "atari", mode == "zx", mode == "tt", mode == "cpc", mode == "mt", mode == "vd":
 	case mode == "uni":
 	default:
 		mode = "amiga"

@@ -116,6 +116,8 @@ func init() {
 			machine("ZX Spectrum", "zx"),
 			machine("Teletext", "tt"),
 			machine("Amstrad CPC", "cpc"),
+			machine("Minitel", "mt"),
+			machine("Viewdata", "vd"),
 			machine("Unicode (terminals, IRC)", "uni"),
 			{label: "Convert to Unicode", action: "convert_unicode"},
 			menuSep,

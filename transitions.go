@@ -334,8 +334,10 @@ func scanKey(pat, cols, rows int, asp float64) func(x, y int) [3]float64 {
 // mosaics count (the codes are always there: they colour the row).
 func usedCell(mode string, v, e uint32) bool {
 	switch mode {
-	case "tt":
+	case "tt", "vd":
 		return v&0x7F > 0x20
+	case "mt": // a cell that is not the cleared screen's black mosaic space
+		return v != mtBlank
 	case "atari", "c64": // the character is all a cell has (a C64 space shows no colour)
 		return v&255 != e&255
 	case "zx":
@@ -1383,6 +1385,8 @@ func (a *App) typeCursor(v uint32) uint32 {
 		return makeCell(219, 7, cellBg(v)&7, 0)
 	case a.tt():
 		return v&^0x7F | 0x7F // the solid block
+	case a.mt():
+		return makeCell(0x7F, cellFg(v)|7, 0, 0)
 	}
 	return makeCell('_', 15&max(7, cellFg(v)), cellBg(v), 0)
 }

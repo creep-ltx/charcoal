@@ -149,7 +149,7 @@ func parseFontFile(name string, b []byte, mode string, cur *Font) (up, low *Font
 			"atari": "Atari font (1024 bytes)", "zx": "Spectrum character set (768 bytes) or UDGs (168 bytes)"}[mode])
 	}
 	switch mode {
-	case "st", "tt", "cpc":
+	case "st", "tt", "cpc", "mt", "vd":
 		return nil, nil, fmt.Errorf("an %s page keeps its own font", modeNames[mode])
 	case "uni":
 		return nil, nil, fmt.Errorf("a Unicode page draws with Unifont (and VGA)")

@@ -91,6 +91,8 @@ func defaultFkeys() map[string][][]int {
 		"tt":    ttFkeys,
 		"uni":   uniFkeys,
 		"cpc":   cpcFkeys,
+		"vd":    ttFkeys,
+		"mt":    mtFkeys,
 	}
 }
 
@@ -208,10 +210,13 @@ type App struct {
 	fg, bg, brush int
 	ital, under   bool
 	rev, insert   bool
-	flash         bool // ZX Spectrum: new cells flash
-	showCodes     bool // teletext: show the attribute codes' names in their cells
-	ttMeta        int  // teletext: edit.tf's page digit (bits 0-2 character set, bit 3 codes 0 and 16 are black)
-	playSpeed     int  // frames play at speeds[playSpeed] (0: 1x)
+	flash         bool   // ZX Spectrum: new cells flash
+	mtAttr        uint32 // Minitel: flash, inverse, underline (separated) and concealing that new cells get (minitel_ui.go)
+	mtSize        int    // Minitel: the size letters are typed in (0 normal, 1 double width, 2 double height, 3 double size)
+	mtSizeShown   bool   // the note on big letters was shown
+	showCodes     bool   // teletext: show the attribute codes' names in their cells
+	ttMeta        int    // teletext: edit.tf's page digit (bits 0-2 character set, bit 3 codes 0 and 16 are black)
+	playSpeed     int    // frames play at speeds[playSpeed] (0: 1x)
 	clip          *Block
 	clipText      string
 	fset, factive int
@@ -250,7 +255,7 @@ func (a *App) c64() bool   { return a.mode == "c64" }
 func (a *App) atari() bool { return a.mode == "atari" }
 func (a *App) st() bool    { return a.mode == "st" }
 func (a *App) zx() bool    { return a.mode == "zx" }
-func (a *App) tt() bool    { return a.mode == "tt" }
+func (a *App) tt() bool    { return a.mode == "tt" || a.mode == "vd" } // teletext, and Viewdata (viewdata.go)
 
 // ttBlack: does the page draw codes 0 and 16 black (edit.tf's own choice)?
 func (a *App) ttBlack() bool { return a.ttMeta&8 != 0 }
@@ -259,6 +264,9 @@ func (a *App) ttBlack() bool { return a.ttMeta&8 != 0 }
 func (a *App) cellW() int {
 	if a.tt() {
 		return ttW
+	}
+	if a.mt() {
+		return mtW
 	}
 	if a.pc() && a.ninePx() {
 		return 9 // VGA's 9-dot cells (SAUCE letter spacing)
@@ -293,6 +301,9 @@ func (a *App) font() *Font {
 	}
 	if a.tt() {
 		return ttFont
+	}
+	if a.mt() {
+		return mtFont
 	}
 	if a.c64() {
 		fam := a.mach().family
@@ -342,6 +353,9 @@ func (a *App) cellH() int {
 	if a.tt() {
 		return ttH
 	}
+	if a.mt() {
+		return mtH
+	}
 	if f := a.font(); (a.pc() || a.amiga()) && f.h > 0 {
 		return f.h // a font of 8 or 14 rows
 	}
@@ -373,6 +387,9 @@ func (a *App) cell(ch int) uint32 {
 	if a.tt() {
 		return makeCell(ch&0x7F, 0, 0, 0)
 	}
+	if a.mt() {
+		return mtCellOf(ch, a.fg, a.bg, a.mtAttr)
+	}
 	if a.zx() {
 		return zxCell(ch, a.fg, a.bg, a.fg > 7 || a.bg > 7, a.flash)
 	}
@@ -395,7 +412,7 @@ func (a *App) brushCell() uint32 {
 	if a.tt() {
 		return makeCell(a.brush&0x7F, 0, 0, 0)
 	}
-	if a.zx() {
+	if a.zx() || a.mt() {
 		return a.cell(a.brush)
 	}
 	if a.atari() {
@@ -453,6 +470,9 @@ func (a *App) setPalette() {
 	if a.tt() && p.id != "custom" {
 		p = teletextPalette
 	}
+	if a.mt() && p != minitelPalette && p.id != "custom" {
+		p = minitelGreyPalette
+	}
 	if a.st() && p.id != "custom" { // the ST's colours are the resolution's
 		p = paletteByID(a.res().palette)
 	}
@@ -470,6 +490,9 @@ func (a *App) printable(c int) bool {
 	}
 	if a.tt() {
 		return c < 0x80
+	}
+	if a.mt() {
+		return mtPrintable(c)
 	}
 	if a.zx() {
 		return c >= 32 && c < 165
@@ -489,6 +512,9 @@ func (a *App) charToByte(r rune) int {
 	}
 	if a.tt() {
 		return ttFromRune(r)
+	}
+	if a.mt() {
+		return mtFromRune(r)
 	}
 	if a.zx() {
 		return zxFromRune(r)
@@ -536,6 +562,9 @@ func (a *App) runeOf(c int) rune {
 	}
 	if a.tt() {
 		return ttRune(c)
+	}
+	if a.mt() {
+		return mtRune(c)
 	}
 	return byteRune(c, a.amiga())
 }
@@ -646,9 +675,9 @@ func (a *App) doRedo() {
 // teletext page 25, every other page as many as the page size limit allows.
 func (a *App) maxRows() int {
 	switch {
-	case a.zx():
+	case a.zx(), a.vd():
 		return 24
-	case a.tt(), a.cpc():
+	case a.tt(), a.cpc(), a.mt():
 		return 25
 	}
 	return maxRowsFor(a.doc.cols)
@@ -678,8 +707,12 @@ func (a *App) typeByte(b int) {
 			d.set(x, a.cy, d.get(x-1, a.cy))
 		}
 	}
-	a.setCell(a.cx, a.cy, a.cell(b))
-	a.cx++
+	if a.mt() {
+		a.mtType(b) // big letters take two or four cells (minitel_ui.go)
+	} else {
+		a.setCell(a.cx, a.cy, a.cell(b))
+		a.cx++
+	}
 	if a.cx >= d.cols {
 		a.cx, a.cy = 0, a.cy+1
 	}
@@ -792,6 +825,10 @@ func (a *App) paintOne(x, y, button int, fx, fy bool) {
 
 // paintSixel sets (on) or clears one of a teletext cell's 2x3 sixels; gx, gy count sixels.
 func (a *App) paintSixel(gx, gy int, on bool) {
+	if a.mt() {
+		a.mtPaintSixel(gx, gy, on)
+		return
+	}
 	x, y := gx/2, gy/3
 	if x < 0 || y < 0 || x >= a.doc.cols || y >= a.doc.rows {
 		return
@@ -883,6 +920,10 @@ func (a *App) pick(x, y int) {
 		a.uniPick(v)
 		return
 	}
+	if a.mt() {
+		a.mtPick(v)
+		return
+	}
 	a.brush = cellCh(v)
 	if !a.atari() {
 		a.fg = cellFg(v)
@@ -894,7 +935,7 @@ func (a *App) pick(x, y int) {
 }
 
 func (a *App) setTool(t string) {
-	if t == "half" && !a.pc() && !a.tt() && !a.uni() {
+	if t == "half" && !a.pc() && !a.tt() && !a.uni() && !a.mt() {
 		t = "draw"
 	}
 	a.tool = t
@@ -905,8 +946,8 @@ func (a *App) setTool(t string) {
 
 // toolKey picks a tool from the keyboard and says which.
 func (a *App) toolKey(t string) {
-	if t == "half" && !a.pc() && !a.tt() {
-		a.msg("The Half tool is for PC pages, the Sixel tool for teletext pages")
+	if t == "half" && !a.pc() && !a.tt() && !a.mt() {
+		a.msg("The Half tool is for PC pages, the Sixel tool for teletext and Minitel pages")
 		return
 	}
 	a.start = false // a tool means drawing: on the page of the last used type
@@ -914,7 +955,7 @@ func (a *App) toolKey(t string) {
 	for _, tl := range tools {
 		if tl.id == t {
 			name := tl.name
-			if t == "half" && a.tt() {
+			if t == "half" && (a.tt() || a.mt()) {
 				name = "Sixel"
 			}
 			a.msg(name + " tool")
@@ -970,6 +1011,8 @@ func (a *App) nColours(bg bool) int {
 	switch {
 	case a.tt():
 		return 0
+	case a.mt():
+		return 8
 	case a.st():
 		return a.res().colours
 	case a.cpc():
@@ -1236,7 +1279,7 @@ func (a *App) reparse() {
 	if a.reparseUni() {
 		return
 	}
-	if a.reparseEditor() || a.reparseCPC() {
+	if a.reparseEditor() || a.reparseCPC() || a.reparseVideotex() {
 		return
 	}
 	switch a.srcKind {
@@ -1288,6 +1331,9 @@ func (a *App) reparse() {
 		default:
 			a.doc = parseTTI(a.source)
 		}
+		if a.vd() { // a teletext file read as Viewdata: 24 rows
+			a.vdCut()
+		}
 	} else if a.zx() {
 		d, approx := parseSCRFont(a.source, a.font())
 		a.doc = d
@@ -1336,6 +1382,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		return
 	}
 	if a.loadCPC(b, name, path, as) { // Amstrad CPC .bin and .dsk (cpc.go)
+		return
+	}
+	if a.loadVideotex(b, name, path, as) { // Minitel .vdt, Viewdata .cpt/.bin/.json (minitel_ui.go)
 		return
 	}
 	if what := notArt(b); what != "" && as == "auto" {
@@ -1690,7 +1739,7 @@ func (a *App) finishLoad(b []byte, name, path string, sauce *Sauce, fmtID string
 // and sets up its look (applyLook).
 func (a *App) applyMode() {
 	a.applyLook()
-	if a.tool == "half" && !a.pc() && !a.tt() && !a.uni() { // Half on PC and Unicode pages, Sixel on teletext
+	if a.tool == "half" && !a.pc() && !a.tt() && !a.uni() && !a.mt() { // Half on PC and Unicode pages, Sixel on teletext and Minitel
 		a.setTool("draw")
 	}
 	if a.fset >= len(a.fkeys[a.mode]) {
@@ -1744,6 +1793,9 @@ func (a *App) setMode(m string) {
 		a.cpcEnsure()
 		a.fg, a.bg = 1, 0
 	}
+	if m == "mt" || a.mode == "mt" {
+		a.fg, a.bg = 7, 0
+	}
 	was := a.mode
 	a.mode = m
 	switch {
@@ -1765,7 +1817,11 @@ func (a *App) setMode(m string) {
 			a.doc = newTTDoc()
 		case m == "cpc":
 			a.doc = newCPCDoc(a.cpcSet.mode)
-		case was == "cpc":
+		case m == "mt":
+			a.doc = newMTDoc()
+		case m == "vd":
+			a.doc = newVDDoc()
+		case was == "cpc" || was == "mt" || was == "vd":
 			a.doc = newDoc(80, 25)
 		case was == "c64" || was == "atari" || was == "st" || was == "zx" || was == "tt":
 			a.doc = newDoc(80, 25)
@@ -1774,12 +1830,18 @@ func (a *App) setMode(m string) {
 		if m == "cpc" {
 			fmtID = "cpcbin"
 		}
+		if f, ok := map[string]string{"mt": "vdt", "vd": "vdcpt"}[m]; ok {
+			fmtID = f
+		}
 		if fmtID == "" {
 			fmtID = "ansi"
 		}
 		ext = "." + map[string]string{"ansi": "ans", "seq": "seq", "ata": "ata", "vt52": "vt", "scr": "scr", "tti": "tti"}[fmtID]
 		if m == "cpc" {
 			ext = ".bin"
+		}
+		if e, ok := map[string]string{"mt": ".vdt", "vd": ".cpt"}[m]; ok {
+			ext = e
 		}
 		a.saveFmt = fmtID
 		if a.path == "" {
@@ -1869,7 +1931,7 @@ func (a *App) setSTRes(id string) {
 func (a *App) setRows(n int) {
 	a.endPlay()
 	n = max(1, min(a.maxRows(), n))
-	if n == a.doc.rows || a.zx() || a.tt() || a.cpc() { // a Spectrum screen is 24 rows, a teletext page and a CPC screen 25
+	if n == a.doc.rows || a.zx() || a.tt() || a.cpc() || a.mt() { // a Spectrum screen is 24 rows, a teletext page and a CPC screen 25
 		return
 	}
 	a.pushUndo()
@@ -1889,7 +1951,7 @@ func (a *App) setRows(n int) {
 func (a *App) setCols(n int) {
 	a.endPlay()
 	n = max(8, min(1000, n))
-	if n == a.doc.cols || a.c64() || a.st() || a.zx() || a.tt() || a.cpc() || (a.atari() && n != 38 && n != 40) {
+	if n == a.doc.cols || a.c64() || a.st() || a.zx() || a.tt() || a.cpc() || a.mt() || (a.atari() && n != 38 && n != 40) {
 		return // a machine's screen has the width it has
 	}
 	if a.source != nil && !a.dirty && !a.splitPage() {
@@ -1966,6 +2028,15 @@ func (a *App) makeTab(mode string) *Tab {
 		t.cpcSet = newCPCSetup(1)
 		t.doc = newCPCDoc(1)
 		t.saveFmt, t.name = "cpcbin", "untitled.bin"
+	}
+	if mode == "mt" {
+		t.doc = newMTDoc()
+		t.saveFmt, t.name = "vdt", "untitled.vdt"
+		t.cy = 1 // under the status row
+	}
+	if mode == "vd" {
+		t.doc = newVDDoc()
+		t.saveFmt, t.name = "vdcpt", "untitled.cpt"
 	}
 	return t
 }
@@ -2178,6 +2249,12 @@ func (a *App) blockOp(op int) {
 		if a.tt() {
 			b.mosaic = a.ttMosaic(r)
 		}
+		if a.mt() {
+			if msg := mtBlockOpRefused(b, op); msg != "" {
+				a.msg(msg)
+				return
+			}
+		}
 	case op != invertBlock && (!a.tt() || a.brush >= 0x20):
 		// Nothing selected: the brush character itself turns into its twin.
 		was := a.brush
@@ -2257,6 +2334,8 @@ func (a *App) transformBlock(b *Block, op int) *Block {
 				v = a.invertCell(v)
 			case a.uni():
 				v = uniWithCode(v, uniMirror(uniCode(v), op))
+			case a.mt() && mtMosaic(v) && op != invertBlock:
+				v = v&^255 | uint32(ttSixelFlip(c, op == flipV))
 			case mosaic && (c < 0x40 || c >= 0x60):
 				v = v&^255 | uint32(ttSixelFlip(c, op == flipV))
 			case a.tt():
@@ -2473,6 +2552,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		return out, err
 	}
 	if out, ok, err := a.encodeCPC(fmtID, d); ok { // Amstrad CPC .bin and .dsk (cpc.go)
+		return out, err
+	}
+	if out, ok, err := a.encodeVideotex(fmtID, d); ok { // Minitel and Viewdata (minitel_ui.go)
 		return out, err
 	}
 	switch fmtID {
@@ -2765,7 +2847,7 @@ func (a *App) playBytes() []byte {
 	if a.source != nil && !a.dirty && a.srcKind == "" && (a.nFrames() == 1 || a.pageBoard() == "") { // a paced file's codes are the board's, not the terminal's
 		return a.source
 	}
-	if a.nFrames() > 1 && !a.zx() && !a.tt() { // every frame, a clear between them
+	if a.nFrames() > 1 && !a.zx() && !a.tt() && !a.mt() { // every frame, a clear between them
 		return a.writeStreamFrames(map[string]string{"c64": "seq", "atari": "ata", "st": "vt52"}[a.mode], a.allDocs(), false)
 	}
 	switch {
@@ -2784,7 +2866,7 @@ func (a *App) play() {
 		a.stopPlay(true)
 		return
 	}
-	if (a.source != nil && a.sourceBin && !a.dirty) || a.zx() || a.tt() || a.cpc() {
+	if (a.source != nil && a.sourceBin && !a.dirty) || a.zx() || a.tt() || a.cpc() || a.mt() {
 		a.msg("This file has no codes to play: it is a picture of the screen")
 		return
 	}

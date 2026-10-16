@@ -26,7 +26,7 @@ type Frame struct {
 // holdDefault is how long a frame without a hold of its own is shown: teletext
 // carousels turn every 8 seconds, animations run at 10 pictures a second.
 func holdDefault(mode string) int {
-	if mode == "tt" {
+	if mode == "tt" || mode == "vd" {
 		return 8000
 	}
 	return 100
@@ -129,7 +129,7 @@ func (a *App) frameMsg() {
 
 // holdText says a hold time: whole seconds on teletext (the .tti CT line), else ms.
 func holdText(mode string, ms int) string {
-	if mode == "tt" {
+	if mode == "tt" || mode == "vd" {
 		return fmt.Sprintf("%d s", (ms+500)/1000)
 	}
 	return fmt.Sprintf("%d ms", ms)
@@ -141,8 +141,12 @@ func (a *App) blankLike(d *Doc) *Doc {
 	switch {
 	case a.zx():
 		n = newZXDoc()
+	case a.vd():
+		n = newVDDoc()
 	case a.tt():
 		n = newTTDoc()
+	case a.mt():
+		n = newMTDoc()
 	case a.cpc():
 		n = newCPCDoc(a.cpcSet.mode)
 	case a.st():

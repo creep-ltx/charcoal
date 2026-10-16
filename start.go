@@ -45,6 +45,8 @@ func startTiles() []startTile {
 		{"ZX Spectrum", "zx", "", "", 0, 8},
 		{"Teletext", "tt", "", "", 7, 8},
 		{"Amstrad CPC", "cpc", "", "", 1, 4},
+		{"Minitel", "mt", "", "", 7, 8},
+		{"Viewdata", "vd", "", "", 7, 8},
 		{"Unicode", "uni", "", "", 7, 16},
 	}
 }
@@ -121,6 +123,8 @@ func (a *App) pickTile(tl startTile) {
 		a.fg, a.bg = 0, 7
 	case tl.mode == "cpc":
 		a.fg, a.bg = 1, 0
+	case tl.mode == "mt":
+		a.fg, a.bg = 7, 0
 	case old.mode == "st" || old.mode == "zx" || old.mode == "cpc":
 		a.fg, a.bg = 7, 0
 	}
@@ -377,7 +381,7 @@ func (a *App) drawTile(u *UI, r Rect, tl startTile, sel bool) {
 		fb.fill(scr, paper)
 		cw, ch := a.cellW(), a.cellH()
 		z := 1
-		if ch <= 8 {
+		if ch <= 10 { // 8 rows, or the Minitel's 10
 			z = 2
 		}
 		var cells []int
@@ -399,6 +403,10 @@ func (a *App) drawTile(u *UI, r Rect, tl startTile, sel bool) {
 		for i, b := range cells {
 			if a.tt() {
 				a.drawTTCell(fb, tx+i*cw*z, ty, z, ttCell{code: b, fg: tl.fg, control: -1}, false)
+				continue
+			}
+			if a.mt() {
+				a.drawMTCell(fb, tx+i*cw*z, ty, z, mtShow{code: b, fg: tl.fg}, false)
 				continue
 			}
 			a.drawCell(fb, tx+i*cw*z, ty, z, makeCell(b, tl.fg, a.paperIndex(), 0))
