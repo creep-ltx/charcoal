@@ -438,7 +438,7 @@ func (a *App) previewFg() int {
 		return a.res().fg
 	}
 	if a.atari() {
-		return a.doc.ink
+		return 0 // the screen's text colour (an Atari cell has none)
 	}
 	if a.cpc() {
 		return 1
@@ -473,7 +473,7 @@ func (a *App) setPalette() {
 	if a.c64() && !strings.Contains(" c64 colodore vic20 vdc petgreen petamber petwhite custom ", " "+p.id+" ") {
 		p = paletteByID(a.mach().palette)
 	}
-	if a.atari() && p.id != "custom" && p.id != "atari" {
+	if a.atari() && p != atariPalette && p != atariNTSCPalette { // PAL or NTSC GTIA (gtia.go)
 		p = atariPalette
 	}
 	if a.zx() && p.id != "custom" {
@@ -1063,6 +1063,10 @@ func (a *App) stepFg(d int) {
 		a.msg(why)
 		return
 	}
+	if a.atari() {
+		a.atariStep(d, false)
+		return
+	}
 	n := a.nColours(false)
 	a.setFg((a.fgNow()%n + d + n) % n)
 }
@@ -1070,6 +1074,10 @@ func (a *App) stepFg(d int) {
 func (a *App) stepBg(d int) {
 	if why := a.colourKeyRefused(true); why != "" {
 		a.msg(why)
+		return
+	}
+	if a.atari() {
+		a.atariStep(d, true)
 		return
 	}
 	n := a.nColours(true)
@@ -1081,6 +1089,10 @@ func (a *App) stepBg(d int) {
 func (a *App) colourKey(i int, bg bool) {
 	if why := a.colourKeyRefused(bg); why != "" {
 		a.msg(why)
+		return
+	}
+	if a.atari() {
+		a.atariColourKey(i, bg)
 		return
 	}
 	n := a.nColours(bg)
@@ -1110,8 +1122,12 @@ func (a *App) defaultColours() {
 	case a.tt():
 		a.msg(a.colourKeyRefused(false))
 		return
-	case a.atari():
-		a.msg("An Atari screen has one text colour and one background: click the colours to set them")
+	case a.atari(): // the start-up registers
+		if a.doc.bg != atariBg || a.doc.ink != atariInk || a.doc.border != atariBorder {
+			a.pushUndo()
+			a.doc.bg, a.doc.ink, a.doc.border = atariBg, atariInk, atariBorder
+		}
+		a.msg("The Atari's start-up colours: 709 = 202, 710 = 148, 712 = 0")
 		return
 	case a.st():
 		a.fg, a.bg = a.res().fg, a.res().bg
@@ -1300,7 +1316,7 @@ func (a *App) reparse() {
 	if a.reparseUni() {
 		return
 	}
-	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseVideotex() {
+	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseVideotex() || a.reparseAtari8() || a.reparseZXTap() {
 		return
 	}
 	switch a.srcKind {
@@ -1403,6 +1419,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		return
 	}
 	if a.loadCPC(b, name, path, as) { // Amstrad CPC .bin and .dsk (cpc.go)
+		return
+	}
+	if a.loadAtari8(b, name, path, as) || a.loadZXTap(b, name, path, as) { // Atari .xex/.atr, Spectrum .tap (atari8.go, zxtap.go)
 		return
 	}
 	a.igs = nil
@@ -2614,6 +2633,12 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		return out, err
 	}
 	if out, ok, err := a.encodeCPC(fmtID, d); ok { // Amstrad CPC .bin and .dsk (cpc.go)
+		return out, err
+	}
+	if out, ok, err := a.encodeAtari8(fmtID, d); ok { // Atari .xex and .atr (atari8.go)
+		return out, err
+	}
+	if out, ok, err := a.encodeZXTap(fmtID, d); ok { // Spectrum .tap (zxtap.go)
 		return out, err
 	}
 	if out, ok := a.encodeIGS(fmtID, d); ok { // Atari ST IGS (igs_page.go)

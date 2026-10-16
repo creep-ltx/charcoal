@@ -360,6 +360,8 @@ func (a *App) writeHTML() []byte {
 	hex := func(c uint32) string { return fmt.Sprintf("#%06x", c&0xFFFFFF) }
 	bgOf := func(v uint32) uint32 {
 		switch {
+		case a.atari():
+			return a.atariRGB(d.bg)
 		case a.screen():
 			return a.pal[d.bg]
 		case a.ice:
@@ -374,7 +376,7 @@ func (a *App) writeHTML() []byte {
 	}
 	page := a.pal[0]
 	if a.screen() {
-		page = a.pal[d.borderColour()]
+		page = a.borderPx(d)
 	}
 	fmt.Fprintf(&b, "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>%s</title>\n", html.EscapeString(title))
 	fmt.Fprintf(&b, "<style>body{background:%s;margin:2em}pre{font:16px/1 \"Topaz a600a1200a400\",\"Px437 IBM VGA 8x16\",monospace;display:inline-block;background:%s;padding:0;margin:0}</style>\n",
@@ -388,7 +390,7 @@ func (a *App) writeHTML() []byte {
 			v := d.get(x, y)
 			fg, bg := a.pal[cellFg(v)], bgOf(v)
 			if a.atari() {
-				fg = a.pal[d.ink]
+				fg = a.atariRGB(atariText(d))
 			}
 			key := uint64(fg)<<32 | uint64(bg)
 			if v&italic != 0 {

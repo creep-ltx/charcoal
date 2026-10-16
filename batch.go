@@ -1237,6 +1237,7 @@ func headlessApp() {
 		defFont: map[string]string{}, defPalette: map[string]string{}, baud: 14400}
 	a.hasC64 = loadC64Fonts()
 	loadSTFonts()
+	loadAtariROMFonts()
 	loadPrefs()
 	a.focusTab(a.newTab("amiga"))
 }

@@ -186,6 +186,9 @@ func (a *App) drawColours(u *UI, x, y, perRow int) int {
 	if a.cpc() { // the inks and the 27 colours (cpc.go)
 		return a.drawCPCColours(u, x, y, perRow)
 	}
+	if a.atari() { // the 128 colours and the three registers (gtia.go)
+		return a.drawAtariColours(u, x, y, perRow)
+	}
 	fb := u.fb
 	n := 16
 	if a.mt() {

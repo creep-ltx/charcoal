@@ -42,6 +42,7 @@ type autosaveMeta struct {
 	Border       int             `json:"border"`
 	Ink          int             `json:"ink"`
 	Glyph0       bool            `json:"glyph0,omitempty"`
+	GTIA         bool            `json:"gtia,omitempty"` // an Atari page's colours are register values (gtia.go)
 	Title        string          `json:"title,omitempty"`
 	Author       string          `json:"author,omitempty"`
 	Group        string          `json:"group,omitempty"`
@@ -113,6 +114,7 @@ func writeAutosave(t *Tab) error {
 		Title: t.info.title, Author: t.info.author, Group: t.info.group, WriteSauce: t.info.writeSauce,
 		Clear: t.info.clear, Notes: t.info.notes}
 	m.SrcKind, m.Order = t.srcKind, t.order
+	m.GTIA = t.mode == "atari"
 	if t.mode == "uni" {
 		m.UniPairs = uniPairsSnapshot()
 	}
@@ -277,6 +279,9 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 		}
 		b = b[4*f.Cols*f.Rows:]
 		d.bg, d.border, d.ink, d.glyph0 = f.Bg, f.Border, f.Ink, f.Glyph0
+		if mode == "atari" && !m.GTIA { // colours 0-15 before 2026-10-16
+			atariFromOld(d)
+		}
 		docs[i] = d
 	}
 	if mode == "uni" {
