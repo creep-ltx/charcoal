@@ -93,9 +93,9 @@ func TestColourKeysRespectPages(t *testing.T) {
 	}
 
 	a = testApp(t, "atari")
-	editorKey("5", true, false, false)
-	if a.doc.ink != 5 || len(a.undo) != 1 {
-		t.Errorf("Atari: Ctrl+5 gave ink %d, %d undo steps", a.doc.ink, len(a.undo))
+	editorKey("3", true, false, false) // luminance 6, the register's hue kept (gtia.go)
+	if a.doc.ink != 0xC6 || len(a.undo) != 1 {
+		t.Errorf("Atari: Ctrl+3 gave ink %d, %d undo steps", a.doc.ink, len(a.undo))
 	}
 
 	a = testApp(t, "tt")

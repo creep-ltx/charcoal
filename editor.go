@@ -445,7 +445,7 @@ func (a *App) previewFg() int {
 		return a.res().fg
 	}
 	if a.atari() {
-		return a.doc.ink
+		return 0 // the screen's text colour (an Atari cell has none)
 	}
 	if a.cpc() {
 		return 1
@@ -484,7 +484,7 @@ func (a *App) setPalette() {
 	if a.c64() && !strings.Contains(" c64 colodore vic20 vdc petgreen petamber petwhite custom ", " "+p.id+" ") {
 		p = paletteByID(a.mach().palette)
 	}
-	if a.atari() && p.id != "custom" && p.id != "atari" {
+	if a.atari() && p != atariPalette && p != atariNTSCPalette { // PAL or NTSC GTIA (gtia.go)
 		p = atariPalette
 	}
 	if a.zx() && p.id != "custom" {
@@ -1094,6 +1094,10 @@ func (a *App) stepFg(d int) {
 		a.tedStep(d)
 		return
 	}
+	if a.atari() {
+		a.atariStep(d, false)
+		return
+	}
 	n := a.nColours(false)
 	a.setFg((a.fgNow()%n + d + n) % n)
 }
@@ -1101,6 +1105,10 @@ func (a *App) stepFg(d int) {
 func (a *App) stepBg(d int) {
 	if why := a.colourKeyRefused(true); why != "" {
 		a.msg(why)
+		return
+	}
+	if a.atari() {
+		a.atariStep(d, true)
 		return
 	}
 	n := a.nColours(true)
@@ -1116,6 +1124,10 @@ func (a *App) stepBg(d int) {
 func (a *App) colourKey(i int, bg bool) {
 	if why := a.colourKeyRefused(bg); why != "" {
 		a.msg(why)
+		return
+	}
+	if a.atari() {
+		a.atariColourKey(i, bg)
 		return
 	}
 	n := a.nColours(bg)
@@ -1149,8 +1161,12 @@ func (a *App) defaultColours() {
 	case a.tt():
 		a.msg(a.colourKeyRefused(false))
 		return
-	case a.atari():
-		a.msg("An Atari screen has one text colour and one background: click the colours to set them")
+	case a.atari(): // the start-up registers
+		if a.doc.bg != atariBg || a.doc.ink != atariInk || a.doc.border != atariBorder {
+			a.pushUndo()
+			a.doc.bg, a.doc.ink, a.doc.border = atariBg, atariInk, atariBorder
+		}
+		a.msg("The Atari's start-up colours: 709 = 202, 710 = 148, 712 = 0")
 		return
 	case a.st():
 		a.fg, a.bg = a.res().fg, a.res().bg
@@ -1341,7 +1357,7 @@ func (a *App) reparse() {
 	if a.reparseUni() {
 		return
 	}
-	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseVideotex() || a.reparseTED() {
+	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseVideotex() || a.reparseAtari8() || a.reparseZXTap() || a.reparseTED() {
 		return
 	}
 	switch a.srcKind {
@@ -1411,7 +1427,7 @@ func (a *App) reparse() {
 		if cols == 0 {
 			cols = a.mach().cols
 		}
-		d, lower := parseSeqOn(a.source, cols, a.ted())
+		d, lower := parseSeqOn(a.source, cols, a.ted(), a.codes)
 		a.doc = d
 		if lower >= 0 {
 			a.setCase(lower == 1)
@@ -1444,6 +1460,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		return
 	}
 	if a.loadCPC(b, name, path, as) { // Amstrad CPC .bin and .dsk (cpc.go)
+		return
+	}
+	if a.loadAtari8(b, name, path, as) || a.loadZXTap(b, name, path, as) { // Atari .xex/.atr, Spectrum .tap (atari8.go, zxtap.go)
 		return
 	}
 	a.igs = nil
@@ -1508,6 +1527,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 			a.finishLoad(b, name, path, nil, k)
 			return
 		}
+	}
+	if as == "imageseq" { // a .seq with Image BBS's £ codes (c64bbs.go)
+		a.codes, as = as, "c64"
 	}
 	// Other boards' colour codes (bbscodes.go): read in front of the ANSI terminal.
 	if isBBSCodes(as) {
@@ -1615,7 +1637,11 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 			a.setMode("st")
 		})
 	}
+	if mode == "c64" && a.hasC64 && a.codes == "" && (as == "auto" || as == "c64") && a.machine != "plus4" && isImageCodes(b) { // Image is a C64 board
+		a.codes = "imageseq" // Image BBS's £ codes (c64bbs.go)
+	}
 	if mode == "c64" && !a.hasC64 {
+		a.codes = ""
 		// Shown as PC for now; with the character set it is read again as PETSCII.
 		t := a.Tab
 		openC64Req(func() {
@@ -1661,6 +1687,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	switch {
 	case mode == "c64":
 		a.saveFmt = "seq"
+		if a.codes == "imageseq" {
+			a.saveFmt = a.codes
+		}
 	case mode == "atari":
 		a.saveFmt = "ata"
 	case mode == "zx":
@@ -2679,6 +2708,15 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	if out, ok, err := a.encodeCPC(fmtID, d); ok { // Amstrad CPC .bin and .dsk (cpc.go)
 		return out, err
 	}
+	if out, ok, err := a.encodeAtari8(fmtID, d); ok { // Atari .xex and .atr (atari8.go)
+		return out, err
+	}
+	if out, ok, err := a.encodeZXTap(fmtID, d); ok { // Spectrum .tap (zxtap.go)
+		return out, err
+	}
+	if out, ok := a.encodeImageSeq(fmtID, board, ps, d); ok { // PETSCII with Image BBS's £ codes (c64bbs.go)
+		return out, nil
+	}
 	if out, ok := a.encodeIGS(fmtID, d); ok { // Atari ST IGS (igs_page.go)
 		return out, nil
 	}
@@ -2902,7 +2940,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID] || isBBSCodes(fmtID) || a.uniOwn(fmtID)
+	own := strings.Contains(" ansi text bin seq imageseq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID] || isBBSCodes(fmtID) || a.uniOwn(fmtID)
 	if own && a.nFrames() > 1 && !framesFormats[fmtID] {
 		// One picture: written as an export, so the page is not taken for saved.
 		a.lastDir = filepath.Dir(path)
@@ -2918,7 +2956,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		if editorOwn[fmtID] || a.uniOwn(fmtID) {
 			a.srcKind = fmtID
 		}
-		a.codes = map[bool]string{true: fmtID}[isBBSCodes(fmtID)] // the source is now in these codes (or none)
+		a.codes = map[bool]string{true: fmtID}[isBBSCodes(fmtID) || fmtID == "imageseq"] // the source is now in these codes (or none)
 		a.markSaved()
 		dropAutosave(a.Tab)
 		a.rememberRef() // the reference goes with the file's new name

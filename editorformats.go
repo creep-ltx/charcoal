@@ -1371,6 +1371,11 @@ type psciPage struct {
 }
 
 // psciNearest is the Playscii colour (1..) nearest to c.
+// psciGTIA is an Atari colour register value as a colour of Playscii's atari palette, and back.
+func psciGTIA(v int) int { return v&0x0E/2*16 + v>>4&15 + 1 }
+
+func gtiaOfPsci(i int) int { return (i-1)&15<<4 | (i-1)>>4&7*2 }
+
 func psciNearest(c uint32, pal []uint32) int {
 	best, bd := 0, math.MaxInt
 	for i, p := range pal {
@@ -1412,8 +1417,8 @@ func writePsci(docs []*Doc, holds []int, p psciPage) (out []byte, missed int) {
 			}
 			return psciTile{Char: float64(idx), Fg: float64(fg), Bg: float64(bg)}
 		case "atari":
-			pal := psciPalettes["atari"]
-			fg, bg := psciNearest(p.pal[d.ink]&0xFFFFFF, pal), psciNearest(p.pal[d.bg]&0xFFFFFF, pal)
+			// Playscii's atari palette is GTIA's 128 colours, 16 hues to a row, a row a luminance.
+			fg, bg := psciGTIA(atariText(d)), psciGTIA(d.bg)
 			if ch >= 128 {
 				fg, bg = bg, fg
 			}
@@ -1567,6 +1572,12 @@ func parsePsci(b []byte) (*psciArt, error) {
 		}
 		if i > len(pal) {
 			return 0
+		}
+		if art.mode == "atari" && f.Palette == "atari" { // a register value (gtia.go)
+			return gtiaOfPsci(i)
+		}
+		if art.mode == "atari" {
+			return gtiaNearest(pal[i-1], &gtiaPAL)
 		}
 		return nearestOf(pal[i-1], pageCols[art.mode])
 	}

@@ -428,10 +428,13 @@ func (t *PetTerm) write(b []byte) {
 }
 
 // parseSeq reads a .seq file; it returns the character set it asks for (-1, 0 upper, 1 lower).
-func parseSeq(b []byte, cols int) (*Doc, int) { return parseSeqOn(b, cols, false) }
+// codes "imageseq": read with Image BBS's £ codes (c64bbs.go).
+func parseSeq(b []byte, cols int, codes ...string) (*Doc, int) {
+	return parseSeqOn(b, cols, false, codes...)
+}
 
 // parseSeqOn reads a .seq as a C64 (or PET, VIC-20, C128) prints it, or with ted as a Plus/4 does.
-func parseSeqOn(b []byte, cols int, ted bool) (*Doc, int) {
+func parseSeqOn(b []byte, cols int, ted bool, codes ...string) (*Doc, int) {
 	if cols <= 0 {
 		cols = 40
 	}
@@ -443,7 +446,13 @@ func parseSeqOn(b []byte, cols int, ted bool) (*Doc, int) {
 	}
 	var f fullest
 	t.beforeClear = func() { f.look(t.doc) }
-	writeWatching(t, b, &f)
+	if len(codes) > 0 && codes[0] == "imageseq" {
+		it := newImageTerm(t)
+		writeWatching(it, b, &f)
+		it.flush()
+	} else {
+		writeWatching(t, b, &f)
+	}
 	if d = f.pick(t.doc); d == t.doc {
 		d.fit(cursorRows(t.x, t.y))
 	} else {

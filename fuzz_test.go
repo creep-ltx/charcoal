@@ -99,6 +99,14 @@ func FuzzParsers(f *testing.F) {
 		f.Add([]byte("G#X>7,1,\r\n" + strings.Repeat("XX--XX--XX--XX--@", 16) + ":A>4,1,1:Z>r,R,9999,9999:G>0,6,0,0,99,99,5,5:"))
 		f.Add([]byte("G#X>11,1,3,\xff\x00\xff\x00G#T>2,1,41:T>2,1,50:J>1,1,500,9,0,3600:E>31,20,1:W>9,9,Hi@F>5,5:"))
 	}
+	{ // files that run on the machine: Atari .xex/.atr, Spectrum .tap (atari8.go, zxtap.go)
+		d := newAtariDoc()
+		d.cells[3] = makeCell(0x41|0x80, 0, 0, 0)
+		f.Add(writeXex(d, nil))
+		f.Add(writeXex(d, make([]byte, 1024)))
+		f.Add(writeATR(d, nil)[:16+40*128])
+		f.Add(writeTap(make([]byte, 6912), 3, "f"))
+	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		check := func(name string, run func() []*Doc) {
 			start := time.Now()
@@ -148,6 +156,7 @@ func FuzzParsers(f *testing.F) {
 		check("adf", func() []*Doc { return own(parseADF(b)) })
 		check("tnd", func() []*Doc { return own(parseTundra(b)) })
 		check("seq", func() []*Doc { d, _ := parseSeq(b, 40); return one(d) })
+		check("seq image", func() []*Doc { d, _ := parseSeq(b, 40, "imageseq"); return one(d) }) // Image BBS's £ codes (c64bbs.go)
 		check("edit.tf", func() []*Doc { d, _ := parseEditTF(b); return one(d) })
 		check("tti", func() []*Doc { return one(parseTTI(b)) })
 		check("ep1", func() []*Doc { return one(parseEP1(b)) })
@@ -200,6 +209,14 @@ func FuzzParsers(f *testing.F) {
 		check("cpc dsk", func() []*Doc {
 			if f, _, err := dskArt(b); err == nil {
 				d, _, _, _ := parseCPCBin(f.data)
+				return one(d)
+			}
+			return nil
+		})
+		check("xex", func() []*Doc { d, _, _ := readAtariProgram(b); return one(d) })
+		check("tap", func() []*Doc {
+			if scr, _, err := readTap(b); err == nil {
+				d, _ := parseSCR(scr)
 				return one(d)
 			}
 			return nil

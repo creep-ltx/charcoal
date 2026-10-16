@@ -1471,6 +1471,8 @@ func docOf(e interface{ write([]byte) }) *Doc {
 		return t.doc
 	case *PetTerm:
 		return t.doc
+	case *imageTerm:
+		return t.doc
 	case *AtariTerm:
 		return t.doc
 	}

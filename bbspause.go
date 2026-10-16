@@ -37,6 +37,9 @@ type bbsBoard struct {
 	layout   func(pieces []string) []byte // the board reads the file in pieces: no code may be cut (nil: joined)
 	note     string                       // what the code is, for the help and the requester
 	how      string                       // how this was established
+	colours  string                       // the board's colour codes, written for ANSI's (boardcolours.go)
+	// paceFn: a board that paces its own way (the C64 boards, c64bbs.go).
+	paceFn func(b *bbsBoard, stream []byte, ps []pause) []byte
 }
 
 func (b *bbsBoard) shows(fmtID string) bool { return strings.Contains(b.formats, " "+fmtID+" ") }
@@ -75,8 +78,10 @@ var bbsBoards = []*bbsBoard{
 			}
 			return ""
 		},
-		note: "|PO first, |DE waits half a second (the shortest it has), a | in the art as |PI",
+		note: "|PO first, |DE waits half a second (the shortest it has), a | in the art as |PI, colours as |00-|23",
 		how:  "verified: read in Mystic 1.10's source (bbs_io.pas OutFile, ParseMCI) and its wiki (display codes)",
+
+		colours: "pipe", // the board's colour codes for ANSI's (boardcolours.go)
 	},
 	{
 		// PCBoard 15.3 (source v0.014: display/xlate.c DELAY, pcbmacro.c
@@ -90,8 +95,10 @@ var bbsBoards = []*bbsBoard{
 		head:   "@POFF@",
 		delay:  func(n int) string { return "@DELAY:" + strconv.Itoa(n) + "@" },
 		layout: layoutPCB,
-		note:   "@POFF@ first, @DELAY:n@ waits n/10 s (up to 255)",
+		note:   "@POFF@ first, @DELAY:n@ waits n/10 s (up to 255), colours as @Xnn",
 		how:    "verified: read in PCBoard 15.3's source (display/xlate.c, pcbmacro.c, files.c, dosfgets.c)",
+
+		colours: "pcb", // the board's colour codes for ANSI's (boardcolours.go)
 	},
 	{
 		// Synchronet (src/sbbs3: putmsg.cpp, con_out.cpp ctrl_a): Ctrl-A ","
@@ -114,8 +121,10 @@ var bbsBoards = []*bbsBoard{
 			}
 			return ""
 		},
-		note: "Ctrl-A , waits 0.1 s, Ctrl-A ; 0.5 s, Ctrl-A . 2 s; Ctrl-A Q after each line, @ and |",
+		note: "Ctrl-A , waits 0.1 s, Ctrl-A ; 0.5 s, Ctrl-A . 2 s; Ctrl-A Q after each line, @ and |; colours as Ctrl-A codes",
 		how:  "verified: read in Synchronet's source (src/sbbs3 putmsg.cpp, con_out.cpp ctrl_a, atcodes.cpp)",
+
+		colours: "ctrla", // the board's colour codes for ANSI's (boardcolours.go)
 	},
 	{
 		// Tempest (TDocs-Tempest, chapter V): "~DELAY(n)" pauses n ticks
@@ -169,7 +178,12 @@ func (b *bbsBoard) units(ps []pause) []int {
 
 // pace writes stream with the board's delay codes at the pauses (in order of at).
 func (b *bbsBoard) pace(stream []byte, ps []pause) []byte {
+	if b.paceFn != nil {
+		return b.paceFn(b, stream, ps)
+	}
 	us := b.units(ps)
+	// The board's colour codes for the SGRs (nil: the colours stay ANSI).
+	cc := boardColourer(b.colours, stream)
 	var pieces []string // codes and the art's bytes (escaped): a board must never cut one in two
 	if b.head != "" {
 		pieces = append(pieces, b.head)
@@ -184,9 +198,23 @@ func (b *bbsBoard) pace(stream []byte, ps []pause) []byte {
 	}
 	for i := 0; i < len(stream); i++ {
 		flush(i)
+		if cc != nil {
+			if n, code := cc.code(stream, i); n > 0 {
+				if len(code) > 0 {
+					pieces = append(pieces, string(code))
+				}
+				i += n - 1
+				continue
+			}
+		}
 		c := stream[i]
 		if b.lfOnly && c == '\r' && i+1 < len(stream) && stream[i+1] == '\n' {
 			continue // the board sends CR LF for a LF anyway
+		}
+		if b.colours == "pcb" && c == '@' && i+3 < len(stream) && stream[i+1] == 'X' && isUpperHex(stream[i+2]) && isUpperHex(stream[i+3]) {
+			// "@X1F" in the art is a colour code to PCBoard: an empty delay keeps the @ from the X.
+			pieces = append(pieces, "@", "@DELAY:0@")
+			continue
 		}
 		if e := ""; b.escape != nil {
 			if e = b.escape(c); e != "" {
@@ -291,6 +319,9 @@ func (a *App) pageBoard() string {
 
 // animatedSave: saving the page as fmtID writes an animation (paced by pauses).
 func (a *App) animatedSave(fmtID string) bool {
+	if fmtID == "imageseq" { // a .seq with Image BBS's codes (c64bbs.go)
+		fmtID = "seq"
+	}
 	return streamFormats[fmtID] && (a.orderedSave(fmtID) || a.nFrames() > 1)
 }
 
@@ -331,6 +362,9 @@ func copyPath(path, id string) string {
 
 // copyBoards are the boards the page also saves a copy for (not the main file's own).
 func (a *App) copyBoards(fmtID string) []*bbsBoard {
+	if fmtID == "imageseq" { // a .seq with Image BBS's codes (c64bbs.go)
+		fmtID = "seq"
+	}
 	if a.order == nil || a.order.Copies == "" {
 		return nil
 	}
@@ -377,6 +411,9 @@ func pacedNote(id string, ps []pause) string {
 // (name-amiexpress.ans ...) and says so for the status line.
 func (a *App) writeCopies(path, fmtID string) string {
 	var done, failed []string
+	if fmtID == "imageseq" { // the copies are another board's .seq (c64bbs.go)
+		fmtID = "seq"
+	}
 	for _, b := range a.copyBoards(fmtID) {
 		p := copyPath(path, b.id)
 		data, err := a.encodeFor(fmtID, b.id, nil)

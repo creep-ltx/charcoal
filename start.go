@@ -457,6 +457,9 @@ func (a *App) paperIndex() int {
 
 // paperColour is the colour an empty page shows.
 func (a *App) paperColour() uint32 {
+	if a.atari() {
+		return a.atariRGB(a.doc.bg)
+	}
 	i := a.paperIndex()
 	if !a.screen() && !a.st() && !a.zx() && !a.ice {
 		i &= 7

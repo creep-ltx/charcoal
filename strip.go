@@ -282,6 +282,8 @@ func (a *App) drawOnion(fb *FB, ox, oy, x0, x1, y0, y1 int) {
 			px, py := ox+x*colPx, oy+y*rowPx
 			paper := uint32(cPaper)
 			switch {
+			case a.atari():
+				paper = a.atariRGB(a.doc.bg)
 			case a.screen():
 				paper = a.screenRGB(a.doc.bg)
 			case a.zx() || a.st() || a.cpc():

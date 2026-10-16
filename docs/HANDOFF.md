@@ -46,13 +46,13 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 |---|---|
 | Amiga ANSI | .ans .asc .txt .nfo .diz, XBin, PNG/HTML; Amiga or PC guessed by learned byte weights (core.go) |
 | PC ANSI | + .bin (BIOS colour order!), XBin, PCBoard .pcb, Avatar .avt; iCEDraw .idf, ArtWorx .adf, Tundra .tnd, IcyDraw .icy, REXPaint .xp, Playscii .psci (see Other editors' files) |
-| Atari (ATASCII) | .ata (width 38/40 guessed); AltirraOS font built in |
+| Atari (ATASCII) | .ata (width 38/40 guessed); .xex and boot .atr (2026-10-16); AltirraOS font built in, an OS ROM's when present; GTIA colour registers |
 | Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL) |
 | PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form, or CharEdit's for sets/modes) .d64, CharPad .ctm read; multicolour and ECM (C64, C128 40); ROMs from VICE on first use |
 
 | Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL); IGS .ig (2026-10-16): the drawing as a picture under the cells, see "Atari ST IGS" below |
 | PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form); ROMs from VICE on first use |
-| ZX Spectrum | .scr (6912 bytes); 48K ROM font built in (Amstrad allows passing it on) |
+| ZX Spectrum | .scr (6912 bytes), .tap (2026-10-16: loader + SCREEN$); 48K ROM font built in (Amstrad allows passing it on) |
 | Amstrad CPC | modes 0/1/2; .bin (AMSDOS program), .dsk, Playscii .psci (Logiker's exporter); firmware ROM font built in (Amstrad's permission) |
 | Teletext | .tti .ep1, edit.tf links (.url), Mode 7 dumps; Bedstead font (CC0) built in; a .tti carousel opens as frames (one per subpage) and saving rewrites only changed subpages' OL 0-24 rows, every other line kept (teletext.go writeTTIFrames) |
 | Minitel (2026-10-16) | .vdt (Videotex stream; screens a clear ends become frames); Bisson's Minitel font (CC0) built in; see "Minitel and Viewdata pages" |
@@ -410,10 +410,64 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   one page (`TestBBSCodesIcyDrawMembers`; IcyDraw writes @ as @@ in Ctrl-A, let off), Synchronet's text/menu
   (85 Ctrl-A files, every board's look) and WWIV's install/gfiles round-trip (`TestBBSCodesRealFiles`). Fuzz:
   every kind in FuzzParsers. How to fetch them and the board facts: the knowledge note on BBS colour codes in ~/Projects/Knowledge/bbs/.
-- Not done: "Save for board X" writing the board's colour codes (bbspause's boards: Mystic pipe, Synchronet
-  Ctrl-A, PCBoard @X; proposed only); PCBoard's @X00/@XFF save/restore (pcformats.go reads them as colours);
+- Not done: PCBoard's @X00/@XFF save/restore (pcformats.go reads them as colours);
   Telegard's backtick codes; Renegade's ^0-^9 user colours and Mystic's |T0-|T9 theme colours (shown as text);
   Animate a folder counts a codes file as "other" (written as .ans with ANSI colours).
+
+## C64 BBS graphics and the boards' own colour codes (2026-10-16, branch r3-c64bbs)
+
+- **The user's decisions (2026-10-16):** Image BBS is in "Save for board" with `£Sx` tenths only; no `£W` (its
+  first second is short, and 2.0 does not wait); Color 64 stays out (no timed pause); Image colours as plain
+  PETSCII bytes, not `£C`.
+
+- **What**: "Save for board X" (bbspause.go's boards: Settings' My BBS, Animate's choice and copies, Animate a
+  folder) now covers two C64 boards for animated `.seq` files, and the PC boards write their own colour codes.
+  `.seq` files with Image BBS's £ codes open with them and save back with them (format "imageseq").
+- `c64bbs.go`: boards appended to `bbsBoards` in `init` with a new field `paceFn` (the board paces its own way;
+  `pace` calls it first). **Image BBS** (`paceImage`, `imageLayout`): a pause of n tenths is `£S`+digit before
+  the next byte that shows (`printable`: &0x7F >= 0x20; Image 1.2 slows only those, 2.0 every byte) and `£S0`
+  after it; more than 15 tenths spread over the next characters; the slowed characters and their codes are one
+  piece, so no filler and no control byte is ever sent at a speed. Every £ of the art is `££`. Lines: Image's
+  dskin reads 80 bytes or up to a RETURN (not kept), so no piece is cut (filled with `£B0`, 0 bells = nothing,
+  moving 1-2 art bytes to the next line so the fill is whole codes; reverse no-op bytes only when nothing can
+  move), `£B0` before a line that would start with ↑ (read0 stops there), and a RETURN at the end (the last
+  byte comes with EOF status, and dskin then turns a line without RETURN into "↑": lost). `£W` is not used (first
+  second short; in the 2.0 source `comw` compares the seconds register with itself and returns at once).
+  **C*Base** (`paceCBase`, `cbaseLayout`): a unit is Ctrl-P (0x10) + a reverse code that changes nothing
+  (`petState.noop`); waiter2 waits for the jiffy clock's `& 6` to change, so ~1/30 s (its manual says 1/10 s).
+  After 0x10 C*Base prints the next byte without the MCI check: in quote mode (where a no-op reverse would print)
+  the 0x10 goes before the next art byte instead, and a £/@ there is written after a 0x10. Elsewhere every £ and
+  @ gets a no-op reverse after it (`£N T S V O P R L W I B` and `@:` are codes; both look at the next byte, even
+  past the line). Lines of 255 bytes with the RETURN kept.
+- `boardcolours.go`: `boardColourer(kind, stream)` (nil unless every SGR has a code: italic/underline never,
+  blink not for Mystic 1.10 which eats `|24`-`|31`), `code()` turns each SGR into `appendCodes` (pipe, ctrla) or
+  `@Xnn`, written only when the attribute changes. Boards get it by the `colours` field (Mystic "pipe", Synchronet
+  "ctrla", PCBoard "pcb"). PCBoard also: art `@X` + two hex digits gets `@DELAY:0@` after the `@` (before, the
+  board took it for a colour; the old test model did not look at @X).
+- **Image's codes read** (`imageTerm` in front of `PetTerm`, like `codeTerm`): `£C1`-`£CO` colour (the
+  command is the byte's low 6 bits, the number its low 4: `£Ca` = `£C1`), `£F` clear, `£R` reverse, `££` a £.
+  `£C0` (the caller's default colour) and everything else (`£V2` name, `£S`, `£W` ...) stay on the page as text.
+  `imageEscape` (the writer) doubles a £ only where `imageCodeAt` would read a code, so text codes go back as they
+  came. `isImageCodes` (detection, only on C64 pages with the ROMs): >= 3 codes typed as letters with a digit/J-O
+  after them, >= 2 acting, >= 2 kinds, at least half of the £ in codes; 0 of 239 petscii-bbs screens and 627 big
+  check C64 files taken. Glue: `parseSeq(b, cols, codes...)`, `splitStream` c64 case, `docOf`, `loadBytes`
+  (`as == "imageseq"`, detection after the mode, saveFmt), `encodeFor` hook `encodeImageSeq` (an animated page
+  writes its `.seq` animation; escaped unless a C64 board paced it), `writeOut` (own + codes), Open as list
+  (hidden without the ROMs), `framesFormats`, `animatedSave`/`copyBoards`/`writeCopies` treat imageseq as seq.
+- Tests (`c64bbs_test.go`): models of Image's read0/dskin/MCI and C*Base's readln3/bufout2 (fail on a cut code,
+  art taken for a code, a lost last line, a control byte at a speed); every draw order, effect and frame strip of
+  random pages full of £ @ : ↑ " through both, the terminal bytes = the plain stream minus no-op reverses, the
+  time within half a unit; layouts and escapes byte for byte; colour codes in Mystic/Synchronet/PCBoard files,
+  blink and italic keep ANSI; reading/writing Image codes, in the editor (open, Ctrl+S, Open as, animated saves +
+  a C*Base copy); Animate a folder for both boards; the 239 petscii-bbs `.seq` (`CHARCOAL_C64BBS_FILES`, default
+  ~/.cache/charcoal-c64bbs/petscii-bbs, skipped when missing). bbspause_test.go's models now act on the colour
+  codes (sending an SGR), `checkPaced` compares through `cbbsCanon`. FuzzParsers reads "seq image".
+- **Traps**: a real `.seq` with a stray `"` leaves quote mode on to the end of its line; a filler there would print
+  (only when a 2-byte C*Base piece meets the end of a 255-byte line in quote mode; the real-file test puts its
+  pauses after a RETURN). Test pages need `glyph0 = true` (screen code 0 is @) or `writeSeq` drops trailing @s.
+- **Open questions to the user**: Image's `£W` for long holds (whole seconds, unreliable per the 2.0 source); Color
+  64 (no pause code, only `£v` speed); writing Image's `£C` colours instead of PETSCII's (CharEdit writes PETSCII's:
+  the board passes them to C/G callers, and £C is for typists on other machines). Nothing was run on a real board.
 
 ## Amstrad CPC pages (2026-10-16, branch r1-cpc; roadmap step 5)
 
@@ -692,6 +746,62 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   the page only), the screen editor's ESC commands (skipped when read),
   Petmate9's own c16 .prg player output (assembled at run time; not read), multicolour text mode (TED $FF07
   bit 4), blocks pasted from a C64 page keep their 4-bit colours (shown at luminance 0), Marq's editor not run (needs Java).
+
+## Files that run on the machine, Atari colours (2026-10-16, branch r3-machines)
+
+- **The user's decisions (2026-10-16, "I trust you"):** PAL default; the GTIA model re-implemented from atari800's
+  numbers (no code) is fine; the OS ROM font is the default when a ROM is found (prefs.go); a .xex shows 24 rows
+  with a note, no scrolling; a measured palette becomes the default once one with a shippable licence is found
+  (the emulator check, branch r3-emu, gathers the evidence).
+
+- **Atari colours** (`gtia.go`): an Atari page's `Doc.bg/ink/border` are now the machine's registers as values
+  0-255: COLOR2 (710, the screen), COLOR1 (709: only its luminance shows, the text takes the screen's hue:
+  `atariText(d)` = bg&$F0 | ink&$0E) and COLOR4 (712). Start-up 148 / 202 / 0 (`atariBg`, `atariInk`,
+  `atariBorder`). Before, they were numbers 0-15 into a 16-colour list: old autosaves (no `gtia` flag in the
+  meta) go through `atariFromOld`. RGB: `a.atariRGB(v)` = `a.gtia()[v&$FE]` (luminance bit 0 ignored in text
+  modes); **never `a.pal[d.bg]` on an Atari page** (it panics on values > 15): the sites that did (drawCell,
+  borderPx, HTML, strip, paperRGB, paperColour, convertFromMachine, Playscii) have an atari case. `a.pal` on
+  an Atari page is 16 hues at luminance 8 (for code that wants some palette). Palettes `atari` (PAL, default) and
+  `atarintsc`, tables `gtiaPAL`/`gtiaNTSC` made at start by atari800's model (standard preset: gamma 2.35, levels
+  16-235, delay 26.8 / 23.2 degrees, PAL's even/odd delay table; *read* from its colours_ntsc.c / colours_pal.c,
+  written anew). They come out darker than measured palettes (atari800's act/jakub.act, Real.act: $94 is
+  #2D769D there, #034653 here): the model is what atari800 shows by default, not a measurement.
+- Colour UI (`drawAtariColours`): 16 hues x 8 luminances; left = COLOR1, right = COLOR2, middle = COLOR4 (all
+  undoable); under it "709: n 710: n 712: n". Keys: `atariColourKey` (Ctrl+0-7 = text luminance 0-14, background
+  keys = screen hue), `atariStep` (luminance / the 128 in order); `defaultColours` resets the start-up registers.
+  Playscii: its `atari` palette is GTIA's 128 in order (16 hues a row, a row a luminance): `psciGTIA` /
+  `gtiaOfPsci` map exactly.
+- **.xex / .atr** (`atari8.go`): `atariXexCode` at $2000 sets SDMCTL 0, SDLSTL/H = $2060, COLOR1/2/4, CHBAS ($E0 =
+  ROM font, else $24 = the own font at $2400), CHACT 2, SDMCTL $22, then `loop: LDA #0 STA ATRACT JMP loop`
+  (attract mode off), an RTS (the .atr's DOSINI) and "CharEdit" + width + rows (how it is read back). Display list
+  3x$70, $42 $3000, 23x$02, $41. Screen $3000 in ANTIC's screen codes (`atariInternal`); a 38-wide page from
+  column 2. Segments: code+DL, font (if any), screen, RUNAD. `.atr`: 720 x 128-byte sectors, boot header at
+  $1FFA (count, load, DOSINI) so the image from $2000 is the same memory; the OS calls $2000, which never
+  returns. The font goes in the file unless it is the standard set (`atari`, `atarirom`): the international set
+  is carried (no $CC set on a 400/800). Reading: `readAtariProgram` (only ours: code template + mark), opens as
+  the page (`loadAtari8`, srcKind xex/atr, own font restored by `useOwnFont`).
+- **OS ROM font**: `loadAtariROMFonts` (main, headlessApp) looks for ATARIXL.ROM / ATARIOSB.ROM / ATARIOSA.ROM in
+  the data dir, ~/.atari800, ~/.config/atari800, /usr/share/atari800, /usr/local/share/atari800; 10 KB (set at
+  $0800) or 16 KB (set at $2000, international at $0C00); fonts `atarirom` / `atarixlrom`. Not offered as a
+  download (Atari's ROMs may not be passed on). Not the default font: the user picks it.
+- **.tap** (`zxtap.go`): program header + `10 BORDER b: LOAD ""SCREEN$` / `20 PAUSE 0: GO TO 20` (autostart 10)
+  + CODE header (6912 at 16384) + the .scr (`writeSCRFont`, so the page's own font). Name = the saved file's
+  (`cpcTarget`), 10 characters. Reading: the first SCREEN$ (header + data, or a headerless 6912-byte block) and
+  the BORDER of a BASIC block before it.
+- Glue: formats inserted after `ata` / `scr` by `init()`; editorOwn xex/atr/tap; `loadAtari8 || loadZXTap` after
+  loadCPC; `reparseAtari8 || reparseZXTap` after reparseVideotex; `encodeAtari8`, `encodeZXTap` after
+  encodeCPC; `loadAtariROMFonts` in main.go and batch.go's headlessApp; help text in dialogs.go.
+- Tests (`mach_test.go`): palettes (greys, rising luminance, blue start-up screen, gold hue 1); colour UI and
+  keys, undo, NTSC switch, PNG colours; old autosave; **every .xex/.atr combination (38/40, ROM/own font, short
+  pages) loaded as DOS / booted as the OS does, run in a 6502 (`machF6502`), drawn by a model of ANTIC
+  (`machFAntic`: display list, CHBAS, CHACT, colour registers) and compared with the PNG export pixel for
+  pixel, border included**; round trips; editor save/open/Ctrl+S with an own font; ROM font detection;
+  .tap blocks byte for byte (headers, the tokenised BASIC, checksums), other tapes' loading screens, editor round
+  trip with the border. FuzzParsers has xex/atr and tap.
+- Not run in an emulator: none installed. atari800 was built from source in ~/.cache/charcoal-mach/src
+  (`--target=libatari800`, needs `CFLAGS=-Wno-error`), but running it was not allowed in that session; fuse is
+  not installed. Not done: pages taller than 24 rows in the .xex (only the first 24), a DOS 2 disk with the .xex
+  as a file, a tape loader for an own Spectrum font (the .scr carries the pixels anyway), .tzx.
 
 ## Keys and safety (2026-10-13, evening)
 

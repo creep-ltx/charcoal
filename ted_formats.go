@@ -332,7 +332,7 @@ func (a *App) tedHides(f Format) bool {
 	if f.modes == "c64 (Plus/4)" {
 		return !a.ted()
 	}
-	return a.ted() && (f.id == "psci" || f.id == "pmjson")
+	return a.ted() && (f.id == "psci" || f.id == "pmjson" || f.id == "imageseq") // Image BBS is a C64 board (c64bbs.go)
 }
 
 // encodeTED writes a Plus/4 page's own files.

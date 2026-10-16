@@ -466,6 +466,9 @@ func (a *App) nearestColour(rgb uint32, lo, hi int) int {
 
 // paperColour is the colour cells fade from: the clear screen's background.
 func (a *App) paperRGB(d, e *Doc) uint32 {
+	if a.atari() {
+		return a.atariRGB(d.bg)
+	}
 	if a.screen() {
 		return a.screenRGB(d.bg)
 	}

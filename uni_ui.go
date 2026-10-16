@@ -466,6 +466,7 @@ func (a *App) setModeUni(m string) bool {
 func (a *App) convertFromMachine() {
 	from := a.mode
 	pal := a.pal
+	gtia := a.gtia()
 	runeOf := a.runeOf
 	a.endPlay()
 	cells := func(d *Doc) *Doc {
@@ -495,6 +496,14 @@ func (a *App) convertFromMachine() {
 				fgc, bgc = rgbColour(a.tedRGB(tedAttr(v))), rgbColour(a.tedRGB(d.bg))
 				if v&0x80 != 0 {
 					fgc, bgc = bgc, fgc
+				}
+			}
+			if from == "atari" { // register values (gtia.go)
+				if v&0x80 != 0 {
+					fg, bg = d.ink, d.bg
+					fgc, bgc = rgbColour(gtia[bg&0xFE]), rgbColour(gtia[atariText(d)])
+				} else {
+					fgc, bgc = rgbColour(gtia[atariText(d)]), rgbColour(gtia[bg&0xFE])
 				}
 			}
 			n.cells[i] = uniCell(code, pairOf(fgc, bgc))

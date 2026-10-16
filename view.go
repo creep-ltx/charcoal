@@ -45,6 +45,8 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	var fgc, bgc uint32
 	smear := false
 	switch {
+	case a.atari(): // the colour registers (gtia.go)
+		bgc, it, ul = a.atariRGB(a.doc.bg), false, false
 	case a.screen():
 		bgc, it, ul = a.screenRGB(a.doc.bg), false, false
 	case a.st():
@@ -67,7 +69,7 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	}
 	switch {
 	case a.atari():
-		fgc = a.pal[a.doc.ink]
+		fgc = a.atariRGB(atariText(a.doc))
 	case a.ted(): // the cell's whole TED colour; a flashing cell's ink is off half the time
 		if ink, on := a.tedInk(v); on {
 			fgc = ink

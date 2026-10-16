@@ -194,6 +194,9 @@ func (a *App) drawColours(u *UI, x, y, perRow int) int {
 	if a.ted() { // the TED's hues and luminances (ted.go)
 		return a.drawTEDColours(u, x, y, perRow)
 	}
+	if a.atari() { // the 128 colours and the three registers (gtia.go)
+		return a.drawAtariColours(u, x, y, perRow)
+	}
 	fb := u.fb
 	n := 16
 	if a.mt() {
