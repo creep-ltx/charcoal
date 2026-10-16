@@ -1032,6 +1032,8 @@ func (a *App) pagePress(c *Click) {
 	case "type":
 		a.cx, a.cy, a.sel = p.x, p.y, nil
 		a.moved()
+	case "logo": // TheDraw fonts (tdf_ui.go)
+		a.logoClick(p.x, p.y)
 	case "select":
 		if a.sel != nil && c.button == 1 && !c.shift && a.selRect().has(p.x, p.y) {
 			a.liftSel(p.x, p.y) // a drag inside the selection moves it

@@ -416,6 +416,10 @@ func textInput(s string) {
 		return
 	}
 	a.start = false // typing starts on a page of the last used type
+	if a.tool == "logo" && a.tdfPage() {
+		a.logoText(s) // in a TheDraw font (tdf_ui.go)
+		return
+	}
 	for _, r := range s {
 		b := a.charToByte(r)
 		if b < 0 {
@@ -540,6 +544,9 @@ func editorKey(k string, ctrl, shift, alt bool) {
 		if sets := a.fkeys[a.mode]; a.fset < len(sets) && fk <= len(sets[a.fset]) {
 			a.typeByte(sets[a.fset][fk-1])
 		}
+		return
+	}
+	if a.tool == "logo" && a.tdfPage() && a.logoKey(k) { // Backspace and Return of the Logo tool (tdf_ui.go)
 		return
 	}
 	if a.cursorKey(k) {

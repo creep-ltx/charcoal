@@ -1059,6 +1059,61 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   not found), Playscii's "sharp" charset (another layout), flips of second-set characters (they use the first
   set's mirror table), the 2nd set's look without Sharp's ROM (codes in boxes).
 
+## TheDraw fonts: the Logo tool (2026-10-16, branch r5-tdf)
+
+- **What**: `tdf.go` (reader, glyphs, layout, TheDraw's 19 outline styles), `tdf_ui.go` (library, download, the
+  Logo tool, its options, the font picker `TDFReq`, the line requester `TDFLineReq`). Tool id "logo" (appended to
+  `tools` in `init`; hidden like Half on pages that are not PC/Amiga/Unicode, `tdfPage`), actions `tool_logo`
+  Alt+G, `logo_font` Alt+Shift+G, `logo_line` Ctrl+Shift+G, Draw menu entries, `prefs.TDF` (paths, font by its
+  SHA-1 `sum`, outline, spacing (0 = the font's, n = n-1), the line's text).
+- **Format** (read from TheDraw 4.63's manual, its TDFONTS.TDF and THEDRAW.EXE, IcyDraw's retrofont; checked on
+  Roy/SAC's 3,536 fonts): header 19 + "TheDraw FONTS file" + 1A; per font 55 AA 00 FF, name length + 12 bytes,
+  4 zero bytes, type 0 outline / 1 block / 2 colour, spacing, u16 block size, 94 u16 offsets for '!'..'~'
+  (FFFF none), the block; a glyph = width, height, cells to a 0 byte, 13 = new line, colour cells char + DOS
+  attribute (BIOS order: `biosANSI`). **Traps**: the height byte leaves out descender lines, which end in '&';
+  an '&' that is *not* at the end of a line is a character (with an attribute in colour fonts: the "Dolce" fonts
+  use it; reading every '&' as a mark made 40 of their glyphs wider than their width byte, the end-of-line rule
+  makes all agree). Fonts in one file can be cut short or followed by junk (one tdfiglet file): the fonts before
+  are kept. Width may be less than the longest line (old fonts): the longest line wins.
+- **Drawing** (`render`): outline letters A-P through `tdfOutlines` (19 x 16 bytes, read out of THEDRAW.EXE at
+  0x2305B; O = 0xFF and P = space are blanks), '@' = TheDraw's solid space (blank, drawn); block 0xFF = solid
+  space; block/outline glyphs fill their box (width x lines, not descenders) with spaces in the brush's colours
+  first (IcyDraw does this), a space in the glyph leaves the fill. Colour fonts: a space on a black background is
+  left out (the page shows through), a space with a background is drawn (1,671 of Roy/SAC's colour fonts draw with
+  coloured spaces; IcyDraw drops them all), 0xFF is a space in its colours.
+- **Typing** (`logoGlyph`): one `pushUndo` per glyph, cursor set to the glyph's corner *before* the push (undo
+  puts it back there); then x += width + spacing. `logo` keeps the run: `left` (Return's column), `x` (may pass
+  the page's width), the glyphs' generations `gens`. Backspace (`logoKey`) is `doUndo` only when the page's gen is
+  the last glyph's and the cursor is where it left it; else the normal Backspace. `logoRun` also continues after
+  Ctrl+Z (the gen is one of the run's). Return = left column, y + `lineHeight` (the tallest glyph without its
+  descenders); `moved()` may add rows (its own undo step, counted in gens). A glyph that does not fit wraps to the
+  next line of letters. Space = half the letters' usual width; a letter the font lacks: its other case, else a
+  message. Typing goes to `logoText` from `textInput`, Backspace/Return from `editorKey` (both only with the tool on
+  a `tdfPage`).
+- **Pages**: PC = CP437 as is; Unicode = `uniFromRune(cp437)`, colour fonts `styleOf(fg, bg, 0)`; Amiga = the CP437
+  character's Latin-1 byte or refused (`tdfMissing`, the whole glyph, with the character named). Only 118 of the
+  3,536 fonts fit an Amiga page (`tdfFits`, cached per font): the picker lists only those there unless "Also
+  fonts an Amiga page cannot show" is ticked.
+- **Fonts**: none built in (art by others, almost none with a licence). Library = `<data dir>/tdf` + the user's
+  paths (files, folders walked, `.zip`s read), each font once by `sum`, sorted by name. Download (`FontReq` with
+  `fetchTDF`): Roy/SAC's `TDFONTSALL.ZIP` (3,136,213 bytes, one 20 MB TDFONTSALL.TDF, 3,536 fonts: 3,388 colour,
+  146 block, 2 outline), from roysac.com, which offers it for free download (his page's FAL 1.3 covers his tools,
+  not the fonts); no SHA pin (the zip must hold readable .tdf). A `.tdf` opened (openPath) or dropped joins the
+  list and opens the picker. TheDraw's own TDFONTS.TDF (11 fonts, incl. Outline/BigOutline) is shareware-package
+  content: not shipped, not fetched.
+- **Picker**: rows of name/kind/file + a preview of the Text field in the font (`renderDoc` of the laid-out line,
+  `blitScaled`, cached per font+mode+style+spacing+brush+text), the selected font larger below. Line requester:
+  preview, size, characters the font lacks; Stamp = `startPaste(tdfBlock(...))`.
+- **Tests** (`tdf_test.go`, helpers `tdfF...`; a writer `tdfFFile` makes fonts): parsing (cut, junk, offsets, types,
+  dedupe), every outline style, block fill/solid space/descender, colour transparency rules and BIOS colours,
+  typing/Backspace/Ctrl+Z/Return/wrap/click, Amiga refusal and fit filter, Unicode cells, the line stamp, library
+  (folders, zip, bad files, prefs, open .tdf, find), download (httptest), requesters drawing headless.
+  `TestTDFRealFiles` (CHARCOAL_TDF, default ~/.cache/charcoal-tdf/roysac; CHARCOAL_THEDRAW for TDFONTS.TDF):
+  every glyph of 3,536 fonts in every style, TheDraw's Outline 'Q' and its descender. FuzzParsers reads "tdf".
+- **Not done**: a font editor for .tdf (IcyDraw has one), FIGlet fonts, TheDraw's own fonts menu keys in the
+  TheDraw key preset, a ghost of the next letter under the mouse, kerning. Not checked against TheDraw running
+  (no DOS emulator here): the box fill and spacing columns follow IcyDraw and the manual.
+
 ## Keys and safety (2026-10-13, evening)
 
 - `keys.go`: one table of actions (id, default keys, help line, what it does) drives every shortcut, the help's

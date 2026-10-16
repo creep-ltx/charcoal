@@ -96,7 +96,9 @@ against each platform's best editor. Each step says what it wins.
 - [x] More PC fonts (done 2026-10-14): EGA 8x14, VGA50 8x8 (80x50), code pages 850 and 866; SAUCE font names
   honoured on opening and written on saving (IBM VGA, IBM EGA, IBM VGA50, IBM EGA43, IBM VGA 850 ...). Not yet:
   other code pages' 8x8/8x14 sets (Moebius's names open in the CP437 font of the same size and are kept on save), the 4:3 aspect above.
-- TheDraw fonts (logo typing), select by character or colour, fill limited to a colour.
+- [x] TheDraw fonts (logo typing) (done 2026-10-16, tdf.go tdf_ui.go): the Logo tool, the font list with previews,
+  a line to stamp, Roy/SAC's collection downloaded on request; PC, Amiga (Latin-1 fonts only) and Unicode pages.
+- Select by character or colour, fill limited to a colour.
 - Layers (later: they touch everything, so after frames).
 
 ## Step 5: platform by platform

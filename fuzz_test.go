@@ -44,6 +44,7 @@ func FuzzParsers(f *testing.F) {
 		f.Add(pd)
 		f.Add(writeBSV(d))
 		f.Add([]byte(skyFDrawing))
+		f.Add(tdfFFile(tdfFBlock(), tdfFOutline(), tdfFColour()))
 		for _, buf := range []int{icyPETSCII, icyATASCII, icyAtariST} { // other machines' pages (icymach.go)
 			o := &icyOut{buffer: buf, fontMod: 1, w: 3, h: 2, fontH: 8, pal: []uint32{0, 0xFFFFFF},
 				screen: icyScreenRecord(map[int]int{icyPETSCII: 5, icyATASCII: 9, icyAtariST: 8}[buf], 1, 3, 113),
@@ -200,6 +201,23 @@ func FuzzParsers(f *testing.F) {
 		})
 		check("td", func() []*Doc { pages, _ := parseTD(b); return pages })
 		check("skypix", func() []*Doc { isSkyPix(b); return one(readSkyPix(b).cells) }) // skypix.go
+		// TheDraw fonts (tdf.go): every glyph of the first fonts, a line in each.
+		check("tdf", func() []*Doc {
+			fonts, _ := parseTDF(b, "")
+			for i, f := range fonts {
+				if i == 20 {
+					break
+				}
+				for c := rune(tdfFirst); c < tdfFirst+tdfChars; c++ {
+					f.render(c, int(c)%len(tdfOutlines))
+				}
+				f.lineHeight()
+				if l := f.layout("Charcoal tdf ~!", 1, -1); l.pic.w > tdfLineMax+2*tdfMaxCols || l.pic.h > tdfMaxRows {
+					t.Fatalf("tdf line %dx%d", l.pic.w, l.pic.h)
+				}
+			}
+			return nil
+		})
 		check("bsv", func() []*Doc { d, _ := parseBSV(b); return one(d) })
 		check("icy machine", func() []*Doc { // IcyDraw's pages of other machines (icymach.go)
 			if doc, err := parseIcyDraw(b); err == nil {

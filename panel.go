@@ -15,6 +15,9 @@ func (a *App) drawTools(u *UI, x, y, w, cols int) int {
 		if t.id == "half" && !a.pc() && !a.tt() && !a.uni() && !a.mt() {
 			continue
 		}
+		if t.id == "logo" && !a.tdfPage() { // TheDraw fonts are CP437 (tdf_ui.go)
+			continue
+		}
 		r := Rect{x + (i%cols)*(w+4), y + (i/cols)*(smallH+4), w, smallH}
 		name, hint := t.name, t.hint
 		if t.id == "half" && a.tt() {

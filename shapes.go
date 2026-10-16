@@ -561,6 +561,9 @@ func (a *App) setPaintOnly(what string) {
 // drawToolOptions draws the options of the tool in use from (x, y), in rows
 // that end before right, and returns the y under them.
 func (a *App) drawToolOptions(u *UI, x, y, right int) int {
+	if a.tool == "logo" && a.tdfPage() { // TheDraw fonts (tdf_ui.go)
+		return a.drawLogoOptions(u, x, y, right)
+	}
 	if a.tool != "draw" && a.tool != "shape" && a.tool != "colour" && a.tool != "half" {
 		return y
 	}

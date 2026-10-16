@@ -46,6 +46,7 @@ type Prefs struct {
 	UIFontFile string              `json:"ui_font_file,omitempty"`      // with "file": a .ttf or .otf
 	UIFontSize int                 `json:"ui_font_size,omitempty"`      // in pixels ("": 13)
 	Party      string              `json:"party,omitempty"`             // Check for a party's last compo (compo.go)
+	TDF        *tdfPrefs           `json:"tdf,omitempty"`               // the Logo tool: TheDraw fonts' folders, font, outline, spacing (tdf_ui.go)
 	Width      int                 `json:"width"`
 	Height     int                 `json:"height"`
 }

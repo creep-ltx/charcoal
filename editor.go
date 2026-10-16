@@ -1058,6 +1058,9 @@ func (a *App) toolKey(t string) {
 		a.msg("The Half tool is for PC pages, the Sixel tool for teletext and Minitel pages")
 		return
 	}
+	if t == "logo" && !a.logoTool() { // TheDraw fonts: the page must take them, and fonts be here (tdf_ui.go)
+		return
+	}
 	a.start = false // a tool means drawing: on the page of the last used type
 	a.setTool(t)
 	for _, tl := range tools {
@@ -2441,6 +2444,10 @@ func (a *App) openPath(path, as string) {
 	}
 	if as == "auto" && isPicture(b) { // a picture is no art: it can be the page's reference
 		askReference(path)
+		return
+	}
+	if as == "auto" && isTDF(b) { // TheDraw fonts: into the Logo tool's list (tdf_ui.go)
+		openTDFFile(path)
 		return
 	}
 	for _, t := range a.tabs { // already open: go there

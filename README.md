@@ -372,7 +372,7 @@ evens out colours that do not show when it saves and writes NUL as a space; an A
 80 columns; Playscii and REXPaint files cannot hold a font (CharEdit keeps a page's own font for the file, as
 for `.ans`); PabloDraw cannot store characters 1-6 in a `.pd` (left out, the save says how many). Moebius and
 ACiDDraw have no files of their own beyond ANSI/BIN/XBin (ACiDDraw's `.adf` is ArtWorx's); TheDraw's `.tdf`
-are fonts. Not done: TheDraw 3's `.td` and libraries (`.tdl`), its COM/OBJ/C/Pascal/ASM exports; IcyDraw's
+are fonts (see TheDraw fonts). Not done: TheDraw 3's `.td` and libraries (`.tdl`), its COM/OBJ/C/Pascal/ASM exports; IcyDraw's
 Viewdata and Mode 7 pages, sixel layers, live text and effects; Playscii's teletext_uk, ultima4, ui and
 osamu-micro sets (glyphs wider than a cell: they open by number); Marq's DirArt as a disk. Playscii's `msx` set
 opens on the MSX page, its `sharp` set (the Japanese MZ's, with kana and kanji) on a PC page with the set as its font.
@@ -436,6 +436,30 @@ empty cells; Alt+O), **Play** (Ctrl+P, at 1/2x to 4x, looping or once). Undo cov
   Paste, Undo; arrows or the character map pick another character. The page shows every change at once. Editing a
   built-in font makes a copy, the page's own. *Save font...* writes it as `.psf`, `.f08/.f14/.f16`, `.64c`, `.fnt`,
   `.ch8` or `.udg`.
+
+## TheDraw fonts (logos)
+
+TheDraw fonts (`.tdf`) are the big letters ANSI artists type logos with; thousands exist, many in one file.
+The **Logo tool** (Alt+G, the Logo button, Draw > Logo) types in one on PC, Amiga and Unicode pages:
+
+- **Typing** puts the font's letter at the cursor and moves on past it (plus the font's spacing, or one you
+  choose under the brush). Each letter is one undo step: **Backspace** takes the last letter back, Ctrl+Z works
+  as always. **Return** goes to the next line of letters, under the first one typed. A letter that does not fit
+  goes to the next line by itself. A click puts the cursor somewhere else. Most fonts have capitals only:
+  small letters use them (and the other way round). A letter the font lacks is named in the status line.
+- **The three kinds**: *Block* fonts draw in the brush's colours, *Colour* fonts keep their own colours,
+  *Outline* fonts are drawn in one of TheDraw's 19 outline styles (single and double lines, half blocks: the
+  Outline choice under the brush shows its corners).
+- **The font list** (Alt+Shift+G, or the font's name under the brush): every font with a preview of your text
+  in it, as the page will show it; Find narrows the list by name, file or kind. *Add fonts...* takes a `.tdf`,
+  a `.zip` of them or a whole folder; opening or dropping a `.tdf` adds it too. *Download...* fetches Roy/SAC's
+  collection (3,536 fonts, 3 MB, from roysac.com) into CharEdit's data folder: fonts are other people's art,
+  so none come with the program.
+- **A whole line** (Ctrl+Shift+G, *Line...*): type the text in a requester with a preview, *Stamp* hands it
+  over as a block; a click puts it down (Shift: without the blanks), as many times as you like, Esc stops.
+- **Amiga pages** show Latin-1, which has no block or line characters: only 118 of Roy/SAC's fonts can be
+  typed there (the list shows those unless you tick *Also fonts an Amiga page cannot show*); a letter needing a
+  character the page lacks is refused, not changed. **Unicode pages** take every font (CP437 to Unicode).
 
 ## Animation templates
 
@@ -649,6 +673,7 @@ Delete, Insert, Esc. The defaults, the PC ANSI editors' (Moebius, PabloDraw, The
 | Ctrl+Home, Ctrl+End | top, bottom of the page |
 | Alt+Up / Alt+Down, Alt+Left / Alt+Right | delete / insert a row, delete / insert a column |
 | Alt+T, D, K, L, P, S, B | tools: Type, Draw, Colour, Fill, Pick, Select, Half (PC, Unicode) / Sixel (teletext, Viewdata, Minitel) |
+| Alt+G, Alt+Shift+G, Ctrl+Shift+G | Logo tool (TheDraw fonts), the font list, a whole line to stamp |
 | Ctrl+Alt+PgUp / PgDn | Unicode page: the character table's previous / next block |
 | Ctrl+Up / Ctrl+Down, Ctrl+Left / Ctrl+Right | foreground -/+, background -/+ |
 | Ctrl+0-7, Alt+0-7 | foreground, background colour (again: the bright one; Plus/4: the hue, its luminance kept) |
@@ -806,4 +831,6 @@ project; for the Plus/4 its KERNAL ROM, which holds the characters) and the EmuT
 pages; Playscii's charset pictures (Apple II, Agat, BBC Master, Intellivision, Pac-Man, Sharp MZ, ZX81) and
 palettes, from Playscii's source at a fixed version (Playscii is MIT, but the glyphs are the machines' own); the
 Amiga fonts SkyPix files name (Topaz, the Workbench fonts and the 8x8 IBM set SkyPix terminals draw text in),
-as IcyDraw 0.6's source keeps them (Amiga's own fonts). Not included and not fetched: an Atari OS ROM (Atari's; used only when it is already on the computer).
+as IcyDraw 0.6's source keeps them (Amiga's own fonts). TheDraw fonts: none
+come with the program (they are their makers' art, mostly without a stated licence); *Download...* in the
+Logo tool's font list fetches Roy/SAC's free collection (`TDFONTSALL.ZIP`, roysac.com) when asked. Not included and not fetched: an Atari OS ROM (Atari's; used only when it is already on the computer).

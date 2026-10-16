@@ -229,6 +229,9 @@ func init() {
 		{"tool_pick", "Alt+P", "Pick tool", func() { a.toolKey("pick") }},
 		{"tool_select", "Alt+S", "Select tool", func() { a.toolKey("select") }},
 		{"tool_half", "Alt+B", "Half tool (PC pages), Sixel tool (teletext, Minitel)", func() { a.toolKey("half") }},
+		{"tool_logo", "Alt+G", "Logo tool: type in a TheDraw font (PC, Amiga and Unicode pages)", func() { a.toolKey("logo") }},
+		{"logo_font", "Alt+Shift+G", "TheDraw fonts: the list, with a preview of each (add folders, download a collection)", func() { openTDFPicker(nil) }},
+		{"logo_line", "Ctrl+Shift+G", "Type a line in the TheDraw font and stamp it", openTDFLine},
 
 		// Shapes and brushes (shapes.go).
 		{"shape_line", "Alt+Shift+L", "Shape tool: line (drag; the shape tool's choices are under the brush)", func() { a.shapeKey(shapeLine) }},
