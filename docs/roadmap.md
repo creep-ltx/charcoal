@@ -148,6 +148,14 @@ against each platform's best editor. Each step says what it wins.
   Image BBS's £ codes read (colours, clear, reverse) and saved back with them. Later: Image's whole-second £W and
   Color 64 (open questions to the user), C-Net/DMBBS/Centipede codes (not found), a run on a real board.
 
+- [x] **The rest of other editors' files** (2026-10-16, icymach.go, psciown.go, othformats.go, petmate9.go,
+  skypix.go): IcyDraw's PETSCII (every Commodore model), ATASCII and ST pages read and written (IcyDraw's engine
+  reads and draws all 18 kinds as CharEdit does); Playscii's other sets as the page's own font (fetched) and its
+  palettes; PabloDraw's .pd; TheDraw 4's .td (read, page layers as frames); BSAVE .bsv; Petmate9's VIC-20, PET
+  and C128 screens; SkyPix (Amiga BBS graphics) as a picture under the cells, the Amiga fonts fetched. Later:
+  IcyDraw's Viewdata/Mode 7 pages, TheDraw 3 and .tdl, Playscii's teletext set on the teletext page, Marq's
+  DirArt as a .d64, MSX/Sharp sets on the MSX and MZ-700 pages when they come.
+
 ## Later
 
 - Collaboration in Moebius's protocol (IcyDraw and Moebius speak it).

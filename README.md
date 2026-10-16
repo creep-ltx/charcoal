@@ -174,6 +174,12 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   the drawing and its sounds, pauses and closing clear byte for byte and adds the text after the drawing (an
   unchanged page saves as the same file). The drawing itself is not editable; sound is not played.
   Design: docs/igs-design.md.
+- **SkyPix** (`.spx`, or an `.ans` with SkyPix commands; the Amiga BBS graphics of SkyPix and JR-Comm): opens
+  on a PC page of 80x25 in the 8x8 font with the drawing (lines, fills, rectangles, ellipses, brushes, palettes,
+  text placed in pixels, the Amiga fonts it names) as a picture under the cells, as IcyDraw's engine draws it
+  (pixel for pixel on 9 of its 10 test files). Type over it; saving keeps the file as it came and adds the typed
+  cells after it. The Amiga fonts are fetched on first use (Not now: the text shows in the VGA's 8x8). Open as
+  "SkyPix (Amiga)" reads any file so.
 - **Teletext page**: 40x25 cells of 7-bit codes in 12x20 cells like the SAA5050's; attributes (text/graphics
   colour, double height, flash, conceal, separated, hold, new/black background) act from their cell on, read
   left to right as the chip reads a row (set-at / set-after as in ETS 300 706 and edit.tf). **Codes** shows the
@@ -317,8 +323,13 @@ open again become the page's file (Save writes the same format again).
 | ArtWorx | `.adf` | PC, Amiga, 80 columns | cells, font, the 16 colours in the EGA's 64 | yes | ansilove (picture identical), IcyDraw's reader; files IcyDraw wrote |
 | TundraDraw | `.tnd` | PC, Amiga, 80 columns | cells with 24-bit colours (no font) | yes | ansilove (colours; it cannot draw characters 1, 2, 4, 6), IcyDraw's reader; files IcyDraw wrote |
 | IcyDraw | `.icy` | PC, Amiga | one layer, font, palette, iCE or blink; a picture of the first 80 rows | yes (version 1 with or without zstd, and the older version 0; layers put together, picture layers and effects left out) | IcyDraw's reader; files IcyDraw 0.6 wrote |
+| IcyDraw | `.icy` | PETSCII (C64, C128 40/80, VIC-20, PET 40/80, Plus/4 as IcyDraw's C16), Atari, Atari ST | IcyDraw's page of that machine: its machine and case, screen colour and border, the character set (a page's own set too), the machine's colour numbers (the C16's 128, the VDC's own order), flash | yes, on that machine's page (an XEP80 page of 80 columns shows its first 40; the VDC's per-cell set: the one most cells use) | IcyDraw's engine reads all 18 page kinds cell for cell and draws them pixel for pixel as CharEdit; files its engine wrote |
+| PabloDraw | `.pd` | PC, Amiga | PabloDraw's own file: its font (by PabloDraw's name, or the font itself), palette, cells with 24-bit colours; SAUCE for other widths | yes (an Amiga font opens on an Amiga page) | its source (Pablo.cs, Tundra.cs, BitFont.cs, Eto's Palette) |
+| TheDraw | `.td` | PC | (read only) TheDraw 4's own save file: every page layer, as frames | yes | TheDraw 4.63's own example files; abydos' reader |
+| TheDraw, ACiDDraw | `.bsv` | PC, 80 columns | a BASIC BSAVE screen dump (`BLOAD` loads it into the text screen) | yes | TheDraw's manual |
 | REXPaint | `.xp` | PC | one layer, 24-bit colours | yes (layers put together) | IcyDraw's reader |
 | Playscii | `.psci` | PC (dos), Amiga (amiga_topaz), PETSCII (c64_real_*, commodore_pet), Atari (atari) | every frame with its hold, one layer; Playscii's own charset and palette by name | yes, also c64_petscii, c64_edscii (Playscii's defaults) and jpetscii; other charsets open as a PC page; layers put together | Playscii's own loader (art.py); its glyph order compared with the ROM fonts |
+| Playscii | `.psci` | PC with Playscii's set as its font: Apple II, Agat, BBC Master, Intellivision, MSX, Pac-Man, Sharp MZ, ZX81 (`speccy`); Atari ST (`atari_st`) | the same charset and palette names and numbers as read (a palette other than ansi/ega is the page's own colours: the 16 the art uses most of a bigger one) | yes; the sets' pictures and Playscii's palettes are fetched on first use (see Licences) | Playscii's charset.py/palette.py; its own art (56 files) |
 | Marq's PETSCII editor | `.pet` | C64 | screen codes, colours, border, background, case | yes | its source (m_c64.pde) |
 | Marq's PETSCII editor | `.bas`, `.s` | C64 | a BASIC listing (for petcat) and an ACME program of a 40x25 screen (data only for other sizes); with a custom set, multicolour or ECM: the registers and the set (BASIC: VIC bank 3, screen `$C400`, set `$C800`; ACME: the set at `$2000`) | no | its source; the ACME output assembled by ACME 0.97 and run in a 6502 (c64x_test.go) |
 | CharPad | `.ctm` (v5-v9) | C64 | (read only) the character set, mode, colours; the map laid out as characters | yes, as a font or a page | CharPad 2.7's format pages; c64lib's test projects (`testdata/charpad`), every version the same page |
@@ -326,13 +337,16 @@ open again become the page's file (Save writes the same format again).
 | Marq's PETSCII editor | `.prg`, `.c`, `.bas`, `.s` | Plus/4 | the program of its Plus/4 template (screen codes, attributes, border, background, case); the C array with `PLUS4` (no flash: the editor has none); its BASIC 3.5 listing (`petcat -w3`) and ACME source (data only for sizes other than 40x25), attributes with their flash bit | `.prg` and `.c` | its source (m_plus4.pde) and template; the `.prg`, the BASIC listing (tokenised by VICE's petcat) and the ACME program (ACME 0.96.4) run in VICE's xplus4: screenshots identical to CharEdit's PNG |
 | TED Screen Editor | `.scrn` + `.proj` | Plus/4 | attributes, its 24-byte signature, screen codes ("save screen"); the project's size, colours, case | yes (without a `.proj`: 40 columns, black) | its source and README; its own title and help screens |
 | Petmate9 | `.petmate` | Plus/4 | `c16Upper` / `c16Lower` screens with the TED's attribute bytes and colours | yes | its source |
+| Petmate9 | `.petmate` | VIC-20, PET 40/80, C128 40/80 | the machine's charset name (`vic20Upper`, `petBiz`, `c128Lower` ...); the VDC's colour numbers and attribute byte | yes, on that machine's page | its source (presetExport.ts, vdcAttr.ts) |
 
 Traps: Petmate's `.pet` export says 0 for lower case where Marq's says 1 (CharEdit follows Marq); IcyDraw
 evens out colours that do not show when it saves and writes NUL as a space; an ArtWorx or TundraDraw page is
 80 columns; Playscii and REXPaint files cannot hold a font (CharEdit keeps a page's own font for the file, as
-for `.ans`). Not done: PabloDraw and TheDraw have no files of their own beyond ANSI/BIN/XBin (TheDraw's `.tdf`
-are fonts); ACiDDraw saves ANSI; Moebius saves ANSI/BIN/XBin with SAUCE; IcyDraw's PETSCII, ATASCII and other
-non-PC pages; Playscii's other charsets (Apple II, CPC, MSX, ZX81 "speccy" ...).
+for `.ans`); PabloDraw cannot store characters 1-6 in a `.pd` (left out, the save says how many). Moebius and
+ACiDDraw have no files of their own beyond ANSI/BIN/XBin (ACiDDraw's `.adf` is ArtWorx's); TheDraw's `.tdf`
+are fonts. Not done: TheDraw 3's `.td` and libraries (`.tdl`), its COM/OBJ/C/Pascal/ASM exports; IcyDraw's
+Viewdata and Mode 7 pages, sixel layers, live text and effects; Playscii's teletext_uk, ultima4, ui and
+osamu-micro sets (glyphs wider than a cell: they open by number); Marq's DirArt as a disk.
 
 ## Frames and animation
 
@@ -672,6 +686,8 @@ palette has them).
 | `c64bbs.go`, `boardcolours.go` | the C64 boards' pauses (Image BBS, C*Base) and Image's £ codes read and written; the PC boards' own colour codes in their animated files (`c64bbs_test.go` with models of Image's and C*Base's display code) |
 | `bbscodes.go` | BBS colour codes: pipe, Synchronet Ctrl-A, WWIV, Wildcat!, Celerity, read in front of the ANSI terminal and written (`bbscodes_test.go`; real files when fetched, see HANDOFF) |
 | `editorformats.go` | other editors' files: iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii, Marq's `.pet`/`.bas`/`.s`, Petmate JSON (`editorformats_test.go`; `editorformats_ext_test.go` checks against ansilove, IcyDraw's engine and Playscii's loader when they are there) |
+| `icymach.go`, `psciown.go`, `othformats.go`, `petmate9.go` | IcyDraw's PETSCII/ATASCII/ST pages, Playscii's other sets and palettes, PabloDraw `.pd` / TheDraw `.td` / BSAVE `.bsv`, Petmate9's machines (`oth_test.go`) |
+| `skypix.go`, `skyfonts.go` | SkyPix pages and the Amiga fonts they name (`oth_test.go`) |
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
 | `gtia.go`, `atari8.go`, `zxtap.go` | Atari GTIA colours and the colour registers; the Atari `.xex`/`.atr` and the OS ROM's font; the Spectrum `.tap` (`mach_test.go` runs the Atari program in a small 6502 with a model of ANTIC and compares its screen with the PNG export pixel for pixel) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
@@ -729,4 +745,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 
 Not included, fetched on first use and checked by SHA-1: the Commodore character ROMs (from the VICE
 project; for the Plus/4 its KERNAL ROM, which holds the characters) and the EmuTOS font sources (GPL; 8x8, 8x16 and, for IGS's small text, 6x6), for PETSCII and Atari ST
-pages. Not included and not fetched: an Atari OS ROM (Atari's; used only when it is already on the computer).
+pages; Playscii's charset pictures (Apple II, Agat, BBC Master, Intellivision, MSX, Pac-Man, Sharp MZ, ZX81) and
+palettes, from Playscii's source at a fixed version (Playscii is MIT, but the glyphs are the machines' own); the
+Amiga fonts SkyPix files name (Topaz, the Workbench fonts and the 8x8 IBM set SkyPix terminals draw text in),
+as IcyDraw 0.6's source keeps them (Amiga's own fonts). Not included and not fetched: an Atari OS ROM (Atari's; used only when it is already on the computer).

@@ -59,6 +59,7 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | Viewdata (2026-10-16) | a teletext page of 24 rows: .cpt streams (.car carousels as frames), 960-byte .bin frames, Telstar .json frames, and .tti / edit.tf |
 | Plus/4, C16 (2026-10-16) | a PETSCII model: Marq's Plus/4 .prg and .c, .d64, TED Screen Editor .scrn (+ .proj), Petmate9 c16 screens, .seq; TED colours and flash; see "Plus/4 and C16 pages" |
 | Unicode (2026-10-16) | UTF-8 ANSI (256/24-bit SGR), durdraw .dur (frames), mIRC .irc (also written from PC pages), HTML; GNU Unifont's art blocks built in (OFL); see "Unicode page" below |
+| SkyPix (2026-10-16) | Amiga BBS graphics (.spx, .ans with `ESC[n!`) on a PC page: the drawing under the cells; also IcyDraw's PETSCII/ATASCII/ST .icy, PabloDraw .pd, TheDraw .td, BSAVE .bsv, Playscii's other sets: see "The rest of other editors' files" |
 
 CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide art shrunk to fit, m plays.
 
@@ -221,7 +222,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   IcyDraw's engine (ccdump, built in a bwrap sandbox: ~/Projects/Knowledge/amiga/text-art-editor-formats.md)
   reads all five PC formats cell for cell; Playscii's own art.py loader reads the .psci tiles/frames/delays.
   `FuzzEditorFormats` (2.8M execs) and FuzzParsers (60 s; it stalls at 0/sec for long stretches on main too).
-- Not done: IcyDraw PETSCII/ATASCII/Viewdata/ST pages, sixel layers, layer effects, tags; Playscii xform
+- Not done: IcyDraw Viewdata pages (PETSCII/ATASCII/ST: done 2026-10-16, see "The rest of other editors' files"), sixel layers, layer effects, tags; Playscii xform
   (flips) and other charsets; a Playscii charset for an own font (Playscii takes charsets only from its own
   folders); Petmate custom charsets in its JSON; PabloDraw / TheDraw / ACiDDraw / Moebius have no own art file
   beyond ANSI, BIN, XBin (TheDraw .tdf are fonts).
@@ -837,6 +838,81 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   phase; Spectrum bright black = black.
 - Not done: flash on the Spectrum (not in the movie), C128/VIC-20/PET programs (x128/xvic/xpet not installed),
   Plus/4 (another helper's area), a real machine, Altirra itself.
+
+## The rest of other editors' files (2026-10-16, branch r4-others)
+
+- **IcyDraw's other pages** (`icymach.go`): an `.icy` with buffer type 2 PETSCII / 3 ATASCII / 5 Atari ST opens on
+  that machine's page; the `SCREEN` record (IcyDraw 0.6.0, version 1: tag 1 machine u16 + mode u16, 2 border,
+  3 screen colour, each 4 bytes; unknown or repeated fields refuse the file, as IcyDraw) gives machine and case
+  (`icyMachines`: 1 C64, 2 C128, 3 VIC-20, 4 PET, 5 C16 = CharEdit's Plus/4, 6 PET 80, 7 C128 VDC; 8 ST mode
+  0-2, 9 Atari 8-bit (1 = XEP80), 10 Viewdata, 11 Mode 7), else the font's name as IcyDraw's `petscii_charset`.
+  Cells: PETSCII = screen code (128+ reversed), colour = machine number (C16 lum*16+hue: palette tags 19 n, ICED
+  version 2; VDC = RGBI order, `vdcOfC64`/`c64OfVDC`; font page 1 = lower set per cell), blink = TED flash;
+  ATASCII = code, bg != 0 also inverse, colours = palette entries 0 (screen) and 7 (text) -> `gtiaNearest`;
+  ST = pens. Fonts: IcyDraw writes the ROM's sets (identical to VICE's, checked: C128's lower = its chargen at
+  6144); a PETSCII file whose set is not the ROM's opens with it as the page's own font (`icyAfterLoad`).
+  Writing (`writeIcyMachine`, `icyOut.encode`; `writeIcy` for PC pages now goes through `icyOut` too,
+  byte-identical to before): ICED ice mode 0, font mode 1 as IcyDraw, the page's palette (TED's 128 as shown,
+  VDC reordered), the page's fonts (PET 80 and VDC rows doubled, 8x16 as IcyDraw; VDC both sets), SCREEN.
+  Glue: `icyMachineLoad` in loadEditor's icy case, `reparseIcyMachine` in reparseEditor, `writeIcyMachine` in
+  encodeEditor, Save as "IcyDraw" offered on c64/atari/st pages (init). XEP80 (80 columns) shows its first 40;
+  VDC's per-cell set: the one most cells use (note says how many differ).
+- **Playscii** (`psciown.go`): sets with no page (`psciSets`: agat, apple2, bbc_master, intellivision, msx,
+  pacman, sharp, speccy = ZX81) open on a PC page with the set's picture as the page's own font (glyph i = the
+  picture's i-th cell; on = not black; <= 8 wide, 6-16 high; **glyph 0 and 32 trade places**, `psciSwap`, since a
+  PC page draws nothing for 0 and types space as 32); a palette other than ansi/ega becomes the page's own colours
+  (`psciOwnColours`: all of <= 16, else the 16 most used, the rest nearest). Ctrl+S writes the same names and
+  numbers (`psciPage.own`, from `a.psciOwnOf()` re-reading the source). atari_st opens on an ST page (low <= 40
+  columns, high for 2 colours, else medium); it saves back with the file's palette, each pen as a palette colour
+  that reads back as that pen (`psciPenColour`; ansi alone does not round-trip yellow/light yellow). The pictures
+  (8 sets, 21 palettes) are fetched on first use from github.com/michael-lazar/playscii at `psciVersion`, SHA-1
+  checked (`psciNeeds` asks; `psciURL` is a var for tests). Not done: teletext_uk (12x20 glyphs; the Unicode or
+  teletext page would fit), ultima4/ui/osamu-micro (too wide): by number as before. msx and sharp: when the MSX
+  and MZ-700 pages (round 4, other helper) are merged they could open there (msx index = MSX code - 32).
+- **PabloDraw `.pd`, TheDraw `.td`, BSAVE `.bsv`** (`othformats.go`): `.pd` = .NET string font id (or "" and the
+  font: int16 w, h, count, rows) + int16 palette count + RGB + TundraDraw body without header (PabloDraw's
+  `Tundra.Save`: position after chars 0-6, fg not written for spaces, both start at attribute 0); width from
+  SAUCE (written when not 80, FileType 8). PabloDraw ids map to CharEdit fonts (`pdFonts`); amiga-* open on an
+  Amiga page. `.td` (TheDraw 4.x only; 3.x refused with a message): header 367 bytes (w at 39, h at 41), then
+  chunks u16 size + crunched data (UNCRUNCH.PAS) read until they stop fitting; byte 56 is **not** the page count
+  (SHADING.TD says 2, holds 3). Pages -> frames; read only: path cleared, Ctrl+S asks for an `.ans`. TheDraw
+  writes 255 between words (shown as blank). `.bsv` = FD, seg B800, offset, length + screen bytes (80 columns,
+  at most 409 rows). ACiDDraw has no own format (ANSI/BIN/ASM/...); its `.adf` is ArtWorx's: no clash.
+- **Petmate9** (`petmate9.go`, export.go): charsets name the machine (`petmate9Machine`: c16*, vic20*, petGfx/
+  petBiz (80 wide: PET 80), c128* (80 wide: VDC)); petBiz is lower case; the writer names the machine's set
+  (`petmate9Charset`) when the kept name is a machine set of another machine (`petmate9Known`; custom font names
+  kept). VDC screens: colours are RGBI numbers and pixels carry `attr` (reverse -> reversed glyph); converted only
+  when the page itself is the VDC's (a big-check file mixes a C128 40 screen and a VDC one).
+- **SkyPix** (`skypix.go`, `skyfonts.go`): `ESC[n;...!` commands; parsed as IcyDraw's SkypixParser (text after
+  "!" for 0, 10 (not size 0) and 16), drawn as its sky_paint/skypix_impl (Bresenham, flood fill with a seen set,
+  RectFill inclusive, midpoint ellipse, filled ellipse by rows, brushes, palettes $0BGR, pens, cursor in pixels;
+  every command switches text to JAM1 and CR/LF off until SGR 0 or `ESC[10;0!`). Text: the 8x8 IBM set (fetched)
+  or VGA 8x8; fonts by name from IcyDraw's yaff files (`parseYaff`: cells min(bbox w, 8) wide, pixel-size / size
+  / line-height / bbox height; glyphs left-aligned; labels end in ":", a char label "':':" too). IcyDraw quirks
+  followed: `ESC[10;0!` does not move the cursor (IcyDraw means to, but measures both fonts in the one in use);
+  **not followed**: IcyDraw puts `ESC[row;colH` one row higher (the parser and the sink both subtract 1) - the
+  one bench file that differs (skypix1, 1.8%). Page: PC 80x25, font vga50, `Tab.sky`, picture under blank cells
+  (`drawSkyCell` from igs_page.go's `drawCellXY`), `setPalette` takes the file's colours, fixed height. Saving
+  (`writeSkyPix`): unchanged = the source; else the drawing, `skyMarker` (a comment), then per run `ESC[15;fg!
+  ESC[18;bg! ESC[10;0!` + `ESC[r;cH` + text (control bytes as spaces). Detection `isSkyPix`: 3 commands, no NUL,
+  not a picture/program (a GIF in the big check had them by chance). Work limit 50M pixels.
+- Glue in shared files: editor.go (`Tab.sky`, `a.sky` reset in loadBytes, `loadSkyPix` after loadIGS,
+  `reparseSky`, `encodeSky`, `setPalette`), rowscols.go (fixedHeight), igs_page.go (drawCellXY), export.go
+  (Petmate), fuzz_test.go (seeds and checks), editorformats.go (hooks for icy/psci/pd/td/bsv).
+- Tests (`oth_test.go`): IcyDraw round trips of every machine page, own charset, SCREEN vectors (IcyDraw's own);
+  env-gated: `TestOthIcyDrawMachineFiles` (files IcyDraw's engine wrote + its dumps, default
+  ~/.cache/charcoal-others/icyfiles), `TestOthIcyExternal`/`TestOthIcyRender` (CHARCOAL_ICYMACH /
+  CHARCOAL_ICYRENDER = `~/.cache/charcoal-others/sandbox.sh target/release/examples/ccicy dump|render`,
+  CHARCOAL_ICYDIR): **18 of 18 page kinds read cell for cell and drawn pixel for pixel**. Playscii: own set and
+  palette (made-up set registered with its SHA-1), fetch flow with a test server, real pictures and Playscii's
+  56 own files (CHARCOAL_PLAYSCII), ST open/save. `.pd`/`.bsv` round trips (own font, widths 40/80/132), .NET
+  strings, uncrunch codes, TheDraw 4.63's DEMO.TD/SHADING.TD (CHARCOAL_THEDRAW). Petmate9 machines. SkyPix
+  spot checks, detection, app open/save/reopen; `TestOthSkyPixIcyDraw` (CHARCOAL_SKYPIX_FILES/ICY/FONTS) against
+  IcyDraw's renders. `FuzzOthReaders` (60 s clean) and FuzzParsers' new checks.
+- ccicy (the check program on IcyDraw's engine, not in the repo): `~/.cache/charcoal-others/icy` (icy_tools
+  eddbe237 = IcyDraw 0.6.0) + `crates/icy_engine/examples/ccicy.rs` (dump / make / render / skypix), built with
+  `sandbox.sh cargo build --offline --release -p icy_engine --example ccicy` (bwrap: no network, only that folder
+  writable; PATH must not hold ~/.cargo/bin and /dev, /proc must be given). Recipe in the knowledge note.
 
 ## Keys and safety (2026-10-13, evening)
 
