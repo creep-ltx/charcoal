@@ -42,6 +42,9 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 			fg, bg = bg, fg
 		}
 		bgc = a.pal[bg]
+	case a.cpc(): // pens and papers past the mode's inks wrap, as on the CPC
+		fg, bg = a.cpcSet.mask(fg), a.cpcSet.mask(bg)
+		bgc = a.pal[bg]
 	case a.ice:
 		bgc = a.pal[bg]
 	default:
@@ -76,6 +79,9 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 		}
 		if smear {
 			bits |= bits >> 1
+		}
+		if W == 16 { // a CPC mode 0 cell: pixels twice as wide
+			bits = cpcWide[bits&255]
 		}
 		if ul && r8 == 7 {
 			bits = 0xFF
@@ -509,9 +515,12 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			a.setMode(modeOrder[i])
 		})
 	} else {
-		modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti."
-		for _, m := range []string{"amiga", "pc", "atari", "st", "c64", "zx", "tt"} {
+		modeHint := "Amiga: Latin-1, Amiga fonts, 0x9B CSI. PC: CP437, VGA font, CRLF. Atari: ATASCII, .ata. ST: Atari ST VT52, .vt. PETSCII: PET, VIC-20, C64, C128, .seq. ZX: Spectrum screen, .scr. TT: teletext, .tti. CPC: Amstrad CPC, .bin."
+		for _, m := range modeOrder {
 			label := modeNames[m]
+			if m == "cpc" {
+				label = "CPC"
+			}
 			if m == "st" {
 				label = "ST"
 			}
@@ -580,7 +589,7 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 		fontNames, fontIDs, cur = n2, id2, cur2
 	}
 	if len(fontNames) > 0 {
-		if !a.st() && !a.tt() { // fonts from files and the font editor (fontedit.go)
+		if !a.st() && !a.tt() && !a.cpc() { // fonts from files and the font editor (fontedit.go)
 			fontNames = append(fontNames, "Load a font...", "Edit the font...")
 			fontIDs = append(fontIDs, "+load", "+edit")
 		}
@@ -610,11 +619,13 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 			pcur = i
 		}
 	}
-	u.choice("palette", row("Palette", choiceW(palNames)), palNames, pcur, "Palette (Shift+click a colour below to change it)", func(i int) {
-		a.paletteFor[a.mode] = palIDs[i]
-		a.setPalette()
-		savePrefs()
-	})
+	if !a.cpc() { // a CPC page's colours are its inks (the Colours)
+		u.choice("palette", row("Palette", choiceW(palNames)), palNames, pcur, "Palette (Shift+click a colour below to change it)", func(i int) {
+			a.paletteFor[a.mode] = palIDs[i]
+			a.setPalette()
+			savePrefs()
+		})
+	}
 	if compact {
 		row("Size", 0)
 		fl.x = fl.x0 + labelW
@@ -630,6 +641,15 @@ func (a *App) drawPageGadgets(u *UI, fl *flow, compact bool) {
 		r := fl.place(textW("32 x 24") + 8)
 		fb.text(r.x+4, r.y+3, "32 x 24", cText)
 		u.setHint(r, "The Spectrum's screen")
+	case a.cpc():
+		var names []string
+		for _, m := range cpcModes {
+			names = append(names, m.name)
+		}
+		u.choice("cpcmode", row("Mode", choiceW(names)), names, a.cpcSet.mode, "The CPC's screen mode: its width and how many inks (AMSCII compos: mode 1)", func(i int) {
+			a.start = false
+			a.setCPCMode(i)
+		})
 	case a.st():
 		var names []string
 		cur := 0
@@ -1124,6 +1144,9 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		x = fb.text(x+digitsW(2), y, fmt.Sprintf("%d fg %d bg %d", c, cellFg(v), cellBg(v)), cText) + 24
 	}
 	set := map[string]string{"amiga": "Amiga Latin-1", "pc": "PC CP437", "c64": a.mach().name + " PETSCII", "atari": "Atari ATASCII", "st": a.res().name + " VT52", "zx": "ZX Spectrum", "tt": "Teletext"}[a.mode]
+	if a.cpc() {
+		set = fmt.Sprintf("Amstrad CPC mode %d", a.cpcSet.mode)
+	}
 	x = fb.text(x, y, fmt.Sprintf("%s, %s, %dx%d", set, a.font().name, a.doc.cols, a.doc.rows), cText) + 24
 	name := filepath.Base(a.path) // the whole path is in the title bar and Info
 	if a.path == "" {

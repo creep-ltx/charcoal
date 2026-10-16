@@ -27,7 +27,7 @@ type FontEd struct {
 }
 
 func openFontEditor() {
-	if a.st() || a.tt() {
+	if a.st() || a.tt() || a.cpc() {
 		a.msg("An " + modeNames[a.mode] + " page keeps its own font")
 		return
 	}
@@ -426,7 +426,7 @@ func (a *App) fontFilesNote() string {
 }
 
 func openFontRequester() {
-	if a.st() || a.tt() {
+	if a.st() || a.tt() || a.cpc() {
 		a.msg("An " + modeNames[a.mode] + " page keeps its own font")
 		return
 	}

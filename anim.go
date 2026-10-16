@@ -24,10 +24,10 @@ func (a *App) renderDoc(d *Doc, z int) *FB {
 	}
 	border := 0
 	fb := &FB{}
-	if a.screen() || a.zx() { // with the machine's border around it
+	if a.screen() || a.zx() || a.cpc() { // with the machine's border around it
 		border = 32 * z
 		fb.resize(d.cols*a.cellW()*z+2*border, rows*H*z+2*border)
-		fb.fill(Rect{0, 0, fb.w, fb.h}, a.pal[d.borderColour()])
+		fb.fill(Rect{0, 0, fb.w, fb.h}, a.borderPx(d))
 	} else {
 		fb.resize(d.cols*a.cellW()*z, rows*H*z)
 	}
@@ -81,8 +81,8 @@ func (a *App) animFrames(z int) (frames []animFrame, w, h int, pal color.Palette
 	for i := range docs {
 		fb := render(i)
 		pad := uint32(0xFF000000)
-		if a.screen() || a.zx() {
-			pad = a.pal[docs[i].borderColour()]
+		if a.screen() || a.zx() || a.cpc() {
+			pad = a.borderPx(docs[i])
 		}
 		cur := make([]uint8, cw*ch)
 		for y := 0; y < ch; y++ {
@@ -138,7 +138,7 @@ func (a *App) renderSize(d *Doc, z int) (int, int) {
 		rows = max(rows, map[bool]int{true: 25, false: 24}[a.c64()])
 	}
 	w, h := d.cols*a.cellW()*z, rows*H*z
-	if a.screen() || a.zx() {
+	if a.screen() || a.zx() || a.cpc() {
 		w, h = w+64*z, h+64*z
 	}
 	return w, h

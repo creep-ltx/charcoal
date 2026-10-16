@@ -124,6 +124,9 @@ func (a *App) effectGlyphs() []int {
 		add(0xC2, 0xDC) // the ST's Hebrew letters
 	case "zx":
 		add(0x81, 0x8E) // block graphics
+	case "cpc":
+		add(0x81, 0x8E) // block graphics
+		add(0xD4, 0xD7) // triangles
 	}
 	return g
 }

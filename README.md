@@ -1,7 +1,7 @@
 # Charcoal
 
 Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer, for text art on every
-platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum and teletext, each with its real font, colours
+platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum, Amstrad CPC and teletext, each with its real font, colours
 and file formats.
 
 ![CharEdit with a PC ANSI by Platinum](docs/screenshots/hero.png)
@@ -54,8 +54,8 @@ Settings, keys and autosaves are kept in `%AppData%\Charcoal` on Windows,
 
 An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw,
 IcyDraw, REXPaint, Playscii),
-Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens and teletext
-(BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
+Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens, Amstrad CPC
+text art (AMSCII) and teletext (BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA, EGA 8x14,
 VGA 8x8 (80x50) and the code pages 850 and 866 on a PC page (CP437), the C64's two character sets on a C64 page;
 or a font of your own, drawn in its font editor.
@@ -146,6 +146,19 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
 - **ZX Spectrum page**: the 32x24 screen, ink/paper/bright/flash per cell, the 48K ROM's font (built in: Amstrad
   allows passing the ROM on, `fonts/zx-spectrum-NOTICE.txt`) with the block graphics and UDGs. Saved as `.scr`
   (6912 bytes); a `.scr` opens with each 8x8 cell matched to a character (drawings get the nearest one).
+- **Amstrad CPC page** (AMSCII): the CPC's text screen in its three modes (the **Mode** gadget): mode 1, 40x25
+  with 4 inks (the AMSCII compos' main category), mode 0, 20x25 with 16 inks (wide pixels), mode 2, 80x25 with 2
+  inks (narrow pixels: cells 8x16). Each cell has a character of the ROM's 256 (codes 0-31 are glyphs too) with a
+  pen and a paper; each ink is one of the CPC's 27 colours. The Colours panel shows the mode's inks (left: pen,
+  right: paper) and the 27 colours (left: the pen's ink becomes that colour, right: the paper's ink, middle: the
+  border). The font is the CPC firmware ROM's, built in (Amstrad allows passing it on,
+  `fonts/amstrad-cpc-NOTICE.txt`). Saved as a `.bin` that runs on a CPC (`RUN"NAME.BIN"`) and in emulators
+  (drop it on Caprice Forever): the AMSDOS header, a 21-byte program and the firmware's text codes (mode, border,
+  inks, pen and paper per cell); as a `.dsk` disk image holding that `.bin`; and Playscii `.psci` with Logiker's
+  Amstrad ASCII Exporter's charsets (`CPC_Mode0/1/2`) and `cpc` palette. Opens the exporter's own `.bin` files,
+  `.dsk` images (the first art program on the disk) and its `.psci`; Open as Amstrad CPC reads any file as the
+  CPC's text codes. All 2024 AMSCII Compo entries open and look pixel for pixel like their Caprice Forever
+  screenshots. Typing `^` gives the caret (0xA0; the CPC's 0x5E is an up arrow).
 - **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save; iCEDraw (.idf), ArtWorx (.adf) and
   TundraDraw (.tnd) open with their own fonts and colours and save (see Files for other editors). The same art
   in five formats (ansilove's test files, `testdata/alove`) gives the same page in all of them. PC attribute
@@ -547,6 +560,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | IBM EGA 8×14, IBM VGA 8×8, IBM VGA 8×16 code pages 850 and 866 (`fonts/IBM_*.f08/.f14/.f16`) | drawn from Bm437_IBM_EGA_8x14, Bm437_IBM_VGA_9x8 and BmPlus_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* v2.2 (int10h.org), by `tools/pcfonts.py` | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` (the pack's licence) |
 | Atari 8-bit fonts | AltirraOS, from the Altirra emulator | all-permissive, `fonts/AltirraOS-LICENSE.txt` |
 | ZX Spectrum font | the 48K ROM's character set | © Amstrad, who allow passing it on, `fonts/zx-spectrum-NOTICE.txt` |
+| Amstrad CPC font | the CPC firmware ROM's character set (the same in the 464, 664 and 6128) | © Amstrad; Amstrad has kindly given its permission for its copyrighted material to be redistributed but Amstrad retains its copyright, `fonts/amstrad-cpc-NOTICE.txt` |
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |
 | PETSCII flip and turn tables (`cbmturn.go`) | Marq's PETSCII editor, Marq / Fit^L!T, tables by Dr. TerrorZ | WTFPL, `third_party/marq-petscii-LICENSE.txt` |
 | Petmate's file formats | Petmate, C. T. Lin | MIT, `third_party/petmate-LICENSE.txt` |

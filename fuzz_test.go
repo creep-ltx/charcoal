@@ -38,6 +38,17 @@ func FuzzParsers(f *testing.F) {
 		f.Add(writeMarqPet(d, false))
 		f.Add(writePetmateJSON([]PetScreen{{doc: d}}))
 	}
+	{ // Amstrad CPC (cpc.go)
+		d, s := newCPCDoc(1), newCPCSetup(1)
+		d.cells[3] = makeCell(5, 2, 3, 0)
+		bin := writeCPCBin(d, s, "F")
+		f.Add(bin)
+		dsk, _ := writeDSK("F", bin)
+		f.Add(dsk)
+		out, _ := writePsciCPC([]*Doc{d}, nil, s)
+		f.Add(out)
+		f.Add([]byte("\x04\x00\x1c\x01\x02\x02\x1f\x05\x05\x01\x01\x19A12345678\x1a\x01\x02\x03\x04\x0b\x0bX"))
+	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		check := func(name string, run func() []*Doc) {
 			start := time.Now()
@@ -103,6 +114,15 @@ func FuzzParsers(f *testing.F) {
 		check("petmate", func() []*Doc { return screens(parsePetmate(b)) })
 		check("prg", func() []*Doc { d, _, _ := parsePrg(b); return one(d) })
 		check("vt52", func() []*Doc { return one(parseVT52(b, stResolutions[0], 0)) })
+		check("cpc bin", func() []*Doc { d, _, _, _ := parseCPCBin(b); return one(d) })
+		check("cpc dsk", func() []*Doc {
+			if f, _, err := dskArt(b); err == nil {
+				d, _, _, _ := parseCPCBin(f.data)
+				return one(d)
+			}
+			return nil
+		})
+		check("cpc stream", func() []*Doc { c := newCPCScreen(); c.print(b, false); return one(c.d) })
 		for _, mode := range []string{"pc", "c64", "atari", "st"} {
 			docs, holds, _ := splitStream(b, mode, 40, false, stResolutions[0], true, 14400)
 			total := 0

@@ -167,11 +167,20 @@ func TestStartKeys(t *testing.T) {
 	if a.startSel != 6 {
 		t.Fatalf("Right, Down: item %d, want 6 (VIC-20)", a.startSel)
 	}
-	press("Down") // past the last row of tiles: the first recent file
+	press("Down") // the last row is short (Amstrad CPC): its last tile
 	if a.startSel != 10 {
-		t.Fatalf("Down from the last row: item %d, want 10", a.startSel)
+		t.Fatalf("Down to the short last row: item %d, want 10", a.startSel)
+	}
+	press("Down") // past the last row of tiles: the first recent file
+	if a.startSel != 11 {
+		t.Fatalf("Down from the last row: item %d, want 11", a.startSel)
+	}
+	press("Up") // back through the CPC tile, in its column
+	if a.startSel != 10 {
+		t.Fatalf("Up from the recent files: item %d, want 10", a.startSel)
 	}
 	press("Up")
+	press("Right")
 	if a.startSel != 6 {
 		t.Fatalf("Up from the recent files: item %d, want 6", a.startSel)
 	}
@@ -208,14 +217,15 @@ func TestStartKeys(t *testing.T) {
 	if a.start {
 		t.Error("Delete left the start screen up")
 	}
-	// Tab goes round every item: 10 tiles, 2 recent files, Open.
+	// Tab goes round every item: the tiles, 2 recent files, Open.
 	prefs.Recent = []string{"/nowhere/a.ans", "/nowhere/b.ans"}
 	a.start, a.startSel = true, 0
-	for i := 0; i < 13; i++ {
+	n := len(startTiles()) + 3
+	for i := 0; i < n; i++ {
 		press("Tab")
 	}
 	if a.startSel != 0 {
-		t.Errorf("13 Tabs: item %d, want 0", a.startSel)
+		t.Errorf("%d Tabs: item %d, want 0", n, a.startSel)
 	}
 }
 
