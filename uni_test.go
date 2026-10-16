@@ -1122,3 +1122,65 @@ func TestUniAndCPC(t *testing.T) {
 		t.Errorf("Unicode to CPC: %s %dx%d %q", a.mode, a.doc.cols, a.doc.rows, rune(cellCh(a.doc.get(0, 0))))
 	}
 }
+
+// Big-check findings (2026-10-16): what is not art, a stray character, a byte order
+// mark or a SAUCE record naming a PC font do not make a Unicode page.
+func TestUniFNotUniByAccident(t *testing.T) {
+	a := uniFApp(t)
+	// A ZIP whose bytes before the first 0x1A happen to be valid UTF-8 (CP-CID.ZIP).
+	zip := append([]byte("PK\x03\x04\x14\x00\x00\x00\x08\x00\xd3\xa0}\x1a\x8a\x66"), make([]byte, 64)...)
+	uniFOpen(a, zip, "CP-CID.ZIP")
+	if a.uni() || !strings.Contains(a.message, "not art") {
+		t.Errorf("a ZIP: %s %q", a.mode, a.message)
+	}
+	for _, c := range []struct {
+		name, text string
+		uni        bool
+	}{
+		{"x.txt", "\x1b[31m███ Ŀ ˆ café \x1b[0m\n", false},                               // a stray letter or accent (lp!-yj_pt2.txt)
+		{"x.txt", "\ufeff\x1b[31m███ hello\n", false},                                    // a byte order mark (CROWKEEPER-AURIC.LIT)
+		{"x.txt", "████ … the end\n", false},                                             // punctuation CP437 lacks
+		{"x.txt", strings.Repeat("words — more words … ", 30), false},                    // a lot of it (JM-SILICO.LIT)
+		{"x.txt", strings.Repeat("a line of English text here\n", 20) + "白狐間の稲な", false}, // a few Japanese words in a long text
+		{"x.txt", "Привет, как дела у вас всех\n", true},                                 // a text in another script
+		{"x.txt", "██ ▀▄ ◢◣\n", true},                                                    // a drawing character CP437 lacks
+		{"x.txt", "⣿\n" + sauceFor("IBM VGA"), false},                                    // the record says PC
+		{"x.txt", "\x1b[38;5;200mX\n" + sauceFor("Amiga Topaz 2+"), false},               // ... or Amiga
+		{"x.txt", "⣿\n" + sauceFor(""), true},                                            // a record without a font says nothing
+	} {
+		uniFOpen(a, []byte(c.text), c.name)
+		if a.uni() != c.uni {
+			t.Errorf("%q: opened as %s", c.text, a.mode)
+		}
+	}
+	// A byte order mark takes no cell (vampire blender.mircart.txt): the art starts in column 0.
+	d := parseMirc([]byte("\ufeff\x0304,01AB\x0304,01CD\n"))
+	if uniRune(uniCode(d.get(0, 0))) != 'A' || d.cols != 4 {
+		t.Errorf("mIRC with a BOM: %q, %d columns", uniRune(uniCode(d.get(0, 0))), d.cols)
+	}
+	u, _ := parseUniArt([]byte("\ufeffA\u0301B\u200bC\n"), 0)
+	if string([]rune{uniRune(uniCode(u.get(0, 0))), uniRune(uniCode(u.get(1, 0))), uniRune(uniCode(u.get(2, 0)))}) != "ABC" {
+		t.Errorf("UTF-8 ANSI with a BOM, a combining accent and a zero-width space: %q %q %q",
+			uniRune(uniCode(u.get(0, 0))), uniRune(uniCode(u.get(1, 0))), uniRune(uniCode(u.get(2, 0))))
+	}
+}
+
+// sauceFor is a SAUCE record of an 80-column ANSI with this font name.
+func sauceFor(font string) string {
+	return string(makeSauce(SauceInfo{cols: 80, rows: 1, fileType: 1, font: font}, 10))
+}
+
+// The big check compares Unicode pages as they look: a space's foreground is not seen
+// (the writers keep the pen's colour on spaces), its background is.
+func TestUniFCellsMatch(t *testing.T) {
+	x, y := newDoc(2, 1), newDoc(2, 1)
+	x.uni, y.uni = true, true
+	x.cells[0], y.cells[0] = uniCell(' ', pairOf(15, 4)), uniCell(' ', pairOf(7, 4))
+	if ok, why := cellsMatch("uniansi", x, y); !ok {
+		t.Errorf("a space's foreground: %s", why)
+	}
+	y.cells[0] = uniCell(' ', pairOf(15, 5))
+	if ok, _ := cellsMatch("mirc", x, y); ok {
+		t.Error("a space's background changed, not seen")
+	}
+}

@@ -19,6 +19,10 @@ func cellsMatch(fmtID string, x, y *Doc) (bool, string) {
 				if a&255 == 32 { // a space carries no colour
 					a, b = a&255, b&255
 				}
+			case "uniansi", "mirc", "dur": // Unicode pages: a space shows its background (and underline) only
+				if uniFLook(a) == uniFLook(b) {
+					continue
+				}
 			case "ansi", "pcb", "avt", "vt52":
 				if isBlank(a) && isBlank(b) {
 					continue

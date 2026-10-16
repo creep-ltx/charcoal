@@ -158,7 +158,7 @@ func parseUniArt(b []byte, forceCols int) (*Doc, *Sauce) {
 		switch {
 		case r < 0x80:
 			t.byte(byte(r))
-		case t.state != 0 || r < 0xA0: // inside an escape code, or a C1 control: nothing to draw
+		case t.state != 0 || r < 0xA0 || uniInvisible(r): // inside an escape code, a C1 control, a BOM: nothing to draw
 		case r == utf8.RuneError:
 			t.putCode('?')
 		default:
@@ -758,7 +758,7 @@ func parseMirc(b []byte) *Doc {
 				fg, bg, it, ul, rev = -1, -1, false, false, false
 				continue
 			}
-			if r < 0x20 || r == 0x7F {
+			if r < 0x20 || r == 0x7F || uniInvisible(r) { // (a BOM, zero-width or combining character takes no cell)
 				continue
 			}
 			colour := func(n, def int) int {
@@ -931,6 +931,12 @@ func writeUniHTML(d *Doc, pal *[16]uint32, title string) []byte {
 // (characters CP437 lacks, or colours beyond the 16).
 var extColours = regexp.MustCompile(`\x1b\[[0-9;]*(?:[34]8;5;(?:1[6-9]|[2-9][0-9]|1[0-9][0-9]|2[0-5][0-9])|[34]8;2;)`)
 
+// One drawing character CP437 lacks (arrows, shapes, symbols, Braille, legacy
+// computing: uniArtRune) is enough. Letters CP437 lacks count only when they are
+// many and a good part of the text (a text in another script); punctuation never:
+// a stray … — ˆ or Ɗ in PC or Amiga art, Hungarian names in a web page, a few
+// Japanese words in a text are no Unicode art, and a byte order mark or
+// zero-width character is no character at all (all found in the big check).
 func needsUni(b []byte) bool {
 	if !utf8.Valid(b) {
 		return false
@@ -938,14 +944,38 @@ func needsUni(b []byte) bool {
 	if extColours.Match(b) {
 		return true
 	}
+	letters, shown := 0, 0
 	for _, r := range string(b) {
-		if r > 0xFF {
-			if _, ok := cp437Rev[r]; !ok {
-				return true
-			}
+		if r > ' ' {
+			shown++
+		}
+		if r <= 0xFF || uniInvisible(r) {
+			continue
+		}
+		if _, ok := cp437Rev[r]; ok {
+			continue
+		}
+		if uniArtRune(r) {
+			return true
+		}
+		if unicode.IsLetter(r) {
+			letters++
 		}
 	}
-	return false
+	return letters >= 8 && letters*20 >= shown
+}
+
+var sauceFontPC = regexp.MustCompile(`^(?i)(ibm|amiga|cp437|vga|ega|mda)`)
+
+// uniArtRune: a character for drawing (not a letter or punctuation of some text).
+func uniArtRune(r rune) bool {
+	return (r >= 0x2190 && r <= 0x2BFF) || (r >= 0x1FB00 && r <= 0x1FBFF) || (r >= 0x1CC00 && r <= 0x1CFFF)
+}
+
+// uniInvisible: a character that takes no cell in a terminal (byte order mark,
+// zero-width and other format characters, combining marks).
+func uniInvisible(r rune) bool {
+	return r >= 0x300 && (unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Mn, r))
 }
 
 // loadUni opens a file on a Unicode page: a durdraw file, mIRC text, or UTF-8
@@ -956,6 +986,11 @@ func (a *App) loadUni(b []byte, name, path, as string) bool {
 	}
 	lname := strings.ToLower(name)
 	sauce, end := readSauce(b)
+	if as == "auto" && !isDur(b) && notArt(b) != "" {
+		return false // an archive, a program, a sound: loadBytes says what it is
+	}
+	// A SAUCE record naming a PC or Amiga font says which page the art is for.
+	pcSauce := sauce != nil && sauceFontPC.MatchString(sauce.font)
 	kind := ""
 	switch {
 	case isDur(b) || strings.HasSuffix(lname, ".dur"):
@@ -967,7 +1002,7 @@ func (a *App) loadUni(b []byte, name, path, as string) bool {
 		kind = "uniansi"
 	case (sauce == nil || sauce.dataType <= 1) && utf8.Valid(b[:end]) && strings.HasSuffix(lname, ".utf8.ans"):
 		kind = "uniansi" // durdraw's name for UTF-8 ANSI
-	case (sauce == nil || sauce.dataType <= 1) && needsUni(b[:end]):
+	case (sauce == nil || sauce.dataType <= 1) && !pcSauce && needsUni(b[:end]):
 		kind = "uniansi"
 	}
 	if kind == "" {
