@@ -250,6 +250,9 @@ func (a *App) putCell(x, y int, v uint32) {
 		return
 	}
 	old := a.doc.get(x, y)
+	if a.paintOnly != "" && a.uni() && uniIsCont(old) && uniIsLead(a.doc.get(x-1, y)) {
+		x, old = x-1, a.doc.get(x-1, y) // a wide character's right half: the character
+	}
 	switch a.paintOnly {
 	case "colour":
 		if a.atari() || a.tt() { // no colours in the cells

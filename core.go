@@ -232,6 +232,9 @@ func (d *Doc) withCols(cols int) *Doc {
 	w := min(cols, d.cols)
 	for y := 0; y < d.rows; y++ {
 		copy(n.cells[y*cols:y*cols+w], d.cells[y*d.cols:y*d.cols+w])
+		if n.uni && cols < d.cols {
+			wideNormalRow(n, y, cols-1, cols-1) // a wide character cut by the new width (wide.go)
+		}
 	}
 	return n
 }

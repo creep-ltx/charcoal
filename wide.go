@@ -229,3 +229,146 @@ func uniWideSmall(r rune) ([]byte, bool) {
 	f.small[r] = g
 	return g, true
 }
+
+// ---------------------------------------------------------------- editing
+
+// wideSet writes cell v at (x, y) as a terminal would: a wide character takes
+// (x+1, y) too, and whatever it writes over half of loses its other half (a
+// space). Writing a wide character where it already stands does nothing, so a
+// line or a fill drawn with one comes out as whole characters side by side, in
+// either direction. A right half from a block stays only after a wide
+// character. False: a wide character does not fit in the last column.
+func wideSet(d *Doc, x, y int, v uint32) bool {
+	old := d.get(x, y)
+	lead := uniIsLead(v)
+	if lead {
+		if x+1 >= d.cols {
+			return false
+		}
+		if (uniIsCont(old) && d.get(x-1, y) == v) || (d.get(x+1, y) == v && uniIsCont(d.get(x+2, y))) {
+			return true
+		}
+	}
+	if uniIsCont(v) {
+		if !uniIsCont(old) || !uniIsLead(d.get(x-1, y)) { // not over a wide character's own right half
+			wideBreak(d, x, y)
+			v = uniSpaceOf(v)
+		}
+		d.set(x, y, v)
+		return true
+	}
+	wideBreak(d, x, y)
+	if lead {
+		wideBreak(d, x+1, y)
+		d.set(x+1, y, uniContOf(v))
+	}
+	d.set(x, y, v)
+	return true
+}
+
+// wideBreak: cell (x, y) is about to be written: the wide character it is half of loses its other half.
+func wideBreak(d *Doc, x, y int) {
+	old := d.get(x, y)
+	switch {
+	case uniIsCont(old) && uniIsLead(d.get(x-1, y)):
+		d.set(x-1, y, uniSpaceOf(d.get(x-1, y)))
+	case uniIsLead(old) && uniIsCont(d.get(x+1, y)):
+		d.set(x+1, y, uniSpaceOf(d.get(x+1, y)))
+	}
+}
+
+// wideInsert makes room for w cells at (x, y): the rest of the row moves right
+// (a wide character pushed half off the end becomes a space), the room is blank.
+func wideInsert(d *Doc, x, y, w int) {
+	wideBreak(d, x, y) // the cursor is never on a right half; a lone one is no character
+	for i := d.cols - 1; i >= x+w; i-- {
+		d.set(i, y, d.get(i-w, y))
+	}
+	for i := x; i < min(x+w, d.cols); i++ {
+		d.set(i, y, blank)
+	}
+	wideNormalRow(d, y, d.cols-1, d.cols-1)
+}
+
+// wideDelete takes the cell at (x, y) out of its row, a wide character both its cells.
+func wideDelete(d *Doc, x, y int) {
+	w := 1
+	switch v := d.get(x, y); {
+	case uniIsCont(v) && uniIsLead(d.get(x-1, y)):
+		x, w = x-1, 2
+	case uniIsLead(v) && uniIsCont(d.get(x+1, y)):
+		w = 2
+	}
+	for i := x; i < d.cols; i++ {
+		if i+w < d.cols {
+			d.set(i, y, d.get(i+w, y))
+		} else {
+			d.set(i, y, blank)
+		}
+	}
+}
+
+// wideFloodFill fills the cells like (x, y) around it with want, in reading
+// order through wideSet; a wide character only where both its cells are in the area.
+func (a *App) wideFloodFill(x, y int, target, want uint32) {
+	d := a.doc
+	in := map[[2]int]bool{}
+	stack := [][2]int{{x, y}}
+	for len(stack) > 0 {
+		p := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if p[0] < 0 || p[1] < 0 || p[0] >= d.cols || p[1] >= d.rows || in[p] || d.get(p[0], p[1]) != target {
+			continue
+		}
+		in[p] = true
+		stack = append(stack, [2]int{p[0] + 1, p[1]}, [2]int{p[0] - 1, p[1]}, [2]int{p[0], p[1] + 1}, [2]int{p[0], p[1] - 1})
+	}
+	lead := uniIsLead(want)
+	for py := 0; py < d.rows; py++ {
+		for px := 0; px < d.cols; px++ {
+			if in[[2]int{px, py}] && (!lead || in[[2]int{px + 1, py}]) {
+				wideSet(d, px, py, want)
+			}
+		}
+	}
+}
+
+// wideGrow widens a selection so it holds whole wide characters.
+func wideGrow(d *Doc, r Rect) Rect {
+	if !d.uni {
+		return r
+	}
+	x0, x1 := r.x, r.x+r.w-1
+	for y := r.y; y < min(r.y+r.h, d.rows); y++ {
+		if uniIsCont(d.get(x0, y)) && uniIsLead(d.get(x0-1, y)) {
+			x0 = r.x - 1
+		}
+		if uniIsLead(d.get(x1, y)) && uniIsCont(d.get(x1+1, y)) {
+			x1 = r.x + r.w
+		}
+	}
+	return Rect{x0, r.y, x1 - x0 + 1, r.h}
+}
+
+// wideInBlock: does a block hold a wide character?
+func wideInBlock(b *Block) bool {
+	for _, v := range b.cells {
+		if uniIsLead(v) || uniIsCont(v) {
+			return true
+		}
+	}
+	return false
+}
+
+// wideFlipPairs puts the halves of a block mirrored left-right back in order.
+func wideFlipPairs(b *Block) {
+	for y := 0; y < b.h; y++ {
+		row := b.cells[y*b.w : (y+1)*b.w]
+		for x := 0; x+1 < b.w; x++ {
+			if uniIsCont(row[x]) && uniIsLead(row[x+1]) {
+				row[x], row[x+1] = row[x+1], row[x]
+				x++
+			}
+		}
+	}
+}

@@ -251,3 +251,174 @@ func TestWideMircTextHTML(t *testing.T) {
 		t.Error("a page without wide characters has the wide style")
 	}
 }
+
+// wideFApp is a Unicode page of the given rows, cursor at 0,0.
+func wideFApp(t *testing.T, cols int, rows ...string) *App {
+	t.Helper()
+	a := testApp(t, "uni")
+	a.doc = wideFDoc(t, cols, rows...)
+	a.cx, a.cy = 0, 0
+	return a
+}
+
+func TestWideTyping(t *testing.T) {
+	a := wideFApp(t, 6, "      ", "      ")
+	textInput("a中b")
+	if r := wideFRow(a.doc, 0); r != "a中|b  " || a.cx != 4 {
+		t.Fatalf("typed %q, cursor %d", r, a.cx)
+	}
+	textInput("かx") // か does not fit in the last two? it does: 4,5; x goes to the next row
+	if r0, r1 := wideFRow(a.doc, 0), wideFRow(a.doc, 1); r0 != "a中|bか|" || r1 != "x     " {
+		t.Fatalf("rows %q %q", r0, r1)
+	}
+	a.cx, a.cy = 5, 1
+	textInput("字") // the last column: to the next row
+	if r := wideFRow(a.doc, 2); r != "字|    " || a.cy != 2 {
+		t.Errorf("wrapped %q", r)
+	}
+	// Overwriting either half leaves a space in the other.
+	a.cx, a.cy = 1, 0
+	textInput("y")
+	if r := wideFRow(a.doc, 0); r != "ay bか|" {
+		t.Errorf("left half overwritten: %q", r)
+	}
+	a.doc.set(5, 0, uniCell('z', 7)) // (a click of the Draw tool on a right half goes through setCell)
+	a.doc.set(5, 0, uniContOf(uniCell('か', 7)))
+	a.setCell(5, 0, uniCell('z', 7))
+	if r := wideFRow(a.doc, 0); r != "ay b z" {
+		t.Errorf("right half overwritten: %q", r)
+	}
+	wideFCheck(t, a.doc, "typing")
+	// Insert mode makes room for both cells.
+	a = wideFApp(t, 6, "ab中c")
+	a.insert = true
+	a.cx = 1
+	textInput("字")
+	if r := wideFRow(a.doc, 0); r != "a字|b中|" { // (c falls off the end)
+		t.Errorf("inserted %q", r)
+	}
+	wideFCheck(t, a.doc, "insert")
+}
+
+func TestWideCursorDelete(t *testing.T) {
+	a := wideFApp(t, 8, "a中b字c")
+	editorKey("Right", false, false, false)
+	editorKey("Right", false, false, false)
+	if a.cx != 3 {
+		t.Errorf("Right went to %d, want past the right half (3)", a.cx)
+	}
+	a.cx = 2
+	a.moved()
+	if a.cx != 1 {
+		t.Errorf("on a right half the cursor goes to the character: %d", a.cx)
+	}
+	editorKey("Delete", false, false, false)
+	if r := wideFRow(a.doc, 0); r != "ab字|c   " {
+		t.Errorf("deleted %q", r)
+	}
+	a.cx = 4
+	a.insert = true
+	editorKey("Backspace", false, false, false)
+	if r := wideFRow(a.doc, 0); r != "abc     " || a.cx != 2 {
+		t.Errorf("backspaced %q, cursor %d", r, a.cx)
+	}
+	a = wideFApp(t, 8, "a中b")
+	a.cx = 3
+	editorKey("Backspace", false, false, false)
+	if r := wideFRow(a.doc, 0); r != "a  b    " || a.cx != 1 {
+		t.Errorf("backspace over a wide character: %q, cursor %d", r, a.cx)
+	}
+}
+
+func TestWideFillsAndLines(t *testing.T) {
+	code, _ := uniCodeOf('中')
+	for _, c := range []struct {
+		name string
+		do   func(a *App)
+		want string
+	}{
+		{"fill selection", func(a *App) { a.sel = &Sel{1, 0, 5, 0}; a.fillSel() }, ".中|中|..."},
+		{"left to right", func(a *App) {
+			for x := 0; x < 7; x++ {
+				a.setCell(x, 0, a.brushCell())
+			}
+		}, "中|中|中|中|"},
+		{"right to left", func(a *App) {
+			for x := 6; x >= 0; x-- {
+				a.setCell(x, 0, a.brushCell())
+			}
+		}, "中|中|中|中|"},
+		{"flood fill", func(a *App) { a.floodFill(3, 0) }, "中|中|中|中|"},
+	} {
+		a := wideFApp(t, 8, "........")
+		a.brush = code
+		c.do(a)
+		if r := wideFRow(a.doc, 0); r != c.want {
+			t.Errorf("%s: %q, want %q", c.name, r, c.want)
+		}
+		wideFCheck(t, a.doc, c.name)
+	}
+}
+
+func TestWideBlocks(t *testing.T) {
+	a := wideFApp(t, 8, "a中b字c", "xyzwvuts")
+	// A selection that cuts a wide character holds all of it.
+	a.sel = &Sel{2, 0, 4, 1}
+	if r := a.selRect(); r.x != 1 || r.w != 5 {
+		t.Errorf("selection %+v", r)
+	}
+	a.copySel(false)
+	if a.clipText != "中b字\nyzwvu" {
+		t.Errorf("text %q", a.clipText)
+	}
+	a.blockOp(flipH)
+	if r := wideFRow(a.doc, 0); r != "a字|b中|c " {
+		t.Errorf("mirrored %q", r)
+	}
+	wideFCheck(t, a.doc, "mirror")
+	a.blockOp(turnCW)
+	if !strings.Contains(a.message, "cannot be turned") || wideFRow(a.doc, 0) != "a字|b中|c " {
+		t.Errorf("turned: %q", a.message)
+	}
+	// Stamping a block keeps its wide characters whole and cuts those it lands on.
+	a.cx, a.cy = 0, 1
+	a.startPaste(a.textBlock("漢x"))
+	a.stamp(2, 1, false)
+	if r := wideFRow(a.doc, 1); r != "xu漢|xyts" { // (row 1 was mirrored too)
+		t.Errorf("stamped %q", r)
+	}
+	a.startPaste(a.textBlock("q"))
+	a.stamp(3, 1, false)
+	if r := wideFRow(a.doc, 1); r != "xu qxyts" {
+		t.Errorf("stamped over a right half %q", r)
+	}
+	wideFCheck(t, a.doc, "stamp")
+	// Picking a right half picks the character.
+	a.pick(2, 0)
+	if want, _ := uniCodeOf('字'); a.brush != want {
+		t.Errorf("picked %X", a.brush)
+	}
+}
+
+func TestWideColumns(t *testing.T) {
+	a := wideFApp(t, 8, "a中b字c")
+	a.cx = 2
+	a.deleteColumn()
+	if r := wideFRow(a.doc, 0); r != "a b字|c  " {
+		t.Errorf("column deleted: %q", r)
+	}
+	a = wideFApp(t, 8, "a中b字c")
+	a.cx = 2
+	a.insertColumn()
+	if r := wideFRow(a.doc, 0); r != "a   b字|c" {
+		t.Errorf("column inserted: %q", r)
+	}
+	wideFCheck(t, a.doc, "insert column")
+	a = wideFApp(t, 8, "a中b字c")
+	a.setCols(8)
+	a.doc = a.doc.withCols(5)
+	if r := wideFRow(a.doc, 0); r != "a中|b " {
+		t.Errorf("narrower: %q", r)
+	}
+	wideFCheck(t, a.doc, "W")
+}

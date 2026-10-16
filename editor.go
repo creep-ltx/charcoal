@@ -799,6 +799,12 @@ func (a *App) setCell(x, y int, v uint32) {
 	if x < 0 || x >= a.doc.cols || y < 0 || y >= a.maxRows() {
 		return
 	}
+	if a.uni() && a.doc.uni && (uniIsLead(v) || uniIsCont(v) || uniIsLead(a.doc.get(x, y)) || uniIsCont(a.doc.get(x, y))) {
+		if !wideSet(a.doc, x, y, v) {
+			a.msg("A wide character does not fit in the last column")
+		}
+		return
+	}
 	a.doc.set(x, y, v)
 }
 
@@ -810,19 +816,30 @@ func (a *App) typeByte(b int) {
 	}
 	a.dirty = true
 	d := a.doc
+	w := 1 // a wide character takes two cells (wide.go)
+	if a.uni() && uniWideCode(b) && d.cols > 1 {
+		w = 2
+		if a.cx >= d.cols-1 { // it does not fit in the last column: the next row, as a terminal
+			a.cx, a.cy = 0, a.cy+1
+		}
+	}
 	if a.cx >= d.cols {
 		a.cx, a.cy = 0, a.cy+1
 	}
 	if a.insert && a.cy < d.rows {
-		for x := d.cols - 1; x > a.cx; x-- {
-			d.set(x, a.cy, d.get(x-1, a.cy))
+		if a.uni() {
+			wideInsert(d, a.cx, a.cy, w)
+		} else {
+			for x := d.cols - 1; x > a.cx; x-- {
+				d.set(x, a.cy, d.get(x-1, a.cy))
+			}
 		}
 	}
 	if a.mt() {
 		a.mtType(b) // big letters take two or four cells (minitel_ui.go)
 	} else {
 		a.setCell(a.cx, a.cy, a.cell(b))
-		a.cx++
+		a.cx += w
 	}
 	if a.cx >= d.cols {
 		a.cx, a.cy = 0, a.cy+1
@@ -834,6 +851,9 @@ func (a *App) typeByte(b int) {
 func (a *App) moved() {
 	a.cx = max(0, min(a.doc.cols-1, a.cx))
 	a.cy = max(0, min(a.maxRows()-1, a.cy))
+	if a.uni() && uniIsCont(a.doc.get(a.cx, a.cy)) && uniIsLead(a.doc.get(a.cx-1, a.cy)) {
+		a.cx-- // never on a wide character's right half: on the character
+	}
 	if a.cy >= a.doc.rows { // going past the last row adds rows to the page
 		run := a.inRun
 		a.pushUndo()
@@ -859,9 +879,14 @@ func (a *App) ensureVisible(x, y int) {
 	}
 }
 
-// deleteAt removes the cell and pulls the rest of the row left.
+// deleteAt removes the cell and pulls the rest of the row left (a wide
+// character: both its cells).
 func (a *App) deleteAt(x, y int) {
 	d := a.doc
+	if a.uni() {
+		wideDelete(d, x, y)
+		return
+	}
 	for i := x; i < d.cols-1; i++ {
 		d.set(i, y, d.get(i+1, y))
 	}
@@ -1022,6 +1047,10 @@ func (a *App) floodFill(x, y int) {
 	if target == want || y >= d.rows {
 		return
 	}
+	if a.uni() {
+		a.wideFloodFill(x, y, target, want)
+		return
+	}
 	stack := [][2]int{{x, y}}
 	for len(stack) > 0 {
 		p := stack[len(stack)-1]
@@ -1037,6 +1066,9 @@ func (a *App) floodFill(x, y int) {
 
 func (a *App) pick(x, y int) {
 	v := a.shownCell(x, y) // what is seen, on a page of layers too (layers.go)
+	if a.uni() && uniIsCont(v) && uniIsLead(a.shownCell(x-1, y)) {
+		v = a.shownCell(x-1, y) // a wide character's right half: the character
+	}
 	if a.uni() {
 		a.uniPick(v)
 		return
@@ -1356,7 +1388,11 @@ func (a *App) setFset(n int) {
 func (a *App) selRect() Rect {
 	s := a.sel
 	x, y := min(s.x0, s.x1), min(s.y0, s.y1)
-	return Rect{x, y, abs(s.x1-s.x0) + 1, abs(s.y1-s.y0) + 1}
+	r := Rect{x, y, abs(s.x1-s.x0) + 1, abs(s.y1-s.y0) + 1}
+	if a.uni() {
+		r = wideGrow(a.doc, r) // whole wide characters (wide.go)
+	}
+	return r
 }
 
 func (a *App) copySel(cut bool) {
@@ -1438,6 +1474,20 @@ func (a *App) textBlock(text string) *Block {
 		w = max(w, utf8.RuneCountInString(l))
 	}
 	w = min(w, a.doc.cols)
+	if a.uni() { // a wide character takes two columns
+		w = 1
+		for _, l := range lines {
+			n := 0
+			for _, r := range l {
+				n++
+				if uniWideRune(r) {
+					n++
+				}
+			}
+			w = max(w, n)
+		}
+		w = min(w, a.doc.cols)
+	}
 	b := &Block{w: w, h: len(lines), cells: make([]uint32, w*len(lines)), uni: a.uni()}
 	fillCells(b.cells, blank)
 	for y, l := range lines {
@@ -1453,8 +1503,16 @@ func (a *App) textBlock(text string) *Block {
 			if c < 0 {
 				c = '?'
 			}
+			wide := a.uni() && uniWideCode(c)
+			if wide && x+1 >= w {
+				break
+			}
 			b.cells[y*w+x] = a.cell(c)
 			x++
+			if wide {
+				b.cells[y*w+x] = uniContOf(a.cell(c))
+				x++
+			}
 		}
 	}
 	return b
@@ -2582,7 +2640,14 @@ func (a *App) blockOp(op int) {
 			return
 		}
 	}
+	if a.uni() && op == turnCW && wideInBlock(b) {
+		a.msg("Wide characters cannot be turned: each is 2 cells wide and 1 high")
+		return
+	}
 	out := a.transformBlock(b, op)
+	if a.uni() && op == flipH {
+		wideFlipPairs(out) // a wide character's halves back in order
+	}
 	if a.float != nil {
 		*a.float = *out
 		a.msg(blockOpNames[op] + ": click to stamp it")
@@ -2639,6 +2704,7 @@ func (a *App) transformBlock(b *Block, op int) *Block {
 			switch {
 			case op == invertBlock:
 				v = a.invertCell(v)
+			case a.uni() && (uniIsCont(v) || uniIsLead(v)): // wide characters are not mirrored
 			case a.uni():
 				v = uniWithCode(v, uniMirror(uniCode(v), op))
 			case a.mt() && mtMosaic(v) && op != invertBlock:

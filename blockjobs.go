@@ -21,6 +21,12 @@ func (a *App) fillSel() {
 	v := a.brushCell()
 	for y := r.y; y < min(r.y+r.h, a.doc.rows); y++ { // filling never adds rows
 		for x := r.x; x < r.x+r.w; x++ {
+			if a.uni() { // whole wide characters, only where both cells are inside (wide.go)
+				if !uniIsLead(v) || x+1 < r.x+r.w {
+					wideSet(a.doc, x, y, v)
+				}
+				continue
+			}
 			a.doc.set(x, y, v)
 		}
 	}

@@ -489,6 +489,9 @@ func (a *App) cursorKey(k string) bool {
 		a.cx--
 	case "Right":
 		a.cx++
+		if a.uni() && uniIsCont(a.doc.get(a.cx, a.cy)) {
+			a.cx++ // over a wide character's right half
+		}
 	case "Up":
 		a.cy--
 	case "Down":
@@ -572,6 +575,9 @@ func editorKey(k string, ctrl, shift, alt bool) {
 		if a.cx > 0 {
 			a.pushUndo()
 			a.cx--
+			if a.uni() && uniIsCont(a.doc.get(a.cx, a.cy)) && uniIsLead(a.doc.get(a.cx-1, a.cy)) {
+				a.cx-- // over a whole wide character
+			}
 			if a.insert {
 				a.deleteAt(a.cx, a.cy)
 			} else {

@@ -104,6 +104,7 @@ func (a *App) deleteColumn() {
 		}
 		d.set(d.cols-1, y, e)
 	}
+	wideNormalCols(d, a.cx) // a wide character cut in half (wide.go)
 	a.sel = nil
 }
 
@@ -135,6 +136,7 @@ func (a *App) insertColumn() {
 		}
 		d.set(a.cx, y, e)
 	}
+	wideNormalCols(d, a.cx, a.cx+1, d.cols-1) // a wide character cut in half, or pushed half off (wide.go)
 	a.sel = nil
 }
 
