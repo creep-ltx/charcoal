@@ -44,6 +44,9 @@ func splitStream(b []byte, mode string, cols int, amiga bool, res STRes, atHome 
 		d.glyph0 = true
 		t := newPetTerm(d)
 		em, setHooks = t, func(c, h func()) { t.beforeClear, t.beforeHome = c, h }
+		if len(codes) > 0 && codes[0] == "imageseq" {
+			em = newImageTerm(t) // Image BBS's £ codes (c64bbs.go)
+		}
 	case "atari":
 		d = newDoc(cols, 24)
 		d.bg, d.ink, d.border, d.glyph0 = atariBg, atariInk, 0, true
@@ -100,6 +103,9 @@ func splitStream(b []byte, mode string, cols int, amiga bool, res STRes, atHome 
 	setHooks(func() { take(false) }, func() { take(true) })
 	for pos = 0; pos < len(b); pos++ {
 		em.write(b[pos : pos+1])
+	}
+	if it, ok := em.(*imageTerm); ok {
+		it.flush()
 	}
 	take(false)
 	return docs, holds, homes

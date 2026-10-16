@@ -352,7 +352,7 @@ func (d *BatchReq) drawSetup(u *UI) {
 			x, y = x0+16, y+gadH+4
 		}
 		on := strings.Contains(","+d.copies+",", ","+b.id+",")
-		v, cw := u.check(x, y, b.name, on, "Each file also as name-"+b.id+".ans with "+b.name+"'s codes")
+		v, cw := u.check(x, y, b.name, on, "Each file also as name-"+b.id+boardExts(b)+" with "+b.name+"'s codes")
 		if v != on {
 			o := drawOrder{Copies: d.copies}
 			o.toggleCopy(b.id)
@@ -362,7 +362,7 @@ func (d *BatchReq) drawSetup(u *UI) {
 	}
 	y += gadH + 4
 	if b := boardByID(d.effectBoard()); b != nil {
-		line(b.name+": "+b.note+". Only .ans files: a board with no codes for .seq, .ata or .vt skips those (None animates them at the modem's pace).", cDim)
+		line(b.name+": "+b.note+". Only "+boardExts(b)+" files: the others are skipped (None animates them at the modem's pace).", cDim)
 	} else {
 		line("No board: the files play at the modem's pace (over telnet they flash past). None is right for art packs and 16colo.rs.", cDim)
 	}

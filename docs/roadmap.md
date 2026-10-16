@@ -86,7 +86,7 @@ against each platform's best editor. Each step says what it wins.
 - The 4:3 aspect preview (from the SAUCE aspect bits, which are kept on save).
 - [x] BBS colour codes (2026-10-16, bbscodes.go): pipe codes (Mystic, Renegade, WWIV 5), Synchronet Ctrl-A,
   WWIV hearts, Wildcat! @XX@, Celerity |x read (also mixed with ANSI) and written; Open as lists PCBoard, Avatar
-  and each of them. Next: "Save for board X" could write the board's own colour codes (proposed, not done).
+  and each of them. "Save for board X" writes the board's own colour codes too (2026-10-16, see Step 5).
 - [x] More PC fonts (done 2026-10-14): EGA 8x14, VGA50 8x8 (80x50), code pages 850 and 866; SAUCE font names
   honoured on opening and written on saving (IBM VGA, IBM EGA, IBM VGA50, IBM EGA43, IBM VGA 850 ...). Not yet:
   other code pages' 8x8/8x14 sets (Moebius's names open in the CP437 font of the same size and are kept on save), the 4:3 aspect above.
@@ -131,8 +131,13 @@ against each platform's best editor. Each step says what it wins.
   HTML; PC/Amiga pages convert exactly in one undoable step. Later: wide (CJK, emoji) characters as two cells,
   durdraw's own 16-colour iCE backgrounds checked in durdraw's screen (its export cannot write them).
 
-- **BBS boards**: "Save for board X" (bbspause.go) writes the board's own colour codes as well as its pauses:
-  Mystic pipe codes, Synchronet Ctrl-A, PCBoard @X (the user said yes, 2026-10-16).
+- [x] **BBS boards** (2026-10-16, boardcolours.go): "Save for board X" (bbspause.go) writes the board's own colour
+  codes as well as its pauses: Mystic pipe codes, Synchronet Ctrl-A, PCBoard @X (the user said yes, 2026-10-16);
+  a stream with a colour the board has no code for (blink on Mystic) keeps ANSI.
+- [x] **C64 BBS graphics** (2026-10-16, c64bbs.go): pauses in animated .seq files for Image BBS (£S, tenths) and
+  C*Base (Ctrl-P, ~1/30 s), each board's own characters escaped and its line reading respected; .seq files with
+  Image BBS's £ codes read (colours, clear, reverse) and saved back with them. Later: Image's whole-second £W and
+  Color 64 (open questions to the user), C-Net/DMBBS/Centipede codes (not found), a run on a real board.
 
 ## Later
 

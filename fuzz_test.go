@@ -147,6 +147,7 @@ func FuzzParsers(f *testing.F) {
 		check("adf", func() []*Doc { return own(parseADF(b)) })
 		check("tnd", func() []*Doc { return own(parseTundra(b)) })
 		check("seq", func() []*Doc { d, _ := parseSeq(b, 40); return one(d) })
+		check("seq image", func() []*Doc { d, _ := parseSeq(b, 40, "imageseq"); return one(d) }) // Image BBS's £ codes (c64bbs.go)
 		check("edit.tf", func() []*Doc { d, _ := parseEditTF(b); return one(d) })
 		check("tti", func() []*Doc { return one(parseTTI(b)) })
 		check("ep1", func() []*Doc { return one(parseEP1(b)) })

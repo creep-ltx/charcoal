@@ -1386,7 +1386,7 @@ func (a *App) reparse() {
 		if cols == 0 {
 			cols = a.mach().cols
 		}
-		d, lower := parseSeq(a.source, cols)
+		d, lower := parseSeq(a.source, cols, a.codes)
 		a.doc = d
 		if lower >= 0 {
 			a.setCase(lower == 1)
@@ -1483,6 +1483,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 			a.finishLoad(b, name, path, nil, k)
 			return
 		}
+	}
+	if as == "imageseq" { // a .seq with Image BBS's £ codes (c64bbs.go)
+		a.codes, as = as, "c64"
 	}
 	// Other boards' colour codes (bbscodes.go): read in front of the ANSI terminal.
 	if isBBSCodes(as) {
@@ -1587,7 +1590,11 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 			a.setMode("st")
 		})
 	}
+	if mode == "c64" && a.hasC64 && a.codes == "" && (as == "auto" || as == "c64") && isImageCodes(b) {
+		a.codes = "imageseq" // Image BBS's £ codes (c64bbs.go)
+	}
 	if mode == "c64" && !a.hasC64 {
+		a.codes = ""
 		// Shown as PC for now; with the character set it is read again as PETSCII.
 		t := a.Tab
 		openC64Req(func() {
@@ -1633,6 +1640,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	switch {
 	case mode == "c64":
 		a.saveFmt = "seq"
+		if a.codes == "imageseq" {
+			a.saveFmt = a.codes
+		}
 	case mode == "atari":
 		a.saveFmt = "ata"
 	case mode == "zx":
@@ -2641,6 +2651,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	if out, ok, err := a.encodeZXTap(fmtID, d); ok { // Spectrum .tap (zxtap.go)
 		return out, err
 	}
+	if out, ok := a.encodeImageSeq(fmtID, board, ps, d); ok { // PETSCII with Image BBS's £ codes (c64bbs.go)
+		return out, nil
+	}
 	if out, ok := a.encodeIGS(fmtID, d); ok { // Atari ST IGS (igs_page.go)
 		return out, nil
 	}
@@ -2861,7 +2874,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID] || isBBSCodes(fmtID) || a.uniOwn(fmtID)
+	own := strings.Contains(" ansi text bin seq imageseq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID] || isBBSCodes(fmtID) || a.uniOwn(fmtID)
 	if own && a.nFrames() > 1 && !framesFormats[fmtID] {
 		// One picture: written as an export, so the page is not taken for saved.
 		a.lastDir = filepath.Dir(path)
@@ -2877,7 +2890,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		if editorOwn[fmtID] || a.uniOwn(fmtID) {
 			a.srcKind = fmtID
 		}
-		a.codes = map[bool]string{true: fmtID}[isBBSCodes(fmtID)] // the source is now in these codes (or none)
+		a.codes = map[bool]string{true: fmtID}[isBBSCodes(fmtID) || fmtID == "imageseq"] // the source is now in these codes (or none)
 		a.markSaved()
 		dropAutosave(a.Tab)
 		a.rememberRef() // the reference goes with the file's new name
