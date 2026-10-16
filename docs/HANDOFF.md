@@ -1259,6 +1259,12 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## Layers (2026-10-16, branch r6-layers; design: docs/layers-design.md)
 
+- **Decided (2026-10-16, the user trusts these calls):** "black shows below" means the background below (not
+  IcyDraw's lower-half-of-the-cell rule); CharEdit writes the background as seen into .icy, so IcyDraw shows the
+  same picture. The side file is accepted on SHA-1 + page type + width (no cell compare: .ata keeps no colours).
+  Playscii layers kept on PC/Amiga/ST only (PETSCII/Atari Playscii files have one screen background). Clicking
+  the current layer's name renames it. Keys Alt+Shift+N/M/E/Up/Down, Ctrl+Shift+PgUp/PgDn.
+
 - **The user's decisions (2026-10-16):** empty cells (blankAt) show the layers below, a black full block covers;
   "black shows below" per layer; after a flat save the layers are kept beside the file (SHA-1 of the bytes);
   layers and frames together later; 16M cells for all layers together, 64 layers at most; Pick = what is seen,
