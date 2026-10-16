@@ -143,6 +143,8 @@ func (a *App) blankLike(d *Doc) *Doc {
 		n = newZXDoc()
 	case a.tt():
 		n = newTTDoc()
+	case a.cpc():
+		n = newCPCDoc(a.cpcSet.mode)
 	case a.st():
 		n = newSTDoc(a.res())
 		n.ensureRows(d.rows)
@@ -288,7 +290,7 @@ func (a *App) snapshotLike(s Snap) Snap {
 	}
 	if a.frames != nil && s.cur != a.cur && s.cur < len(a.frames) {
 		d := a.frames[s.cur].doc.clone()
-		return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: s.cur, cost: len(d.cells), order: a.order, mode: a.mode}
+		return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: s.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap()}
 	}
 	return a.snapshot()
 }

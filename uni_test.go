@@ -1074,3 +1074,48 @@ func TestUniBatchSkips(t *testing.T) {
 		t.Errorf("skipped: %+v", r.items)
 	}
 }
+
+// mIRC's ^C and WWIV's hearts are the same byte: each kind of file opens as its own.
+func TestUniMircOrWWIV(t *testing.T) {
+	a := uniFApp(t)
+	// WWIV: a heart and one digit (bbscodes_test's file).
+	uniFOpen(a, []byte("\x032He\x031llo\x032 x\x033 \x032y"), "x.ans")
+	if a.uni() || a.codes != "wwiv" {
+		t.Errorf("WWIV hearts opened as %s (codes %q)", a.mode, a.codes)
+	}
+	// mIRC art saved as .txt: foreground and background colours.
+	r := rand.New(rand.NewSource(9))
+	d := uniFPage(r, 30, 6, func() (int, int) { return mircColour(r.Intn(16)), mircColour(r.Intn(16)) }, false)
+	out, _, _ := writeMirc(d, &vga16)
+	uniFOpen(a, out, "art.txt")
+	if !a.uni() || a.srcKind != "mirc" || a.codes != "" {
+		t.Errorf("mIRC text opened as %s %s (codes %q)", a.mode, a.srcKind, a.codes)
+	}
+	if k := bbsCodesKind(out, "art.txt"); k != "" {
+		t.Errorf("bbsCodesKind takes mIRC art for %s", k)
+	}
+}
+
+// An Amstrad CPC page converts to Unicode in its inks' colours, and a Unicode page back to a CPC page.
+func TestUniAndCPC(t *testing.T) {
+	a := testApp(t, "cpc")
+	a.applyMode()
+	a.typeByte('A')
+	pen := a.pal[cellFg(a.doc.get(0, 0))] & 0xFFFFFF
+	a.setMode("uni")
+	if !a.uni() || uniRune(uniCode(a.doc.get(0, 0))) != 'A' {
+		t.Fatalf("CPC to Unicode: %s %q", a.mode, uniRune(uniCode(a.doc.get(0, 0))))
+	}
+	if fg, _ := uniColoursOf(a.doc.get(0, 0)); colourRGB(fg, &a.pal) != pen {
+		t.Errorf("pen #%06X became %s", pen, colourName(fg))
+	}
+	a.doUndo()
+	if !a.cpc() || cellCh(a.doc.get(0, 0)) != 'A' {
+		t.Errorf("undo: %s", a.mode)
+	}
+	a.doRedo()
+	a.setMode("cpc")
+	if !a.cpc() || cellCh(a.doc.get(0, 0)) != 'A' || a.doc.cols != 40 {
+		t.Errorf("Unicode to CPC: %s %dx%d %q", a.mode, a.doc.cols, a.doc.rows, rune(cellCh(a.doc.get(0, 0))))
+	}
+}

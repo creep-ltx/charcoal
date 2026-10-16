@@ -1385,6 +1385,9 @@ func psciNearest(c uint32, pal []uint32) int {
 // writePsci gives a Playscii file of the frames (one layer each); missed counts
 // the cells whose character Playscii's charset has not (written as spaces).
 func writePsci(docs []*Doc, holds []int, p psciPage) (out []byte, missed int) {
+	if p.mode == "cpc" {
+		return writePsciCPC(docs, holds, a.cpcSet)
+	}
 	w, h := 1, 1
 	for _, d := range docs {
 		w, h = max(w, d.cols), max(h, d.rows)
@@ -1470,6 +1473,7 @@ type psciArt struct {
 	docs    []*Doc
 	holds   []int
 	note    string
+	cpc     *cpcSetup // a CPC page's screen (cpc.go)
 }
 
 // parsePsci reads a Playscii file; layers are put together (by z, visible only).
@@ -1483,6 +1487,9 @@ func parsePsci(b []byte) (*psciArt, error) {
 	// could hold is no Playscii file.
 	if w < 1 || h < 1 || w > 4096 || h > maxRowsFor(w) || w*h > len(b)/16 || len(f.Frames) == 0 {
 		return nil, fmt.Errorf("a Playscii picture of %dx%d", w, h)
+	}
+	if isCPCCharset(f.Charset) { // Logiker's Amstrad ASCII Exporter's charsets (cpc.go)
+		return psciCPC(&f), nil
 	}
 	art := &psciArt{}
 	var glyph func(i int) (ch int, ok bool) // the page's character for a Playscii glyph
@@ -1895,6 +1902,9 @@ func (a *App) reparseEditor() bool {
 		}
 		if art.mode == "c64" {
 			a.setCase(art.lower)
+		}
+		if art.cpc != nil {
+			a.cpcSet = *art.cpc
 		}
 	case "pet", "pmjson":
 		scr, err := a.editorScreens(a.srcKind, a.source)

@@ -144,8 +144,10 @@ type FileReq struct {
 	pickDir bool              // pick takes a folder: the one listed (Animate a folder, batch_ui.go)
 }
 
-var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "tt", "c64"}
-var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "Atari ST VT52", "ZX Spectrum", "Teletext", "C64 PETSCII"}
+var openAs = []string{"auto", "amiga", "pc", "atari", "st", "zx", "tt", "c64",
+	"pcb", "avt", "pipe", "ctrla", "wwiv", "wildcat", "celerity"}
+var openAsNames = []string{"detect", "Amiga", "PC", "Atari ATASCII", "Atari ST VT52", "ZX Spectrum", "Teletext", "C64 PETSCII",
+	"PC: PCBoard @X", "PC: Avatar", "PC: pipe codes |07", "PC: Synchronet Ctrl-A", "PC: WWIV hearts", "PC: Wildcat! @XX@", "PC: Celerity |x"}
 
 func openOpenRequester() {
 	d := &FileReq{sel: -1}
@@ -487,11 +489,19 @@ func (d *FileReq) draw(u *UI) {
 		u.choice("fmt", Rect{in.x + colAfter(64, "Format"), y, choiceW(names), gadH}, names, d.choice, "", d.setFormat)
 	} else {
 		fb.text(in.x, y+3, "Open as", cText)
-		names := openAsNames
-		if !a.hasC64 {
-			names = names[:7]
+		var names []string
+		var shown []int // openAs indexes on offer (C64 only with its ROMs)
+		cur := 0
+		for i, n := range openAsNames {
+			if openAs[i] == "c64" && !a.hasC64 {
+				continue
+			}
+			if i == d.choice {
+				cur = len(shown)
+			}
+			names, shown = append(names, n), append(shown, i)
 		}
-		u.choice("as", Rect{in.x + colAfter(72, "Open as"), y, choiceW(names), gadH}, names, d.choice, "", func(i int) { d.choice = i })
+		u.choice("as", Rect{in.x + colAfter(72, "Open as"), y, choiceW(names), gadH}, names, cur, "", func(i int) { d.choice = shown[i] })
 		bx := in.x + 72 + choiceW(names) + 16
 		if len(prefs.Recent) > 0 {
 			r := Rect{bx, y, buttonW("Recent files"), gadH}
@@ -737,7 +747,7 @@ func openHelp() { a.dialog = &HelpReq{} }
 // helpText is the help; its list of keys is made from the key table.
 func helpText() string {
 	return `START SCREEN
-Started without files, CharEdit shows a new page for each machine (Amiga, PC, Atari 8-bit, Atari ST, C64, PET, VIC-20, C128, ZX Spectrum, teletext), each in its own font and colours with its size, the last 10 files and Open. Click one, or arrows / Tab and Enter. Typing, a tool or Esc starts on a page of the last used type instead; dropping a file opens it. New pages (+, ` + keyName("new_page") + `) start there too; ` + keyName("start_screen") + ` brings it back. "Show this at start" off: CharEdit starts on an empty page of the last used type.
+Started without files, CharEdit shows a new page for each machine (Amiga, PC, Atari 8-bit, Atari ST, C64, PET, VIC-20, C128, ZX Spectrum, teletext, Amstrad CPC), each in its own font and colours with its size, the last 10 files and Open. Click one, or arrows / Tab and Enter. Typing, a tool or Esc starts on a page of the last used type instead; dropping a file opens it. New pages (+, ` + keyName("new_page") + `) start there too; ` + keyName("start_screen") + ` brings it back. "Show this at start" off: CharEdit starts on an empty page of the last used type.
 
 MOUSE
 Draw: left paints the brush (character + colours), right erases, Shift+click draws a line from the last point.
@@ -761,7 +771,7 @@ Typing writes at the cursor in the brush colours (any tool). Arrows, Home, End, 
 Every key below can be changed in ` + shownDir(configDir()) + `keys (the file says how; delete it to get these back).` + macKeysNote() + `
 ` + keysHelp() + "\n" + `A selected block, or one being pasted, can be turned over with the buttons under the colours or the keys above: mirror (left-right), upside down, turn a quarter clockwise, invert (reversed characters on PETSCII and Atari pages, the two colours swapped elsewhere). Characters become their mirrored or turned twins: / and \, the box lines and corners, half blocks, arrows; on PETSCII pages Marq's PETSCII editor's tables. A selection that turns into another shape is lifted off the page to be put down. Copy a block, paste it, turn it, stamp it as often as you like.
 "Sync" scrolls two pages together. Dropping files on the window opens them. Keys in the W and H fields stay in the field until Enter, Esc or Tab.
-PAGE TYPES: AMIGA, PC, ATARI, ATARI ST, PETSCII, ZX SPECTRUM, TELETEXT
+PAGE TYPES: AMIGA, PC, ATARI, ATARI ST, PETSCII, ZX SPECTRUM, TELETEXT, AMSTRAD CPC
 Amiga pages are Latin-1, read 0x9B as CSI, clear on form feed, keep italic and underline, save with LF line ends. PC pages are CP437 in the VGA font and save with CRLF. Atari pages are ATASCII, the Atari 8-bit computers' text screen: inverse characters (Rev), one background, one text colour for the whole screen (left click a colour) and a border (middle click); .ata files, with EOL line ends and ESC before control characters. Width 38 (the screen editor's margins) or 40 (terminals) is guessed from the file and can be switched; the page is never wider. The font is AltirraOS's, free to pass on. PETSCII pages are exactly as wide as the machine's screen (the Machine gadget sets it): PET 40 or 80 columns (one colour: green, amber or white screen), VIC-20 (22 x 23, 8 text colours), C64 (40 x 25), C128 (40 columns, or 80 on the VDC with its RGBI colours). Each has its two character sets (the Font gadget: upper case + graphics, or lower + upper case), reverse characters, one screen colour; they read and write .seq files, the stream a C64 BBS sends. Switching keeps the bytes and only changes how they are shown; an unchanged file is read again with the other page's rules.
 Atari ST pages are the ST's VT52 terminal in one of its resolutions (the Resolution gadget): low 40 x 25 in 16 colours, medium 80 x 25 in 4, high 80 x 25 in black and white with taller characters. Each cell has its own colour and background (ESC b, ESC c); files are the VT52 stream (.vt). The font is EmuTOS's, downloaded on first use.
 
@@ -770,11 +780,13 @@ ZX Spectrum pages are its 32 x 24 screen: a character per cell with ink (left cl
 Teletext pages are 40 x 25 cells of 7-bit codes as on a BBC Micro in Mode 7 or a TV teletext page. Codes 0-31 are attributes that act from their cell to the right, as the teletext chip reads a row: text or graphics colour (F-key sets 1 and 2), double height, flash, conceal, separated, hold, new background. Codes shows their names in their cells. The Sixel tool paints the 2x3 graphics pixels of a cell (the row needs a graphics colour to its left). Files: .tti, .ep1, edit.tf links (.url; a text holding an edit.tf link opens too) and BBC Mode 7 dumps (1000-byte .bin). The characters are Bedstead's (public domain).
 
 Unicode pages (Uni) are for terminals and IRC: any width, any character the built-in Unifont draws (blocks and half blocks, sextants and octants, Braille, box drawing, shapes, arrows, symbols, Latin, Greek, Cyrillic) in the 16 colours, xterm's 256 (the grid under the 16) or any 24-bit colour (the 24-bit... button, or ` + keyName("uni_colour") + `). The character table shows one block at a time (< and >, the wheel, ` + keyName("uni_block_previous") + ` / ` + keyName("uni_block_next") + `); typing takes any character it has. Half paints half blocks in any colours. "VGA + Unifont" draws CP437's characters in the VGA font. Choosing Unicode for a PC or Amiga page converts it exactly (` + keyName("undo") + ` undoes it); back to PC, characters CP437 lacks become ? and colours the nearest of 16. Files: UTF-8 ANSI (.ans, a SAUCE record only when the width needs one), durdraw .dur (frames), mIRC colour codes (.irc; PC pages can save these too; a warning when a line is too long for IRC), HTML, PNG, GIF.
+
+Amstrad CPC pages are the CPC's text screen in one of its modes (the Mode gadget): mode 1, 40 x 25 with 4 inks (the AMSCII compos' main category), mode 0, 20 x 25 with 16 inks, mode 2, 80 x 25 with 2 inks. A cell has a character (all 256 of the ROM's, 0-31 too), a pen and a paper; the inks are the colours, each one of the CPC's 27. In Colours, the inks: left click the pen, right click the paper; under them the 27 colours: left click gives the pen's ink that colour, right click the paper's ink, middle click makes it the border. Saved as .bin (an AMSDOS file that runs on a CPC: RUN"NAME.BIN", or dropped on an emulator), as a .dsk disk image with the .bin on it, or as Playscii .psci for Logiker's Amstrad ASCII Exporter. The exporter's .bin files and disks with them open too. The font is the CPC's ROM: Amstrad has kindly given its permission for its copyrighted material to be redistributed but Amstrad retains its copyright.
 SAVE AS
-ANSI, plain text, UTF-8 text, PC .bin, PCBoard .pcb, Avatar .avt, ATASCII .ata, Atari ST .vt, ZX Spectrum .scr, teletext .tti, .ep1 and edit.tf links (.url), XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border), a web page (.html) and an animation of the frames (.gif, or APNG .png). Typing a file ending picks the format. Saving under the name of another file that is already there asks first.
-For other editors (at the end of the list, only for the pages they fit): iCEDraw .idf, ArtWorx .adf (80 columns) and TundraDraw .tnd (80 columns, 24-bit colours, no font) for PC and Amiga pages; IcyDraw .icy (font, palette and iCE inside; opens in IcyDraw as the page); REXPaint .xp (PC); Playscii .psci (PC, Amiga, PETSCII, Atari; every frame with its hold; Playscii's own charsets and palettes by name, so an own font stays with CharEdit); and for a C64: the PETSCII editor's .pet, its BASIC listing (.bas, for petcat) and ACME source (.s), and Petmate's JSON export (.json, every screen). The ones that open again (.idf, .adf, .tnd, .icy, .xp, .psci, .pet, .json) become the page's file: Save writes the same format again.
+ANSI, plain text, UTF-8 text, PC .bin, PCBoard .pcb, Avatar .avt, BBS colour codes (pipe codes |07 for Mystic and Renegade, Synchronet Ctrl-A .msg, WWIV .msg, Wildcat! .bbs, Celerity), ATASCII .ata, Atari ST .vt, ZX Spectrum .scr, Amstrad CPC .bin and .dsk, teletext .tti, .ep1 and edit.tf links (.url), XBin (.xb, with the font and palette inside, so it looks the same in any viewer), PETSCII .seq, a C64 program (.prg: LOAD and RUN it on a C64 or in VICE, a key goes back to BASIC), the C array of Marq's PETSCII editor and Petmate (.c), a Petmate workspace (.petmate), pictures (.png, normal or twice the size; C64 pages with their border), a web page (.html) and an animation of the frames (.gif, or APNG .png). Typing a file ending picks the format. Saving under the name of another file that is already there asks first.
+For other editors (at the end of the list, only for the pages they fit): iCEDraw .idf, ArtWorx .adf (80 columns) and TundraDraw .tnd (80 columns, 24-bit colours, no font) for PC and Amiga pages; IcyDraw .icy (font, palette and iCE inside; opens in IcyDraw as the page); REXPaint .xp (PC); Playscii .psci (PC, Amiga, PETSCII, Atari, Amstrad CPC; every frame with its hold; Playscii's own charsets and palettes by name, so an own font stays with CharEdit); and for a C64: the PETSCII editor's .pet, its BASIC listing (.bas, for petcat) and ACME source (.s), and Petmate's JSON export (.json, every screen). The ones that open again (.idf, .adf, .tnd, .icy, .xp, .psci, .pet, .json) become the page's file: Save writes the same format again.
 OPENING
-Everything above that holds characters opens again: ANSI, text, .bin, XBin, .pcb, .avt, .ata (also as .txt, recognised by its bytes), .vt, .scr, .tti, .ep1, edit.tf links, .seq, .c, .petmate, and C64 programs saved by CharEdit; also iCEDraw .idf, ArtWorx .adf, TundraDraw .tnd, IcyDraw .icy (PC pages; its layers are put together into one page, picture layers and layer effects are left out), REXPaint .xp (layers put together), Playscii .psci (charsets dos, amiga_topaz, atari, the C64 ones and commodore_pet; layers put together, frames kept), the PETSCII editor's .pet and Petmate's JSON export. A .c, .petmate, .psci or Petmate .json with several screens and a .tti carousel open as frames. Web pages do not open; a picture opened or dropped can be the page's reference (below).
+Everything above that holds characters opens again: ANSI, text, .bin, XBin, .pcb, .avt, BBS colour codes (found by their bytes, also mixed with ANSI; Open as picks one; a board's code that cannot be shown stays as text and is saved back), .ata (also as .txt, recognised by its bytes), .vt, .scr, CPC .bin and .dsk, .tti, .ep1, edit.tf links, .seq, .c, .petmate, and C64 programs saved by CharEdit; also iCEDraw .idf, ArtWorx .adf, TundraDraw .tnd, IcyDraw .icy (PC pages; its layers are put together into one page, picture layers and layer effects are left out), REXPaint .xp (layers put together), Playscii .psci (charsets dos, amiga_topaz, atari, the C64 ones, commodore_pet and the Amstrad exporter's; layers put together, frames kept), the PETSCII editor's .pet and Petmate's JSON export. A .c, .petmate, .psci or Petmate .json with several screens and a .tti carousel open as frames. Web pages do not open; a picture opened or dropped can be the page's reference (below).
 REFERENCE PICTURE
 A picture (PNG, JPEG, GIF, BMP, WebP) to trace over: the Ref gadget, ` + keyName("ref_open") + `, or drop it on the window. It shows in the page's empty cells (or faintly over everything), and can be faded, hidden, shown in greys, moved (` + keyName("ref_move") + `: drag or arrows, Shift a pixel, + and - size it; or Ctrl+drag) and sized (fit width, fit page, 1:1, bigger, smaller). It is only shown: never turned into characters, never saved or exported with the art. CharEdit remembers it with the art file (in prefs.json) and in the autosave.
 FRAMES

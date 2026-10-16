@@ -952,7 +952,8 @@ func (a *App) loadUni(b []byte, name, path, as string) bool {
 	switch {
 	case isDur(b) || strings.HasSuffix(lname, ".dur"):
 		kind = "dur"
-	case strings.HasSuffix(lname, ".irc") || (sauce == nil && looksMirc(b)):
+	case strings.HasSuffix(lname, ".irc") || (sauce == nil && looksMirc(b) && bbsCodesKind(b, name) != "wwiv"):
+		// (WWIV's hearts are Ctrl-C too: a heart takes one digit, mIRC's mostly fg,bg; bbscodes.go decides)
 		kind = "mirc"
 	case as == "uni":
 		kind = "uniansi"

@@ -1136,7 +1136,8 @@ type ParseOpts struct {
 	amiga     bool
 	forceCols int
 	binary    bool
-	utf8      bool // the bytes came from a UTF-8 file (fromUtf8)
+	utf8      bool   // the bytes came from a UTF-8 file (fromUtf8)
+	codes     string // a BBS's colour codes in the text (bbscodes.go), "" none
 }
 
 // rawControls: the art (a file with a SAUCE record, read with glyphCtl) holds
@@ -1214,7 +1215,7 @@ func parseArt(b []byte, o ParseOpts) (*Doc, *Sauce, int) {
 		}
 		return d, sauce, fontRequest
 	}
-	if o.utf8 && sauce == nil && o.forceCols == 0 {
+	if o.utf8 && sauce == nil && o.forceCols == 0 && o.codes == "" { // codes would count as characters
 		if n := longestLine(art); n > cols && n <= 256 {
 			cols = n // a UTF-8 file has no record to say its width (longer lines are prose: they wrap)
 		}
@@ -1227,7 +1228,13 @@ func parseArt(b []byte, o ParseOpts) (*Doc, *Sauce, int) {
 	t.lateWrap = o.utf8                                  // UTF-8 art is for today's terminals, which wrap at the next character
 	var f fullest
 	t.beforeClear = func() { f.look(t.doc) }
-	writeWatching(t, art, &f)
+	if o.codes != "" && !o.amiga {
+		ct := newCodeTerm(t, o.codes)
+		writeWatching(ct, art, &f)
+		ct.flush()
+	} else {
+		writeWatching(t, art, &f)
+	}
 	fontRequest = t.fontRequest
 	if d = f.pick(t.doc); d == t.doc {
 		d.fit(cursorRows(t.x, t.y))
@@ -1439,6 +1446,8 @@ func writeWatching(e interface{ write([]byte) }, b []byte, f *fullest) {
 func docOf(e interface{ write([]byte) }) *Doc {
 	switch t := e.(type) {
 	case *Term:
+		return t.doc
+	case *codeTerm:
 		return t.doc
 	case *PetTerm:
 		return t.doc

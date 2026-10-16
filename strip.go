@@ -246,7 +246,7 @@ func (a *App) drawStrip(u *UI, r Rect) {
 // onionBlank: an empty cell, where the frame before shows through. Spectrum
 // and ST cells carry their paper colour even when empty.
 func (a *App) onionBlank(v uint32) bool {
-	if a.zx() || a.st() {
+	if a.zx() || a.st() || a.cpc() {
 		ch := v & 255
 		return ch == 32 || ch == 0
 	}
@@ -276,7 +276,7 @@ func (a *App) drawOnion(fb *FB, ox, oy, x0, x1, y0, y1 int) {
 				continue
 			}
 			pv := prev.get(x, y)
-			if a.onionBlank(pv) && (!a.zx() && !a.st() || cellBg(pv) == cellBg(v)) {
+			if a.onionBlank(pv) && (!a.zx() && !a.st() && !a.cpc() || cellBg(pv) == cellBg(v)) {
 				continue
 			}
 			px, py := ox+x*colPx, oy+y*rowPx
@@ -284,8 +284,8 @@ func (a *App) drawOnion(fb *FB, ox, oy, x0, x1, y0, y1 int) {
 			switch {
 			case a.screen():
 				paper = a.pal[a.doc.bg]
-			case a.zx() || a.st():
-				paper = a.pal[cellBg(v)]
+			case a.zx() || a.st() || a.cpc():
+				paper = a.pal[cellBg(v)&15]
 			}
 			if a.tt() {
 				if row[x].code == 0x20 && row[x].bg == 0 {

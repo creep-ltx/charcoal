@@ -1,7 +1,7 @@
 # Charcoal
 
 Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer, for text art on every
-platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum and teletext, each with its real font, colours
+platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum, Amstrad CPC and teletext, each with its real font, colours
 and file formats.
 
 ![CharEdit with a PC ANSI by Platinum](docs/screenshots/hero.png)
@@ -52,11 +52,11 @@ Settings, keys and autosaves are kept in `%AppData%\Charcoal` on Windows,
 
 ## What it is
 
-An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, XBin, iCEDraw, ArtWorx, TundraDraw,
-IcyDraw, REXPaint, Playscii), Unicode terminal art (UTF-8 ANSI in 256 and 24-bit colours, durdraw) and IRC art
-(mIRC colour codes),
-Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens and teletext
-(BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
+An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, the BBS colour codes of Mystic,
+Renegade, Synchronet, WWIV, Wildcat! and Celerity, XBin, iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii),
+Unicode terminal art (UTF-8 ANSI in 256 and 24-bit colours, durdraw) and IRC art (mIRC colour codes),
+Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens, Amstrad CPC
+text art (AMSCII) and teletext (BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA, EGA 8x14,
 VGA 8x8 (80x50) and the code pages 850 and 866 on a PC page (CP437), the C64's two character sets on a C64 page;
 or a font of your own, drawn in its font editor.
@@ -163,10 +163,38 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   looks the same, pixel for pixel ("VGA + Unifont" draws CP437's characters in the VGA font). A PC page also
   saves as mIRC text directly. Checked: every durdraw example opens cell for cell as durdraw's own ANSI export
   shows it, and durdraw itself reads CharEdit's `.dur` files back as the page (`uni_ext_test.go`).
+- **Amstrad CPC page** (AMSCII): the CPC's text screen in its three modes (the **Mode** gadget): mode 1, 40x25
+  with 4 inks (the AMSCII compos' main category), mode 0, 20x25 with 16 inks (wide pixels), mode 2, 80x25 with 2
+  inks (narrow pixels: cells 8x16). Each cell has a character of the ROM's 256 (codes 0-31 are glyphs too) with a
+  pen and a paper; each ink is one of the CPC's 27 colours. The Colours panel shows the mode's inks (left: pen,
+  right: paper) and the 27 colours (left: the pen's ink becomes that colour, right: the paper's ink, middle: the
+  border). The font is the CPC firmware ROM's, built in (Amstrad allows passing it on,
+  `fonts/amstrad-cpc-NOTICE.txt`). Saved as a `.bin` that runs on a CPC (`RUN"NAME.BIN"`) and in emulators
+  (drop it on Caprice Forever): the AMSDOS header, a 21-byte program and the firmware's text codes (mode, border,
+  inks, pen and paper per cell); as a `.dsk` disk image holding that `.bin`; and Playscii `.psci` with Logiker's
+  Amstrad ASCII Exporter's charsets (`CPC_Mode0/1/2`) and `cpc` palette. Opens the exporter's own `.bin` files,
+  `.dsk` images (the first art program on the disk) and its `.psci`; Open as Amstrad CPC reads any file as the
+  CPC's text codes. All 2024 AMSCII Compo entries open. Pictures (`.png`, GIF, APNG) are 768x544 in every mode,
+  the size and place of Caprice Forever's screenshots that the compos use, so a saved PNG matches the other
+  entries' pixel for pixel. Typing `^` gives the caret (0xA0; the CPC's 0x5E is an up arrow).
 - **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save; iCEDraw (.idf), ArtWorx (.adf) and
   TundraDraw (.tnd) open with their own fonts and colours and save (see Files for other editors). The same art
   in five formats (ansilove's test files, `testdata/alove`) gives the same page in all of them. PC attribute
   bytes are in BIOS colour order and are converted.
+- **BBS colour codes** (PC pages, open and save): the codes boards turn into ANSI for their callers, as sysops
+  keep menus and screens in them. Found by their bytes (and `.msg` / `.bbs` endings), also in files that mix
+  them with ANSI escapes (common on Mystic); **Open as** picks one for any file, **Save as** writes each with the
+  shortest codes. A file of codes only saves back in them; one with ANSI escapes too saves as ANSI (Save as has
+  the codes). A board's code CharEdit cannot show (a pause, the caller's name, `|PO`, Ctrl-A `P`) stays on the
+  page as text and is written back as it came, so it still works on the board.
+
+  | Format | Codes | Read as |
+  |---|---|---|
+  | Pipe codes (`.ans`) | `\|00`-`\|15` foreground, `\|16`-`\|23` background, `\|24`-`\|31` bright background / blink, `\|CL` clear, `\|PI` a `\|` | Mystic, Renegade, WWIV 5, Synchronet, IcyDraw's `.an1` (a `\|` that could join a code is written `\|PI`, Mystic's way) |
+  | Synchronet Ctrl-A (`.msg`) | Ctrl-A + `K R G Y B M C W`, `H` bright, `I` blink, `E` bright background, `0`-`7` background, `N` normal, `+ - _`, `L` clear, cursor moves | Synchronet's `ctrl_a()`; a `☺` is written Ctrl-A `A` |
+  | WWIV (`.msg`) | Ctrl-C (♥) + `0`-`9` (each caller's colours: the defaults are read), `\|nn`, `\|#n` | WWIV 5's `outstr`; written with `\|nn` only, since hearts differ per caller (a ♥ in the art becomes a space) |
+  | Wildcat! (`.bbs`) | `@BF@`, background and foreground as capital hex digits, `@CLS@` | Synchronet's Wildcat! mode |
+  | Celerity (`.ans`, Open as only) | `\|k \|b \|g \|c \|r \|m \|y \|w`, `\|d \|B ... \|W` bright, `\|S` swap | Synchronet's Celerity mode (no blink: it is dropped, and the save says so) |
 - **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
   character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's
   ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its
@@ -538,6 +566,7 @@ come back cell for cell after saving in their own format.
 | `fontfile.go`, `fontedit.go` | a page's own font: font files read and written, kept with the art; the font editor (`fontfile_test.go`); `tools/pcfonts.py` makes the built-in EGA/VGA fonts |
 | `viewer.go` | CharView |
 | `export.go` | `.prg`, the `.c` array, XBin, HTML (`export_test.go` runs the `.prg` in a small 6502 emulator) |
+| `bbscodes.go` | BBS colour codes: pipe, Synchronet Ctrl-A, WWIV, Wildcat!, Celerity, read in front of the ANSI terminal and written (`bbscodes_test.go`; real files when fetched, see HANDOFF) |
 | `editorformats.go` | other editors' files: iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii, Marq's `.pet`/`.bas`/`.s`, Petmate JSON (`editorformats_test.go`; `editorformats_ext_test.go` checks against ansilove, IcyDraw's engine and Playscii's loader when they are there) |
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
@@ -565,6 +594,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | IBM EGA 8×14, IBM VGA 8×8, IBM VGA 8×16 code pages 850 and 866 (`fonts/IBM_*.f08/.f14/.f16`) | drawn from Bm437_IBM_EGA_8x14, Bm437_IBM_VGA_9x8 and BmPlus_IBM_VGA_8x16, VileR, *The Ultimate Oldschool PC Font Pack* v2.2 (int10h.org), by `tools/pcfonts.py` | CC BY-SA 4.0, `fonts/Px437-LICENSE.TXT` (the pack's licence) |
 | Atari 8-bit fonts | AltirraOS, from the Altirra emulator | all-permissive, `fonts/AltirraOS-LICENSE.txt` |
 | ZX Spectrum font | the 48K ROM's character set | © Amstrad, who allow passing it on, `fonts/zx-spectrum-NOTICE.txt` |
+| Amstrad CPC font | the CPC firmware ROM's character set (the same in the 464, 664 and 6128) | © Amstrad; Amstrad has kindly given its permission for its copyrighted material to be redistributed but Amstrad retains its copyright, `fonts/amstrad-cpc-NOTICE.txt` |
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |
 | Unicode page font (`fonts/unifont-art.hex.gz`) | GNU Unifont 17.0.05, Roman Czyborra, Paul Hardy et al. (unifoundry.com): the blocks text art uses, cut by `tools/unifont.sh` | SIL Open Font License 1.1 (Unifont is dual-licensed OFL / GPL-2+ with the font exception; used under the OFL), `fonts/unifont-NOTICE.txt` |
 | durdraw's colour numbers and file format (`uniformats.go`) | durdraw, Sam Foster (github.com/cmang/durdraw), read from its source; no code copied | BSD 3-clause |

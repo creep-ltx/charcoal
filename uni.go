@@ -193,14 +193,7 @@ func colourRGB(c int, pal *[16]uint32) uint32 {
 	return xterm256(c)
 }
 
-func rgbDist(x, y uint32) int {
-	d := 0
-	for _, sh := range []uint{0, 8, 16} {
-		e := int(x>>sh&255) - int(y>>sh&255)
-		d += e * e
-	}
-	return d
-}
+// rgbDist (the squared distance of two RGB colours) is in cpc.go.
 
 // rgbColour is the colour for an RGB value: one of the 256 when it is exactly
 // one of xterm's (16-255), else a 24-bit colour.

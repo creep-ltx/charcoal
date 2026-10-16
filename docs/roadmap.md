@@ -80,6 +80,9 @@ against each platform's best editor. Each step says what it wins.
 
 - [x] 9-pixel VGA cells (2026-10-14): from the SAUCE letter-spacing flag, Alt+9, kept on save with the aspect bits.
 - The 4:3 aspect preview (from the SAUCE aspect bits, which are kept on save).
+- [x] BBS colour codes (2026-10-16, bbscodes.go): pipe codes (Mystic, Renegade, WWIV 5), Synchronet Ctrl-A,
+  WWIV hearts, Wildcat! @XX@, Celerity |x read (also mixed with ANSI) and written; Open as lists PCBoard, Avatar
+  and each of them. Next: "Save for board X" could write the board's own colour codes (proposed, not done).
 - [x] More PC fonts (done 2026-10-14): EGA 8x14, VGA50 8x8 (80x50), code pages 850 and 866; SAUCE font names
   honoured on opening and written on saving (IBM VGA, IBM EGA, IBM VGA50, IBM EGA43, IBM VGA 850 ...). Not yet:
   other code pages' 8x8/8x14 sets (Moebius's names open in the CP437 font of the same size and are kept on save), the 4:3 aspect above.
@@ -92,8 +95,12 @@ against each platform's best editor. Each step says what it wins.
   pages (40x24, same characters); Minitel/Videotex (.vdt) reusing the teletext code.
 - **PETSCII**: Plus/4 and C16 (TED, 121 colours); C64 custom charsets, multicolour and ECM; dirart and
   .d64; pages wider than the screen for scrollers; asm/BASIC exports.
-- **Amstrad CPC (AMSCII)**: the liveliest platform we lack (compos 2022-24): mode 1 40x25 4 inks, mode 0
-  20x25 16 inks, mode 2 80x25; 27-colour palette; ROM font licence to check (as the Spectrum's).
+- [x] **Amstrad CPC (AMSCII)** (done 2026-10-16, cpc.go): mode 1 40x25 4 inks, mode 0 20x25 16 inks, mode 2
+  80x25 2 inks; the 27 colours, inks and border in the Colours panel; the ROM font built in (Amstrad's
+  permission, as the Spectrum's); .bin that runs on a CPC, .dsk, Playscii .psci with Logiker's exporter; reads
+  the exporter's files (all 2024 compo entries, pixel-identical to their Caprice Forever screenshots). Later: a
+  real-CPC/emulator run of CharEdit's .bin, Caprice's 768x544 screenshot size, play the stream, custom
+  characters (SYMBOL, not allowed in the compos).
 - **Spectrum**: UDG/charset editing; attributes-only painting.
 - **Atari 8-bit**: the real OS ROM font when present, the 128-colour palette, custom fonts.
 - **Atari ST**: IGS (ST BBS graphics), ST/STE palettes.

@@ -90,6 +90,7 @@ func defaultFkeys() map[string][][]int {
 		"zx":    zxFkeys,
 		"tt":    ttFkeys,
 		"uni":   uniFkeys,
+		"cpc":   cpcFkeys,
 	}
 }
 
@@ -118,7 +119,8 @@ type Snap struct {
 	frames []Frame // with whole: the list as it was (nil: a page of one picture)
 	cost   int     // the cells the step keeps, for undoBudget
 	order  *drawOrder
-	mode   string // the page type: undoing a conversion to or from Unicode changes it back
+	mode   string    // the page type: undoing a conversion to or from Unicode changes it back
+	cpc    *cpcSetup // a CPC page's inks and mode as they were (nil on other pages)
 }
 type Play struct {
 	bytes []byte
@@ -150,7 +152,8 @@ type Tab struct {
 	dirty               bool
 	source              []byte // the file as read (or last saved), to read again with other rules
 	sourceBin           bool
-	sourceUTF8          bool // source was decoded from a UTF-8 file
+	sourceUTF8          bool   // source was decoded from a UTF-8 file
+	codes               string // the source's BBS colour codes (bbscodes.go: "pipe", "ctrla" ...), "" none
 	sauce               *Sauce
 	sauceFlags          int  // the file's SAUCE letter spacing and aspect ratio bits (TFlags 1-4), written back
 	rawCtl              bool // the file (with SAUCE) held ○ ◘ • or character 0 as glyphs: saved so again
@@ -189,6 +192,7 @@ type Tab struct {
 	split               splitInfo   // the pictures the page's file (a stream) shows, offered as frames
 	ref                 *RefImage   // the reference picture to trace over (refimage.go), nil: none
 	order               *drawOrder  // the order Save draws a stream file in (transitions.go); nil: row by row
+	cpcSet              cpcSetup    // an Amstrad CPC page's mode, inks and border (cpc.go)
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -259,6 +263,9 @@ func (a *App) cellW() int {
 	if a.pc() && a.ninePx() {
 		return 9 // VGA's 9-dot cells (SAUCE letter spacing)
 	}
+	if a.cpc() {
+		return a.cpcCellW()
+	}
 	return 8
 }
 
@@ -280,6 +287,9 @@ func (a *App) font() *Font {
 	}
 	if a.zx() {
 		return zxFont
+	}
+	if a.cpc() {
+		return cpcFont
 	}
 	if a.tt() {
 		return ttFont
@@ -325,6 +335,9 @@ func (a *App) cellH() int {
 	}
 	if a.zx() {
 		return 8
+	}
+	if a.cpc() {
+		return a.cpcCellH()
 	}
 	if a.tt() {
 		return ttH
@@ -402,6 +415,9 @@ func (a *App) previewFg() int {
 	if a.atari() {
 		return a.doc.ink
 	}
+	if a.cpc() {
+		return 1
+	}
 	if !a.c64() {
 		return 7
 	}
@@ -415,6 +431,11 @@ func (a *App) previewFg() int {
 }
 
 func (a *App) setPalette() {
+	if a.cpc() { // the page's inks
+		a.cpcEnsure()
+		a.pal = a.cpcSet.palette()
+		return
+	}
 	if a.ownPal != nil && a.paletteFor[a.mode] == "file" {
 		a.pal = *a.ownPal
 		return
@@ -453,7 +474,7 @@ func (a *App) printable(c int) bool {
 	if a.zx() {
 		return c >= 32 && c < 165
 	}
-	if a.screen() {
+	if a.screen() || a.cpc() {
 		return true
 	}
 	if a.amiga() {
@@ -471,6 +492,9 @@ func (a *App) charToByte(r rune) int {
 	}
 	if a.zx() {
 		return zxFromRune(r)
+	}
+	if a.cpc() {
+		return cpcFromRune(r)
 	}
 	if a.c64() {
 		return petFromRune(r, a.lower())
@@ -507,6 +531,9 @@ func (a *App) runeOf(c int) rune {
 	if a.zx() {
 		return zxRune(c)
 	}
+	if a.cpc() {
+		return cpcRune(c)
+	}
 	if a.tt() {
 		return ttRune(c)
 	}
@@ -528,7 +555,7 @@ func nextGen() int { genSeq++; return genSeq }
 
 func (a *App) snapshot() Snap {
 	d := a.doc.clone()
-	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode}
+	return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap()}
 }
 
 // undoBudget caps the cells all undo steps of a page may keep (64 MB): tall art
@@ -583,6 +610,10 @@ func (a *App) restore(s Snap) {
 	}
 	a.doc, a.cx, a.cy, a.gen, a.order = s.doc, s.cx, s.cy, s.gen, s.order
 	a.restoreUniMode(s.mode)
+	if s.cpc != nil && a.cpc() {
+		a.cpcSet = *s.cpc
+		a.setPalette()
+	}
 	a.showCase()
 	a.dirty = a.gen != a.savedGen
 	a.inRun = false
@@ -617,7 +648,7 @@ func (a *App) maxRows() int {
 	switch {
 	case a.zx():
 		return 24
-	case a.tt():
+	case a.tt(), a.cpc():
 		return 25
 	}
 	return maxRowsFor(a.doc.cols)
@@ -920,7 +951,7 @@ func (a *App) setBg(i int) {
 		return
 	}
 	a.bg, a.ubgOn = i, false
-	if i > 7 && !a.ice && !a.uni() { // a Unicode page's backgrounds never blink
+	if i > 7 && !a.ice && !a.uni() && !a.cpc() { // a Unicode page's backgrounds never blink
 		a.msg("Backgrounds 8-15 need iCE colours (otherwise they blink on PC)")
 	}
 }
@@ -941,6 +972,8 @@ func (a *App) nColours(bg bool) int {
 		return 0
 	case a.st():
 		return a.res().colours
+	case a.cpc():
+		return a.cpcSet.info().inks
 	case a.c64() && !bg && a.mach().mono:
 		return 1
 	case a.c64() && !bg:
@@ -1020,6 +1053,8 @@ func (a *App) defaultColours() {
 		a.fg, a.bg = a.res().fg, a.res().bg
 	case a.zx():
 		a.fg, a.bg = 0, 7 // black ink on white paper, as at start-up
+	case a.cpc():
+		a.fg, a.bg = 1, 0 // pen 1 on paper 0, as at start-up
 	case a.c64():
 		a.fg = map[string]int{"vic20": 6, "pet": 1, "pet80": 1}[a.machine]
 		if a.fg == 0 {
@@ -1201,7 +1236,7 @@ func (a *App) reparse() {
 	if a.reparseUni() {
 		return
 	}
-	if a.reparseEditor() {
+	if a.reparseEditor() || a.reparseCPC() {
 		return
 	}
 	switch a.srcKind {
@@ -1274,7 +1309,7 @@ func (a *App) reparse() {
 			a.setCase(lower == 1)
 		}
 	} else {
-		d, _, fr := parseArt(a.source, ParseOpts{amiga: a.amiga(), binary: a.sourceBin, forceCols: a.forceCols, utf8: a.sourceUTF8})
+		d, _, fr := parseArt(a.source, ParseOpts{amiga: a.amiga(), binary: a.sourceBin, forceCols: a.forceCols, utf8: a.sourceUTF8, codes: a.codes})
 		a.doc = d
 		if fr >= 0 {
 			for _, f := range fonts {
@@ -1293,10 +1328,14 @@ var seqExt = regexp.MustCompile(`(?i)\.(seq|pet)$`)
 // loadBytes reads a file into the current tab; as is "auto", "amiga", "pc" or "c64".
 func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.srcKind, a.ownFont, a.ownLower, a.ownPal = "", nil, nil, nil
+	a.codes = ""
 	if a.loadUni(b, name, path, as) { // Unicode pages: UTF-8 ANSI, durdraw, mIRC (uniformats.go)
 		return
 	}
 	if a.loadEditor(b, name, path, as) { // other editors' files (editorformats.go)
+		return
+	}
+	if a.loadCPC(b, name, path, as) { // Amstrad CPC .bin and .dsk (cpc.go)
 		return
 	}
 	if what := notArt(b); what != "" && as == "auto" {
@@ -1333,9 +1372,11 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		return
 	}
 	// PCBoard and Avatar: text with their own colour codes.
-	if as == "auto" || as == "pc" {
+	if as == "auto" || as == "pc" || as == "pcb" || as == "avt" {
 		k := ""
 		switch {
+		case as == "pcb" || as == "avt":
+			k = as
 		case strings.HasSuffix(lname, ".pcb") || (isPCBoard(b) && !bytes.Contains(b, []byte("\x1b["))):
 			k = "pcb"
 		case strings.HasSuffix(lname, ".avt") || (isAvatar(b) && !bytes.Contains(b, []byte("\x1b["))):
@@ -1345,6 +1386,14 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 			a.mode, a.srcKind, a.ice = "pc", k, false
 			a.finishLoad(b, name, path, nil, k)
 			return
+		}
+	}
+	// Other boards' colour codes (bbscodes.go): read in front of the ANSI terminal.
+	if isBBSCodes(as) {
+		a.codes, as = as, "pc"
+	} else if as == "auto" || as == "pc" {
+		if k := bbsCodesKind(b, name); k != "" {
+			a.codes, as = k, "pc"
 		}
 	}
 	kind := ""
@@ -1482,6 +1531,8 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		a.saveFmt = "ata"
 	case mode == "zx":
 		a.saveFmt = "scr"
+	case mode == "cpc": // a stream of the CPC's text codes without a program round it
+		a.saveFmt = "cpcbin"
 	case mode == "tt":
 		a.saveFmt = map[bool]string{true: "ep1", false: "tti"}[isEP1(b)]
 		if isEditTF(b) {
@@ -1492,12 +1543,22 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		if r := guessSTRes(b); r != "" {
 			a.stres = r
 		}
+	case a.codes != "" && !bytes.Contains(b, []byte("\x1b[")):
+		// Codes only: saved in them again. With ANSI escapes too, the file stays
+		// ANSI (the codes' colours become ANSI's); Save as offers the codes.
+		a.saveFmt = a.codes
 	case binary:
 		a.saveFmt = "bin"
 	case textExt.MatchString(name) && !bytes.ContainsAny(head, "\x1b\x9b"):
 		a.saveFmt = "text"
 	default:
 		a.saveFmt = "ansi"
+	}
+	if a.codes != "" {
+		a.msg(bbsOpenNote(a.codes, a.saveFmt))
+		if a.codes == "ctrla" && ctrlaUsesIce(b) {
+			a.ice = true // Ctrl-A E: bright backgrounds
+		}
 	}
 	a.undo, a.redo = nil, nil
 	if a.saveFmt == "tti" && isTTI(b) {
@@ -1674,6 +1735,10 @@ func (a *App) setMode(m string) {
 	if m == "zx" {
 		a.fg, a.bg = 0, 7
 	}
+	if m == "cpc" {
+		a.cpcEnsure()
+		a.fg, a.bg = 1, 0
+	}
 	was := a.mode
 	a.mode = m
 	switch {
@@ -1693,14 +1758,24 @@ func (a *App) setMode(m string) {
 			a.fg, a.bg = 0, 7
 		case m == "tt":
 			a.doc = newTTDoc()
+		case m == "cpc":
+			a.doc = newCPCDoc(a.cpcSet.mode)
+		case was == "cpc":
+			a.doc = newDoc(80, 25)
 		case was == "c64" || was == "atari" || was == "st" || was == "zx" || was == "tt":
 			a.doc = newDoc(80, 25)
 		}
 		fmtID, ext := map[string]string{"c64": "seq", "atari": "ata", "st": "vt52", "zx": "scr", "tt": "tti"}[m], ""
+		if m == "cpc" {
+			fmtID = "cpcbin"
+		}
 		if fmtID == "" {
 			fmtID = "ansi"
 		}
 		ext = "." + map[string]string{"ansi": "ans", "seq": "seq", "ata": "ata", "vt52": "vt", "scr": "scr", "tti": "tti"}[fmtID]
+		if m == "cpc" {
+			ext = ".bin"
+		}
 		a.saveFmt = fmtID
 		if a.path == "" {
 			a.name = "untitled" + ext
@@ -1789,7 +1864,7 @@ func (a *App) setSTRes(id string) {
 func (a *App) setRows(n int) {
 	a.endPlay()
 	n = max(1, min(a.maxRows(), n))
-	if n == a.doc.rows || a.zx() || a.tt() { // a Spectrum screen is 24 rows, a teletext page 25
+	if n == a.doc.rows || a.zx() || a.tt() || a.cpc() { // a Spectrum screen is 24 rows, a teletext page and a CPC screen 25
 		return
 	}
 	a.pushUndo()
@@ -1809,7 +1884,7 @@ func (a *App) setRows(n int) {
 func (a *App) setCols(n int) {
 	a.endPlay()
 	n = max(8, min(1000, n))
-	if n == a.doc.cols || a.c64() || a.st() || a.zx() || a.tt() || (a.atari() && n != 38 && n != 40) {
+	if n == a.doc.cols || a.c64() || a.st() || a.zx() || a.tt() || a.cpc() || (a.atari() && n != 38 && n != 40) {
 		return // a machine's screen has the width it has
 	}
 	if a.source != nil && !a.dirty && !a.splitPage() {
@@ -1881,6 +1956,11 @@ func (a *App) makeTab(mode string) *Tab {
 	if mode == "atari" {
 		t.doc = newAtariDoc()
 		t.saveFmt, t.name = "ata", "untitled.ata"
+	}
+	if mode == "cpc" {
+		t.cpcSet = newCPCSetup(1)
+		t.doc = newCPCDoc(1)
+		t.saveFmt, t.name = "cpcbin", "untitled.bin"
 	}
 	return t
 }
@@ -2269,6 +2349,8 @@ var formats = []Format{
 	{"ata", "ATASCII (.ata)", ".ata", "atari"},
 	{"vt52", "Atari ST VT52 (.vt)", ".vt", "st"},
 	{"scr", "ZX Spectrum screen (.scr)", ".scr", "zx"},
+	{"cpcbin", "Amstrad CPC program that shows it (.bin)", ".bin", "cpc"},
+	{"cpcdsk", "Amstrad CPC disk with the program (.dsk)", ".dsk", "cpc"},
 	{"tti", "Teletext page (.tti)", ".tti", "tt"},
 	{"ep1", "Teletext page (.ep1)", ".ep1", "tt"},
 	{"tturl", "edit.tf link (.url)", ".url", "tt"},
@@ -2276,6 +2358,11 @@ var formats = []Format{
 	{"bin", "PC binary (.bin)", ".bin", "pc"},
 	{"pcb", "PCBoard @X codes (.pcb)", ".pcb", "pc"},
 	{"avt", "Avatar (.avt)", ".avt", "pc"},
+	{"pipe", "Pipe codes |07: Mystic, Renegade (.ans)", ".ans", "pc"},
+	{"ctrla", "Synchronet Ctrl-A codes (.msg)", ".msg", "pc"},
+	{"wwiv", "WWIV pipe codes (.msg)", ".msg", "pc"},
+	{"wildcat", "Wildcat! @XX@ codes (.bbs)", ".bbs", "pc"},
+	{"celerity", "Celerity |x codes (.ans)", ".ans", "pc"},
 	{"xbin", "XBin, font and palette inside (.xb)", ".xb", "amiga pc"},
 	{"prg", "C64 program that shows it (.prg)", ".prg", "c64 (C64)"},
 	{"marq", "C array: PETSCII editor, Petmate (.c)", ".c", "c64"},
@@ -2379,6 +2466,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	if out, ok, err := a.encodeUni(fmtID, d); ok { // uniformats.go
 		return out, err
 	}
+	if out, ok, err := a.encodeCPC(fmtID, d); ok { // Amstrad CPC .bin and .dsk (cpc.go)
+		return out, err
+	}
 	switch fmtID {
 	case "ansi":
 		return withSauce(writeAnsi(d, am, true, info.clear, info.writeSauce, info.writeSauce && a.rawCtl), 1), nil
@@ -2428,6 +2518,12 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		return writePCBoard(d, info.clear), nil
 	case "avt":
 		return writeAvatar(d, info.clear), nil
+	case "pipe", "ctrla", "wwiv", "wildcat", "celerity":
+		out, loss := writeBBSCodes(fmtID, d, info.clear, a.ice)
+		if n := loss.note(fmtID); n != "" {
+			a.msg("Saved, but " + n)
+		}
+		return out, nil
 	case "prg", "marq":
 		if fmtID == "prg" {
 			if d.cols != 40 || d.usedRows() > 25 {
@@ -2559,7 +2655,9 @@ func (a *App) writeOut(path, fmtID string) bool {
 		return false
 	}
 	var ps []pause
+	cpcTarget = path // the name inside a CPC .bin or .dsk
 	data, err := a.encodeFor(fmtID, a.pageBoard(), &ps)
+	cpcTarget = ""
 	bakErr, changed := error(nil), 0
 	if err == nil && !prefs.NoBackup {
 		bakErr = keepBackup(path, data)
@@ -2571,7 +2669,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		a.msg("Could not save: " + err.Error())
 		return false
 	}
-	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID] || a.uniOwn(fmtID)
+	own := strings.Contains(" ansi text bin seq ata vt52 scr tti ep1 tturl xbin marq petmate prg pcb avt ", " "+fmtID+" ") || editorOwn[fmtID] || isBBSCodes(fmtID) || a.uniOwn(fmtID)
 	if own && a.nFrames() > 1 && !framesFormats[fmtID] {
 		// One picture: written as an export, so the page is not taken for saved.
 		a.lastDir = filepath.Dir(path)
@@ -2587,6 +2685,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 		if editorOwn[fmtID] || a.uniOwn(fmtID) {
 			a.srcKind = fmtID
 		}
+		a.codes = map[bool]string{true: fmtID}[isBBSCodes(fmtID)] // the source is now in these codes (or none)
 		a.markSaved()
 		dropAutosave(a.Tab)
 		a.rememberRef() // the reference goes with the file's new name
@@ -2675,7 +2774,7 @@ func (a *App) play() {
 		a.stopPlay(true)
 		return
 	}
-	if (a.source != nil && a.sourceBin && !a.dirty) || a.zx() || a.tt() {
+	if (a.source != nil && a.sourceBin && !a.dirty) || a.zx() || a.tt() || a.cpc() {
 		a.msg("This file has no codes to play: it is a picture of the screen")
 		return
 	}

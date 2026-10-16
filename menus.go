@@ -115,6 +115,7 @@ func init() {
 			machine("PETSCII (Commodore)", "c64"),
 			machine("ZX Spectrum", "zx"),
 			machine("Teletext", "tt"),
+			machine("Amstrad CPC", "cpc"),
 			machine("Unicode (terminals, IRC)", "uni"),
 			{label: "Convert to Unicode", action: "convert_unicode"},
 			menuSep,

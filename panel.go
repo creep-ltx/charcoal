@@ -177,6 +177,9 @@ func (a *App) drawFkeyRow(u *UI, x, y int) int {
 
 // drawColours draws the 16 colours, perRow to a row, from (x, y), and returns the y under them.
 func (a *App) drawColours(u *UI, x, y, perRow int) int {
+	if a.cpc() { // the inks and the 27 colours (cpc.go)
+		return a.drawCPCColours(u, x, y, perRow)
+	}
 	fb := u.fb
 	for i := 0; i < 16; i++ {
 		r := Rect{x + i%perRow*20, y + i/perRow*26, 18, 18}
