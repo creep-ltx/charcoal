@@ -160,7 +160,7 @@ func writeAutosave(t *Tab) error {
 	if t.layers != nil {
 		m.Lay = t.lay
 		for i, l := range t.layers {
-			m.Layers = append(m.Layers, autosaveLayer{Cols: docs[i].cols, Rows: docs[i].rows, Name: l.name, Hidden: l.hidden, Clear: l.clear, Keep: l.keep})
+			m.Layers = append(m.Layers, autosaveLayer{Cols: docs[i].cols, Rows: docs[i].rows, Name: l.name, Hidden: l.hidden, Locked: l.locked, Clear: l.clear, Keep: l.keep})
 		}
 	}
 	base := filepath.Join(dir, t.autoID)
@@ -392,7 +392,7 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	case len(m.Layers) > 0 && layerMode(mode):
 		a.layers, a.lay = make([]Layer, len(docs)), m.Lay
 		for i, l := range m.Layers {
-			a.layers[i] = Layer{doc: docs[i], name: l.Name, hidden: l.Hidden, clear: min(max(l.Clear, 0), layerBlack), keep: l.Keep}
+			a.layers[i] = Layer{doc: docs[i], name: l.Name, hidden: l.Hidden, locked: l.Locked, clear: min(max(l.Clear, 0), layerBlack), keep: l.Keep}
 		}
 		a.doc = docs[m.Lay].clone()
 	case len(m.Layers) > 0: // a page type without layers (an unknown mode read as PC is one): what was seen

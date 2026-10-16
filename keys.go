@@ -200,6 +200,7 @@ func init() {
 		{"layer_merge_down", "Alt+Shift+M", "Merge the layer into the one below", func() { a.mergeDown() }},
 		{"layer_merge_all", "", "Merge all layers into one: what is seen (hidden layers are left out)", func() { a.mergeAll() }},
 		{"layer_show", "Alt+Shift+E", "Show / hide the layer", func() { a.toggleLayer(a.lay) }},
+		{"layer_lock", "", "Lock / unlock the layer: no tool changes a locked layer", func() { a.toggleLock(a.lay) }},
 		{"layer_black", "", "Black shows below: on this layer a black background lets the background below show, for letters over a picture", func() { a.toggleBlackClear() }},
 		{"layer_others", "", "The other layers: shown, dim or hidden while you work on this one", func() { a.cycleOthers() }},
 		{"copy_seen", "", "Copy what is seen: the selection with every visible layer, not only the current one", func() { a.copySeen() }},

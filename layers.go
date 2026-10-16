@@ -22,18 +22,21 @@ type Layer struct {
 	doc    *Doc // stale while the layer is the current one: Tab.doc is it then
 	name   string
 	hidden bool
+	locked bool       // no tool changes it (IcyDraw's edit lock)
 	clear  int        // which cells let the layers below show: 0 blank cells, 1 also a background 0
 	keep   *layerKeep // what the file's layer had that CharEdit does not use, written back unchanged
 }
 
 // layerKeep is what a layer's file had that CharEdit keeps but does not use.
 type layerKeep struct {
-	IcyFlags  uint32  `json:"icy_flags,omitempty"`  // IcyDraw's layer flags (lock bits and the like)
+	IcyFlags  uint32  `json:"icy_flags,omitempty"`  // IcyDraw's layer flags (position and alpha locks and the like; visible and edit lock are the layer's own)
 	IcyColour [4]byte `json:"icy_colour,omitempty"` // IcyDraw's layer colour (RGBA)
 	PsciZ     float64 `json:"psci_z,omitempty"`     // Playscii's z
 }
 
 const (
+	icyVisible  = 1 // IcyDraw's layer flags (icy_engine formats/io/icy_draw.rs: IS_VISIBLE, EDIT_LOCK)
+	icyEditLock = 4
 	maxLayers   = 64
 	layerNormal = 0 // blank cells show what is below
 	layerBlack  = 1 // also a background 0 shows the background below
@@ -326,6 +329,9 @@ func (a *App) layerMsg() {
 	if a.layers[a.lay].hidden {
 		s += " (hidden)"
 	}
+	if a.layers[a.lay].locked {
+		s += " (locked)"
+	}
 	a.msg(s)
 }
 
@@ -389,6 +395,10 @@ func (a *App) deleteLayer() {
 		a.msg("The page has one layer")
 		return
 	}
+	if a.layers[a.lay].locked {
+		a.msg("Unlock the layer first: a locked layer is not changed")
+		return
+	}
 	cur := a.doc
 	a.pushLayersUndo(cur.cols * cur.rows)
 	a.layers = slices.Delete(a.layers, a.lay, a.lay+1)
@@ -423,6 +433,9 @@ func (a *App) mergeDown() {
 		return
 	case a.layers[a.lay].hidden || a.layers[a.lay-1].hidden:
 		a.msg("Show both layers first: a hidden layer is not merged")
+		return
+	case a.layers[a.lay].locked || a.layers[a.lay-1].locked:
+		a.msg("Unlock both layers first: a locked layer is not changed")
 		return
 	}
 	cur := a.doc

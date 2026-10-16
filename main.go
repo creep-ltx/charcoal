@@ -200,6 +200,7 @@ func main() {
 			if handleEvent(ev) {
 				redraw = true
 			}
+			a.lockCheck() // an edit of a locked layer is put back (layers_lock.go)
 		}
 		if time.Now().After(nextBlink) {
 			a.blink = !a.blink
@@ -231,12 +232,14 @@ func main() {
 		if scriptStep() {
 			redraw = true
 		}
+		a.lockCheck()
 		a.autosaveTick(time.Now())
 		if a.collabTick() {
 			redraw = true
 		}
 		if redraw {
 			pass()
+			a.lockCheck()
 			present()
 			redraw = false
 		}

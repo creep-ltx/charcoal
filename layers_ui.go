@@ -50,6 +50,9 @@ func (a *App) drawLayers(u *UI, x, y, w int) int {
 			u.field(nr, fieldLayer, "The layer's name (Enter keeps it)")
 		} else {
 			name := a.layerName(i)
+			if l.locked {
+				name += "  (locked)"
+			}
 			if l.clear == layerBlack {
 				name += "  (black shows below)"
 			}
@@ -95,6 +98,9 @@ func (a *App) drawLayers(u *UI, x, y, w int) int {
 		if u.button(fl.place(buttonW(b.label)), b.label, false, hint) != nil {
 			b.do()
 		}
+	}
+	if u.button(fl.place(buttonW("Lock")), "Lock", a.layers[a.lay].locked, actionByID["layer_lock"].help) != nil {
+		a.toggleLock(a.lay)
 	}
 	if a.blackClears() && a.lay > 0 {
 		if u.button(fl.place(buttonW("Black")), "Black", a.layers[a.lay].clear == layerBlack, actionByID["layer_black"].help) != nil {

@@ -29,6 +29,7 @@ type layersFile struct {
 type layersFileItem struct {
 	Name   string     `json:"name,omitempty"`
 	Hidden bool       `json:"hidden,omitempty"`
+	Locked bool       `json:"locked,omitempty"`
 	Clear  int        `json:"clear,omitempty"`
 	Keep   *layerKeep `json:"keep,omitempty"`
 	Pic    stagePic   `json:"picture"`
@@ -56,7 +57,7 @@ func writeLayersFile(t *Tab, path string, data []byte, fmtID string) error {
 	}
 	f := layersFile{Ver: layersVer, Path: path, SHA1: sha1Hex(data), Mode: t.mode, Lay: t.lay}
 	for i, l := range t.layers {
-		f.Layers = append(f.Layers, layersFileItem{Name: l.name, Hidden: l.hidden, Clear: l.clear, Keep: l.keep, Pic: packDoc(t.layerDoc(i), 0)})
+		f.Layers = append(f.Layers, layersFileItem{Name: l.name, Hidden: l.hidden, Locked: l.locked, Clear: l.clear, Keep: l.keep, Pic: packDoc(t.layerDoc(i), 0)})
 	}
 	js, err := json.Marshal(&f)
 	if err != nil {
@@ -88,7 +89,7 @@ func readLayersFile(p string) (*layersFile, []Layer, error) {
 		if cells += d.cols * d.rows; cells > maxPageCells || d.cols != f.Layers[0].Pic.Cols {
 			return nil, nil, errors.New("layers too large or not of one width")
 		}
-		ls[i] = Layer{doc: d, name: it.Name, hidden: it.Hidden, clear: min(max(it.Clear, 0), layerBlack), keep: it.Keep}
+		ls[i] = Layer{doc: d, name: it.Name, hidden: it.Hidden, locked: it.Locked, clear: min(max(it.Clear, 0), layerBlack), keep: it.Keep}
 	}
 	return &f, ls, nil
 }
@@ -162,6 +163,7 @@ type autosaveLayer struct {
 	Rows   int        `json:"rows"`
 	Name   string     `json:"name,omitempty"`
 	Hidden bool       `json:"hidden,omitempty"`
+	Locked bool       `json:"locked,omitempty"`
 	Clear  int        `json:"clear,omitempty"`
 	Keep   *layerKeep `json:"keep,omitempty"`
 }

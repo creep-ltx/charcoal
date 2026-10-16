@@ -128,7 +128,7 @@ func icyFileLayers(doc *icyDoc, flat *Doc) []Layer {
 				clear = layerBlack
 			}
 		}
-		ls[i] = Layer{doc: d, name: l.title, hidden: !l.visible, clear: clear, keep: &layerKeep{IcyFlags: l.flags, IcyColour: l.colour}}
+		ls[i] = Layer{doc: d, name: l.title, hidden: !l.visible, locked: l.flags&icyEditLock != 0, clear: clear, keep: &layerKeep{IcyFlags: l.flags, IcyColour: l.colour}}
 	}
 	return layersKept(ls, flat)
 }
@@ -153,14 +153,15 @@ func writeIcyLayers(t *Tab, page *Doc, pal [16]uint32, f *Font, ice bool, previe
 		if !bottom && clear == layerBlack {
 			below = flatten(ls[:i], 0, ls[0].doc)
 		}
-		flags := uint32(1)
+		flags := uint32(0) // the file's other bits kept; visible and the edit lock are the layer's
 		if l.keep != nil {
-			flags = l.keep.IcyFlags &^ 1
-			if !l.hidden {
-				flags |= 1
-			}
-		} else if l.hidden {
-			flags = 0
+			flags = l.keep.IcyFlags &^ (icyVisible | icyEditLock)
+		}
+		if !l.hidden {
+			flags |= icyVisible
+		}
+		if l.locked {
+			flags |= icyEditLock
 		}
 		ol := icyOutLayer{title: t.layerName(i), flags: flags}
 		if l.keep != nil {

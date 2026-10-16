@@ -1043,6 +1043,9 @@ func (a *App) pagePress(c *Click) {
 		return // a block being moved goes down where the held button is let go
 	}
 	if a.float != nil {
+		if c.button == 1 && a.lockRefused() { // a locked layer takes no block (layers_lock.go)
+			return
+		}
 		if c.button == 1 {
 			x0, y0 := a.floatAt(p.x, p.y)
 			a.stamp(x0, y0, c.shift)
@@ -1059,6 +1062,9 @@ func (a *App) pagePress(c *Click) {
 		a.pick(p.x, p.y)
 		return
 	}
+	if a.tool != "type" && a.tool != "select" && a.lockRefused() { // no tool changes a locked layer (layers_lock.go)
+		return
+	}
 	a.button = c.button
 	a.strokeSeen = nil
 	switch a.tool {
@@ -1069,6 +1075,9 @@ func (a *App) pagePress(c *Click) {
 		a.logoClick(p.x, p.y)
 	case "select":
 		if a.sel != nil && c.button == 1 && !c.shift && a.selRect().has(p.x, p.y) {
+			if a.lockRefused() {
+				break
+			}
 			a.liftSel(p.x, p.y) // a drag inside the selection moves it
 			a.msg("Moving the block: let go to put it down, Esc puts it back")
 			break
@@ -1271,6 +1280,9 @@ func (a *App) drawStatus(u *UI, r Rect) {
 		pos += fmt.Sprintf("  Layer %d/%d", a.lay+1, n)
 		if name := a.layers[a.lay].name; name != "" {
 			pos += " " + name
+		}
+		if a.layers[a.lay].locked {
+			pos += " (locked)"
 		}
 	}
 	pos += a.orderNote()

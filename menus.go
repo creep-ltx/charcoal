@@ -149,6 +149,7 @@ func init() {
 			{label: "Merge down", action: "layer_merge_down"},
 			{label: "Merge all layers", action: "layer_merge_all"},
 			{label: "Show the layer", action: "layer_show", tick: func() bool { return a.layers == nil || !a.layers[a.lay].hidden }},
+			{label: "Lock the layer", action: "layer_lock", tick: func() bool { return a.layerLocked() }},
 			{label: "Black shows below", action: "layer_black", tick: func() bool { return a.layers != nil && a.layers[a.lay].clear == layerBlack }},
 			{label: "Other layers dim / hidden", action: "layer_others", tick: func() bool { return a.others != 0 }},
 		}},

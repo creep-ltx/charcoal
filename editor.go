@@ -216,6 +216,7 @@ type Tab struct {
 	others              int         // how the other layers are shown: 0 as they are, 1 dim, 2 hidden (view only)
 	seeing              bool        // doc is the layers put together for a while (asSeen); the live layer is in layers[lay]
 	layering            bool        // an edit runs on every layer (everyLayerDo): its own undo steps are not kept
+	lockSnap            *Snap       // the page before an edit reached a locked layer, until lockCheck (layers_lock.go)
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -674,6 +675,9 @@ func (a *App) pushUndo() {
 	if a.layering { // one step for every layer is kept already (layers.go)
 		return
 	}
+	if a.lockGuard() { // a locked layer: lockCheck puts its cells back (layers_lock.go)
+		return
+	}
 	a.pushSnap(a.snapshot())
 }
 
@@ -809,6 +813,9 @@ func (a *App) setCell(x, y int, v uint32) {
 }
 
 func (a *App) typeByte(b int) {
+	if a.lockRefused() { // a locked layer (layers_lock.go)
+		return
+	}
 	// A run of typing is one undo step: the run goes on while the cursor is
 	// where the last character left it.
 	if !a.inRun || a.cx != a.runX || a.cy != a.runY {
