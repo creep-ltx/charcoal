@@ -266,8 +266,10 @@ func FuzzParsers(f *testing.F) {
 			if flat, _, err := parseXP(b); err == nil {
 				keep(xpFileLayers(b, flat), flat)
 			}
-			if art, err := parsePsci(b); err == nil && len(art.docs) == 1 {
-				keep(psciFileLayers(b, art.docs[0]), art.docs[0])
+			if art, err := parsePsci(b); err == nil {
+				for i, d := range art.docs[:min(len(art.docs), 4)] { // every frame's layers (layers_frames.go)
+					keep(psciFileLayers(b, i, d), d)
+				}
 			}
 			return out
 		})

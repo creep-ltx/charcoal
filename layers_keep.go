@@ -48,7 +48,7 @@ func layersSideFile(path string) string {
 // written as fmtID); a page of one layer, or a format that keeps layers itself,
 // removes an old side file instead.
 func writeLayersFile(t *Tab, path string, data []byte, fmtID string) error {
-	if t.layers == nil || layersKeptBy(fmtID, t.mode) {
+	if t.layers == nil || t.frames != nil || layersKeptBy(fmtID, t.mode) { // (frames of layers: only the autosave keeps them)
 		os.Remove(layersSideFile(path))
 		return nil
 	}
@@ -146,7 +146,7 @@ func (t *Tab) layersSaveNote(fmtID string, own bool) string {
 		}
 	}
 	s := fmt.Sprintf("; its %d layers put together", len(t.layers))
-	if own {
+	if own && t.frames == nil {
 		s += " (kept beside the file for CharEdit)"
 	}
 	if hidden > 0 {

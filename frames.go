@@ -21,6 +21,9 @@ type Frame struct {
 	lower int    // PETSCII: this screen's case, -1 not said, 0 upper, 1 lower
 	seg   []byte // .tti: the subpage text it came from; nil for a new frame
 	src   int    // .petmate: its framebuf in the file (-1 for a new frame)
+	// On a page of layers: the frame's picture of every layer, bottom first, and doc
+	// the picture they make (stale while the frame is current; layers_frames.go).
+	layers []*Doc
 }
 
 // holdDefault is how long a frame without a hold of its own is shown: teletext
@@ -45,7 +48,7 @@ func (t *Tab) nFrames() int {
 // frameDoc is frame i's picture (the live one for the current frame).
 func (t *Tab) frameDoc(i int) *Doc {
 	if t.frames == nil || i == t.cur {
-		return t.doc
+		return t.seen() // as it is seen: its layers put together (layers.go)
 	}
 	return t.frames[i].doc
 }
@@ -76,6 +79,9 @@ func (t *Tab) ensureFrames() {
 
 // frameCells counts the cells of all frames.
 func (t *Tab) frameCells() int {
+	if t.layers != nil { // every layer of every frame (layers_frames.go)
+		return t.allCells()
+	}
 	n := 0
 	for _, d := range t.allDocs() {
 		n += d.cols * d.rows
@@ -88,6 +94,16 @@ func (a *App) keepCase() {
 	if a.frames != nil && a.c64() {
 		a.frames[a.cur].lower = map[bool]int{true: 1}[a.lower()]
 	}
+}
+
+// keepFrame puts the current frame's picture (its layers) into its Frame, the
+// page going on with it as the current frame.
+func (a *App) keepFrame() {
+	if a.layers != nil {
+		a.storeFrame()
+		return
+	}
+	a.frames[a.cur].doc = a.doc
 }
 
 // showCase puts the current frame's own PETSCII case on.
@@ -105,9 +121,15 @@ func (a *App) goFrame(i int) {
 	a.endPlay()
 	if i != a.cur {
 		a.keepCase()
-		a.frames[a.cur].doc = a.doc
-		a.cur = i
-		a.doc = a.frames[i].doc.clone()
+		if a.layers != nil { // every layer of the frame (layers_frames.go)
+			a.storeFrame()
+			a.cur = i
+			a.loadFrame(i)
+		} else {
+			a.frames[a.cur].doc = a.doc
+			a.cur = i
+			a.doc = a.frames[i].doc.clone()
+		}
 		a.showCase()
 	}
 	a.sel, a.float, a.moving, a.inRun = nil, nil, false, false
@@ -167,10 +189,6 @@ func (a *App) blankLike(d *Doc) *Doc {
 // addFrame puts a picture in after the current frame and goes to it.
 func (a *App) addFrame(d *Doc, copied bool, what string) {
 	a.endPlay()
-	if a.layers != nil {
-		a.msg(layersNoFrames)
-		return
-	}
 	if a.frameCells()+d.cols*d.rows > maxPageCells {
 		a.msg("No more frames: all of them together would be larger than the largest page")
 		return
@@ -182,7 +200,20 @@ func (a *App) addFrame(d *Doc, copied bool, what string) {
 	if copied { // a copied subpage keeps its lines (Fastext links, enhancements)
 		f.seg = a.frames[a.cur].seg
 	}
-	a.frames[a.cur].doc = a.doc
+	if a.layers != nil { // the new frame has every layer: a copy of this frame's, or empty ones (layers_frames.go)
+		a.storeFrame()
+		if copied {
+			f.doc, f.layers = a.frames[a.cur].doc, slices.Clone(a.frames[a.cur].layers)
+		} else {
+			f.layers = make([]*Doc, len(a.layers))
+			f.layers[0] = d
+			for k := 1; k < len(f.layers); k++ {
+				f.layers[k] = emptyLayerLike(d)
+			}
+		}
+	} else {
+		a.frames[a.cur].doc = a.doc
+	}
 	a.frames = slices.Insert(a.frames, a.cur+1, f)
 	a.restructured = true
 	a.goFrame(a.cur + 1)
@@ -201,7 +232,11 @@ func (a *App) deleteFrame() {
 	a.pushFramesUndo(a.doc.cols * a.doc.rows)
 	a.frames = slices.Delete(a.frames, a.cur, a.cur+1)
 	a.cur = min(a.cur, len(a.frames)-1)
-	a.doc = a.frames[a.cur].doc.clone()
+	if a.layers != nil { // its layers (layers_frames.go)
+		a.loadFrame(a.cur)
+	} else {
+		a.doc = a.frames[a.cur].doc.clone()
+	}
 	a.restructured = true
 	a.showCase()
 	a.goFrame(a.cur)
@@ -217,7 +252,7 @@ func (a *App) moveFrame(d int) {
 	a.endPlay()
 	a.pushFramesUndo(0)
 	a.keepCase()
-	a.frames[a.cur].doc = a.doc
+	a.keepFrame()
 	a.frames[a.cur], a.frames[j] = a.frames[j], a.frames[a.cur]
 	a.cur = j
 	a.restructured = true
@@ -258,8 +293,20 @@ func (a *App) stepHold(d int) {
 // withEveryFrame replaces every frame's picture with fn of it, as one undo step
 // (a page's width is the same for all its frames).
 func (a *App) withEveryFrame(fn func(*Doc) *Doc) {
-	if a.layers != nil { // a page of layers has one frame: every layer instead (layers.go)
-		a.withEveryLayer(fn)
+	if a.layers != nil { // every layer of every frame (layers_frames.go)
+		a.pushLayersUndo(a.allCells() - a.doc.cols*a.doc.rows)
+		for i := range a.frames {
+			if i != a.cur {
+				f := &a.frames[i]
+				f.layers = slices.Clone(f.layers)
+				for k := range f.layers {
+					f.layers[k] = fn(f.layers[k])
+				}
+				f.doc = fn(f.doc) // the frame's fields and size, for settleFrames
+			}
+		}
+		a.applyEveryLayer(fn)
+		a.settleFrames()
 		return
 	}
 	old := 0
@@ -281,42 +328,31 @@ func (a *App) withEveryFrame(fn func(*Doc) *Doc) {
 // deleted or moved frames, hold times, all frames' width). extra counts the
 // cells of pictures the step lets go of, which the step keeps alive.
 func (a *App) pushFramesUndo(extra int) {
-	s := a.snapshot()
-	s.whole = true
-	if a.frames != nil {
-		s.frames = slices.Clone(a.frames)
-		s.frames[a.cur].doc = s.doc
-		s.cost += 8 * len(s.frames)
-	}
-	s.cost += extra
-	a.pushSnap(s)
+	a.pushSnap(a.wholeSnap(extra)) // the layer list too (layers_frames.go)
 }
 
 // snapshotLike is a snapshot of the page as it is now, of the kind s is: the
 // whole frame list, or the picture of s's frame.
 func (a *App) snapshotLike(s Snap) Snap {
-	if s.lwhole {
-		n := a.snapshot()
-		n.lwhole = true
-		n.layers = a.cloneLayers(n.doc)
-		return n
-	}
-	if a.layers != nil && !s.whole && s.lay != a.lay && s.lay < len(a.layers) {
-		d := a.layers[s.lay].doc.clone()
-		return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine, step: a.steps, msx: a.msxSnap(), lay: s.lay}
-	}
-	if s.whole {
-		n := a.snapshot()
-		n.whole = true
-		if a.frames != nil {
-			n.frames = slices.Clone(a.frames)
-			n.frames[a.cur].doc = n.doc
-		}
-		return n
+	if s.whole || s.lwhole { // the frame list and the layer list (layers_frames.go)
+		return a.wholeSnap(0)
 	}
 	if a.frames != nil && s.cur != a.cur && s.cur < len(a.frames) {
-		d := a.frames[s.cur].doc.clone()
-		return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: s.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), step: a.steps, msx: a.msxSnap()}
+		var d *Doc
+		if a.layers != nil && s.lay < len(a.layers) { // the layer of that frame, as tall as the frame
+			d = a.frames[s.cur].layers[s.lay].clone()
+			d.ensureRows(a.frames[s.cur].doc.rows)
+			layerFields(d, a.frames[s.cur].doc)
+		} else {
+			d = a.frames[s.cur].doc.clone()
+		}
+		return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: s.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), step: a.steps, msx: a.msxSnap(), lay: s.lay}
+	}
+	if a.layers != nil && s.lay != a.lay && s.lay < len(a.layers) {
+		d := a.layers[s.lay].doc.clone()
+		d.ensureRows(a.doc.rows) // as tall as the page, as the step's own was
+		layerFields(d, a.doc)
+		return Snap{doc: d, cx: a.cx, cy: a.cy, gen: a.gen, cur: a.cur, cost: len(d.cells), order: a.order, mode: a.mode, cpc: a.cpcSnap(), vic: a.vicSnap(), mach: a.machine, step: a.steps, msx: a.msxSnap(), lay: s.lay}
 	}
 	return a.snapshot()
 }

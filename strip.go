@@ -77,7 +77,7 @@ func (a *App) moveFrameTo(j int) {
 	a.endPlay()
 	a.pushFramesUndo(0)
 	a.keepCase()
-	a.frames[a.cur].doc = a.doc
+	a.keepFrame()
 	f := a.frames[a.cur]
 	a.frames = append(a.frames[:a.cur], a.frames[a.cur+1:]...)
 	a.frames = append(a.frames[:j], append([]Frame{f}, a.frames[j:]...)...)
@@ -271,7 +271,7 @@ func (a *App) drawOnion(fb *FB, ox, oy, x0, x1, y0, y1 int) {
 			row = ttDecode(prev, y, a.ttBlack())
 		}
 		for x := x0; x < x1 && x < prev.cols; x++ {
-			v := a.doc.get(x, y)
+			v := a.shownCell(x, y) // what is seen, on a page of layers too
 			if !a.onionBlank(v) {
 				continue
 			}

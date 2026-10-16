@@ -717,23 +717,32 @@ func (a *App) markSaved() {
 
 func (a *App) restore(s Snap) {
 	switch {
-	case s.whole:
-		a.frames, a.cur = slices.Clone(s.frames), s.cur
-		a.sel, a.float = nil, nil
-	case s.lwhole: // the layer list as it was (layers.go)
-		a.layers, a.lay = slices.Clone(s.layers), s.lay
+	case s.whole || s.lwhole: // the frame list and the layer list as they were (layers_frames.go)
+		if s.whole {
+			a.frames, a.cur = slices.Clone(s.frames), s.cur
+			a.sel = nil
+		}
+		if s.lwhole {
+			a.layers, a.lay = slices.Clone(s.layers), s.lay
+		}
 		a.float = nil
+	case a.frames != nil && s.cur != a.cur && s.cur < len(a.frames):
+		// An edit of another frame: undoing it goes there, to show what was undone.
+		a.keepCase()
+		if a.layers != nil && s.lay < len(a.layers) { // and to its layer (layers_frames.go)
+			a.storeFrame()
+			a.cur, a.lay = s.cur, s.lay
+			a.loadFrame(s.cur)
+		} else {
+			a.frames[a.cur].doc = a.doc
+			a.cur = s.cur
+		}
+		a.sel, a.float = nil, nil
 	case a.layers != nil && s.lay != a.lay && s.lay < len(a.layers):
 		// An edit of another layer: undoing it goes there, to show what was undone.
 		a.leaveLayer()
 		a.lay = s.lay
 		a.float = nil
-	case a.frames != nil && s.cur != a.cur && s.cur < len(a.frames):
-		// An edit of another frame: undoing it goes there, to show what was undone.
-		a.keepCase()
-		a.frames[a.cur].doc = a.doc
-		a.cur = s.cur
-		a.sel, a.float = nil, nil
 	}
 	a.doc, a.cx, a.cy, a.gen, a.order = s.doc, s.cx, s.cy, s.gen, s.order
 	a.steps = s.step
@@ -3198,6 +3207,15 @@ func (a *App) writeOut(path, fmtID string) bool {
 		savePrefs()
 		a.msg(fmt.Sprintf("%s holds one picture: frame %d written; the other %d are only here (%s)",
 			filepath.Base(path), a.cur+1, a.nFrames()-1, a.keepFramesHint()))
+		return true
+	}
+	if own && a.nFrames() > 1 && a.layers != nil && !layersKeptBy(fmtID, a.mode) {
+		// Frames of layers: only Playscii's files keep both (layers_frames.go); the
+		// frames were written as they are seen, so the page is not taken for saved.
+		a.lastDir = filepath.Dir(path)
+		savePrefs()
+		a.msg(fmt.Sprintf("%s keeps the frames but not their layers: written put together; the layers are only here (%s)",
+			filepath.Base(path), a.keepLayersHint()))
 		return true
 	}
 	if own { // the page's own file; the others are exports

@@ -242,3 +242,49 @@ offsets, text layers, layer opacity, layers with frames.
 4. 16M cells for all layers together.
 5. Pick = what is seen; Copy = the current layer; Edit > Copy what is seen = the picture.
 6. Hidden layers are left out of flat saves and REXPaint files, with a message.
+
+## 9. Round 7 (2026-10-16): lock, layers with frames, machine pages, .icy on other machines
+
+### Lock
+
+`Layer.locked`: no tool changes a locked layer. IcyDraw's LAYER flags (icy_engine formats/io/icy_draw.rs):
+bit 0 visible, bit 1 position lock, **bit 2 edit lock**, bit 3 alpha channel, bit 4 alpha lock. CharEdit's lock
+is bit 2, read and written; the other bits stay kept in `layerKeep.IcyFlags`. Enforced in two places
+(`layers_lock.go`): the tools refuse at their start where that is cheap (a press on the page with an
+editing tool, a block stamp, lifting a selection, typing), and **`pushUndo` is the net**: every edit of the
+cells pushes an undo step first, so on a locked layer `pushUndo` keeps the page as it was (`lockSnap`)
+instead, and `lockCheck` (after every event in the main loop) puts the cells back if they changed (the
+drag ends), or keeps the step if only page fields changed (a screen colour, a text mode: the page's, not
+the layer's). The page's structure (W, H, rows/columns, crop, conversions) is every layer's and changes a
+locked one too, as in IcyDraw. Delete and merge down refuse a locked layer; move, hide, rename are fine.
+
+### Layers together with frames: the frames hold the layers' pictures, the layer list is the page's
+
+How the others do it (*read*): **Playscii** (art.py) keeps `layers_z`, `layers_visibility`, `layer_names` once
+for the art, and every frame has its own tiles for every layer; `add_layer`/`delete_layer` act on every
+frame. **IcyDraw** has no frames in .icy: its animations are Lua scripts (.icyanim, icy_engine_scripting
+animator) that compose frames from buffers. So the one model a file can hold is Playscii's, and CharEdit
+takes it:
+
+- `Tab.layers` stays the layer list (name, hidden, locked, clear, keep: the same for every frame) with the
+  **current frame's** pictures; `Frame.layers []*Doc` holds a frame's picture of every layer (stale for the
+  current frame, as `Frame.doc` always was).
+- **`Frame.doc` of a frame that is not current is the picture its layers make** (`flattenFrame`). So every
+  reader of frames (the strip, the onion skin, playing, GIF/APNG, the stream, Marq, Petmate, durdraw
+  writers) sees each frame as it is seen without knowing about layers, and `frameDoc(cur)` returns
+  `seen()`. Frames not current are never changed in place, so the picture is made again only when a frame
+  is left (`storeFrame`) or a layer of every frame changes (`settleFrames`).
+- Layer operations act on every frame (`everyFrameLayers`, before the current frame's own change): new,
+  copy, delete, move, merge down, merge all; show/hide and black-shows-below remake every frame's
+  picture. A new frame of a layered page has every layer (empty ones, or a copy of this frame's).
+  `withEveryFrame` (W, crop, machine, conversions) changes every frame's every layer.
+- Undo: a structural step (`wholeSnap`) keeps the frame list and the layer list together; `restore` of a
+  cell step of another frame goes to that frame and that layer.
+- Limits: `allCells` counts every frame's every layer and the frames' pictures against `maxPageCells`.
+- Files: Playscii .psci keeps every frame's layers (read: `psciFramesLayers`, kept only if every frame looks
+  as Playscii's reader shows it and the frames agree on names and visibility). The autosave keeps them
+  (`autosaveFrame.LRows`). Every other format keeps frames *or* layers: a page of frames of layers saved
+  as .ans/.seq/... writes the frames as seen and **stays unsaved** (the frames rule), with a message; no
+  side file for frames of layers.
+- Still refused on a layered page: Split (a stream's frames) and Animate's "as frames" (they make frames
+  of one picture), drawing sessions.

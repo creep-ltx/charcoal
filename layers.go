@@ -156,7 +156,7 @@ func flatten(ls []Layer, cur int, d *Doc) *Doc {
 // when it has one layer, else its layers put together. Everything that writes,
 // exports, checks or animates the whole page reads it through here.
 func (t *Tab) seen() *Doc {
-	if t.layers == nil {
+	if t.layers == nil || t.seeing {
 		return t.doc
 	}
 	return flatten(t.layers, t.lay, t.doc)
@@ -230,8 +230,9 @@ func (t *Tab) shownCell(x, y int) uint32 {
 	return v
 }
 
-// layersNoFrames is why a layered page gets no frames (layers and frames together: later).
-const layersNoFrames = "Merge the layers first (Page > Merge all layers): frames are for pages of one layer"
+// layersNoFrames is why a page of layers gets no frames made from it (Animate's
+// frames, Split): they make frames of one picture.
+const layersNoFrames = "Merge the layers first (Page > Merge all layers): these frames are made from a page of one layer"
 
 // ---------------------------------------------------------------- working on layers
 
@@ -249,13 +250,11 @@ func (a *App) layerRefused() string {
 	switch {
 	case !a.layered():
 		return "Layers are for PC, Amiga, Unicode, PETSCII, Atari and Atari ST pages"
-	case a.frames != nil:
-		return "Layers are for pages of one picture: this page has frames"
 	case collab != nil && collab.tab == a.Tab:
 		return "Layers cannot be shared (Moebius pages are one picture): end the drawing session first"
 	case a.nLayers() >= maxLayers:
 		return fmt.Sprintf("No more layers: %d is the most", maxLayers)
-	case a.layerCells()+a.doc.cols*a.doc.rows > maxPageCells:
+	case a.allCells()+a.nFrames()*a.doc.cols*a.doc.rows > maxPageCells:
 		return "No more layers: all of them together would be larger than the largest page"
 	}
 	return ""
@@ -338,11 +337,7 @@ func (a *App) layerMsg() {
 // pushLayersUndo keeps the whole layer list as an undo step; extra counts the
 // cells of pictures the step lets go of.
 func (a *App) pushLayersUndo(extra int) {
-	s := a.snapshot()
-	s.lwhole = true
-	s.layers = a.cloneLayers(s.doc)
-	s.cost += 8*len(s.layers) + extra
-	a.pushSnap(s)
+	a.pushSnap(a.wholeSnap(extra)) // the frame list too (layers_frames.go)
 }
 
 // otherLayerCells counts the cells of the layers that are not current.
@@ -365,6 +360,14 @@ func (a *App) newLayer(copied bool) {
 		return
 	}
 	a.pushLayersUndo(0)
+	at := a.lay
+	a.everyFrameLayers(func(docs []*Doc) []*Doc { // every frame gets the layer (layers_frames.go)
+		n := emptyLayerLike(docs[0])
+		if copied {
+			n = docs[at]
+		}
+		return slices.Insert(docs, at+1, n)
+	})
 	a.ensureLayers()
 	cur := a.doc
 	var n *Doc
@@ -384,6 +387,7 @@ func (a *App) newLayer(copied bool) {
 	a.layers = slices.Insert(a.layers, a.lay+1, l)
 	a.lay++
 	a.doc = n.clone()
+	a.settleFrames()
 	a.float, a.moving, a.inRun = nil, false, false
 	a.layerMsg()
 }
@@ -401,9 +405,12 @@ func (a *App) deleteLayer() {
 	}
 	cur := a.doc
 	a.pushLayersUndo(cur.cols * cur.rows)
+	at := a.lay
+	a.everyFrameLayers(func(docs []*Doc) []*Doc { return slices.Delete(docs, at, at+1) })
 	a.layers = slices.Delete(a.layers, a.lay, a.lay+1)
 	a.liveLayer(max(0, a.lay-1), cur.rows, cur)
 	a.oneLayer()
+	a.settleFrames()
 	a.float, a.moving, a.inRun = nil, false, false
 	a.layerMsg()
 }
@@ -419,8 +426,14 @@ func (a *App) moveLayer(d int) {
 		return
 	}
 	a.pushLayersUndo(0)
+	at := a.lay
+	a.everyFrameLayers(func(docs []*Doc) []*Doc {
+		docs[at], docs[to] = docs[to], docs[at]
+		return docs
+	})
 	a.layers[a.lay], a.layers[to] = a.layers[to], a.layers[a.lay]
 	a.lay = to
+	a.settleFrames()
 	a.layerMsg()
 }
 
@@ -440,24 +453,18 @@ func (a *App) mergeDown() {
 	}
 	cur := a.doc
 	a.pushLayersUndo(cur.cols * cur.rows)
-	below := a.layers[a.lay-1].doc.clone()
-	below.ensureRows(cur.rows)
-	clear := a.layers[a.lay].clear
-	for y := range min(cur.rows, below.rows) {
-		for x := range min(cur.cols, below.cols) {
-			k := y*below.cols + x
-			if v, ok := mergeCell(cur, below.cells[k], cur.cells[y*cur.cols+x], clear); ok {
-				below.cells[k] = v
-			}
-		}
-	}
-	layerFields(below, cur)
-	wideNormal(below) // a wide character half covered (wide.go)
+	clear, at := a.layers[a.lay].clear, a.lay
+	a.everyFrameLayers(func(docs []*Doc) []*Doc { // in every frame (layers_frames.go)
+		docs[at-1] = mergeOnto(docs[at-1], docs[at], clear)
+		return slices.Delete(docs, at, at+1)
+	})
+	below := mergeOnto(a.layers[a.lay-1].doc, cur, clear)
 	a.layers = slices.Delete(a.layers, a.lay, a.lay+1)
 	a.lay--
 	a.layers[a.lay].doc = below
 	a.doc = below.clone()
 	a.oneLayer()
+	a.settleFrames()
 	a.float, a.moving, a.inRun = nil, false, false
 	a.layerMsg()
 }
@@ -476,8 +483,14 @@ func (a *App) mergeAll() {
 		}
 	}
 	a.pushLayersUndo(a.otherLayerCells())
+	for i := range a.frames { // every frame is the picture its layers make (layers_frames.go)
+		if i != a.cur {
+			a.frames[i].layers = nil
+		}
+	}
 	a.doc = a.seen()
 	a.layers, a.lay = nil, 0
+	a.settleFrames()
 	a.float, a.moving, a.inRun = nil, false, false
 	switch hidden {
 	case 0:
@@ -495,6 +508,7 @@ func (a *App) toggleLayer(i int) {
 	}
 	a.pushLayersUndo(0)
 	a.layers[i].hidden = !a.layers[i].hidden
+	a.settleFrames()
 	a.msg(fmt.Sprintf("%s %s", a.layerName(i), map[bool]string{true: "hidden", false: "shown"}[a.layers[i].hidden]))
 }
 
@@ -514,6 +528,7 @@ func (a *App) toggleBlackClear() {
 	a.pushLayersUndo(0)
 	l := &a.layers[a.lay]
 	l.clear = layerBlack - l.clear
+	a.settleFrames()
 	a.msg(map[int]string{layerNormal: "Black is black on this layer", layerBlack: "Black shows the background below on this layer"}[l.clear])
 }
 
@@ -536,6 +551,11 @@ func (a *App) cycleOthers() {
 // (a page's layers are as wide as the page).
 func (a *App) withEveryLayer(fn func(*Doc) *Doc) {
 	a.pushLayersUndo(a.otherLayerCells())
+	a.applyEveryLayer(fn)
+}
+
+// applyEveryLayer replaces every layer's picture with fn of it (the undo step is the caller's).
+func (a *App) applyEveryLayer(fn func(*Doc) *Doc) {
 	for i := range a.layers {
 		if i != a.lay {
 			a.layers[i].doc = fn(a.layers[i].doc)
@@ -580,7 +600,7 @@ func (a *App) everyLayerDo(op func()) {
 // layersMaxRows is the most rows the current layer may have so that all layers
 // together stay under maxPageCells.
 func (a *App) layersMaxRows() int {
-	return max(1, (maxPageCells-a.otherLayerCells())/max(1, a.doc.cols))
+	return max(1, (maxPageCells-a.otherLayerCells()-a.otherFramesCells())/max(1, a.doc.cols))
 }
 
 // ---------------------------------------------------------------- drawing
@@ -643,4 +663,21 @@ func (a *App) copySeen() {
 	a.clipText = strings.Join(docText(p, a.runeOf, r.x, r.y, r.w, r.h), "\n")
 	setClipboard(a.clipText)
 	a.msg(fmt.Sprintf("Copied %dx%d as it is seen", r.w, r.h))
+}
+
+// mergeOnto is the picture of layer pictures cur (its mode clear) put onto below, as one.
+func mergeOnto(below, cur *Doc, clear int) *Doc {
+	m := below.clone()
+	m.ensureRows(cur.rows)
+	for y := range min(cur.rows, m.rows) {
+		for x := range min(cur.cols, m.cols) {
+			k := y*m.cols + x
+			if v, ok := mergeCell(cur, m.cells[k], cur.cells[y*cur.cols+x], clear); ok {
+				m.cells[k] = v
+			}
+		}
+	}
+	layerFields(m, cur)
+	wideNormal(m) // a wide character half covered (wide.go)
+	return m
 }

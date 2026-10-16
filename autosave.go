@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -80,6 +81,7 @@ type autosaveFrame struct {
 	Lower  int    `json:"lower"`
 	Seg    []byte `json:"tti_subpage_text,omitempty"` // base64
 	Src    int    `json:"source_screen"`
+	LRows  []int  `json:"layer_rows,omitempty"` // a page of frames and layers: the rows of each of the frame's layers, whose cells follow one another (layers_frames.go)
 }
 
 // An autosave on disk: id.json and id.cells (the cells, 4 bytes each, little-endian).
@@ -105,7 +107,8 @@ func writeAutosave(t *Tab) error {
 	if t.playing != nil { // the page, not the screen being played
 		docs[t.cur] = t.playing.saved.doc
 	}
-	d := docs[0]
+	d, fdocs, ldocs := docs[0], docs, docs
+	var lrows [][]int
 	if t.layers != nil { // every layer (layers_keep.go); the page's fields are the current one's
 		docs = make([]*Doc, len(t.layers))
 		for i := range docs {
@@ -114,7 +117,23 @@ func writeAutosave(t *Tab) error {
 		if t.playing != nil {
 			docs[t.lay] = t.playing.saved.doc
 		}
-		d = docs[t.lay]
+		d, ldocs = docs[t.lay], docs
+		if t.frames != nil { // every frame's layers, one frame after the other (layers_frames.go)
+			cur := docs
+			docs = nil
+			for i := range t.frames {
+				ld := cur
+				if i != t.cur {
+					ld = t.frames[i].layers
+				}
+				var rs []int
+				for _, x := range ld {
+					rs = append(rs, x.rows)
+				}
+				lrows = append(lrows, rs)
+				docs = append(docs, ld...)
+			}
+		}
 	}
 	var cells []byte
 	for _, fd := range docs {
@@ -149,9 +168,12 @@ func writeAutosave(t *Tab) error {
 	if t.frames != nil {
 		m.Cur, m.Restructured = t.cur, t.restructured
 		for i, f := range t.frames {
-			fd := docs[i]
+			fd := fdocs[i]
 			m.Frames = append(m.Frames, autosaveFrame{Cols: fd.cols, Rows: fd.rows, Bg: fd.bg, Border: fd.border, Ink: fd.ink,
 				Glyph0: fd.glyph0, Hold: f.hold, Name: f.name, Lower: f.lower, Seg: f.seg, Src: f.src})
+			if lrows != nil {
+				m.Frames[i].LRows = lrows[i]
+			}
 		}
 		if t.mode == "c64" {
 			m.Frames[t.cur].Lower = map[bool]int{true: 1}[strings.HasSuffix(t.fontFor["c64"], "lower")]
@@ -160,7 +182,7 @@ func writeAutosave(t *Tab) error {
 	if t.layers != nil {
 		m.Lay = t.lay
 		for i, l := range t.layers {
-			m.Layers = append(m.Layers, autosaveLayer{Cols: docs[i].cols, Rows: docs[i].rows, Name: l.name, Hidden: l.hidden, Locked: l.locked, Clear: l.clear, Keep: l.keep})
+			m.Layers = append(m.Layers, autosaveLayer{Cols: ldocs[i].cols, Rows: ldocs[i].rows, Name: l.name, Hidden: l.hidden, Locked: l.locked, Clear: l.clear, Keep: l.keep})
 		}
 	}
 	base := filepath.Join(dir, t.autoID)
@@ -275,12 +297,26 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 		frames = []autosaveFrame{{Cols: m.Cols, Rows: m.Rows, Bg: m.Bg, Border: m.Border, Ink: m.Ink, Glyph0: m.Glyph0, Lower: -1, Src: -1}}
 	}
 	if len(m.Layers) > 0 { // layers (layers_keep.go): the page's fields are the top level's
-		if len(m.Frames) > 0 || len(m.Layers) < 2 || len(m.Layers) > maxLayers || m.Lay < 0 || m.Lay >= len(m.Layers) {
+		if len(m.Layers) < 2 || len(m.Layers) > maxLayers || m.Lay < 0 || m.Lay >= len(m.Layers) {
 			return fmt.Errorf("%s: the autosave is damaged", m.Name)
 		}
 		frames = nil
-		for _, l := range m.Layers {
-			frames = append(frames, autosaveFrame{Cols: l.Cols, Rows: l.Rows, Bg: m.Bg, Border: m.Border, Ink: m.Ink, Glyph0: m.Glyph0, Lower: -1, Src: -1})
+		if len(m.Frames) > 0 { // every frame's layers (layers_frames.go)
+			if m.Cur < 0 || m.Cur >= len(m.Frames) {
+				return fmt.Errorf("%s: the autosave is damaged", m.Name)
+			}
+			for _, f := range m.Frames {
+				if len(f.LRows) != len(m.Layers) {
+					return fmt.Errorf("%s: the autosave is damaged", m.Name)
+				}
+				for _, r := range f.LRows {
+					frames = append(frames, autosaveFrame{Cols: f.Cols, Rows: r, Bg: f.Bg, Border: f.Border, Ink: f.Ink, Glyph0: f.Glyph0, Lower: -1, Src: -1})
+				}
+			}
+		} else {
+			for _, l := range m.Layers {
+				frames = append(frames, autosaveFrame{Cols: l.Cols, Rows: l.Rows, Bg: m.Bg, Border: m.Border, Ink: m.Ink, Glyph0: m.Glyph0, Lower: -1, Src: -1})
+			}
 		}
 	}
 	total := 0
@@ -328,7 +364,7 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 			wideMendOld(d) // a wide character in one cell, from before wide characters (wide.go)
 		}
 	}
-	a.mode, a.doc = mode, docs[m.Cur]
+	a.mode, a.doc = mode, docs[min(m.Cur, len(docs)-1)]
 	if len(m.Layers) > 0 {
 		a.doc = docs[m.Lay]
 		for i := range docs {
@@ -389,6 +425,8 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 		}
 	}
 	switch {
+	case len(m.Layers) > 0 && len(m.Frames) > 0: // frames of layers (layers_frames.go)
+		a.restoreFramesOfLayers(m, docs, layerMode(mode))
 	case len(m.Layers) > 0 && layerMode(mode):
 		a.layers, a.lay = make([]Layer, len(docs)), m.Lay
 		for i, l := range m.Layers {
@@ -579,4 +617,47 @@ func shortPath(p string) string {
 		return "~" + p[len(h):]
 	}
 	return p
+}
+
+// restoreFramesOfLayers gives the page the autosaved frames of layers (docs:
+// every frame's layers, one frame after the other); a page type without layers
+// gets the frames as they were seen.
+func (a *App) restoreFramesOfLayers(m autosaveMeta, docs []*Doc, layers bool) {
+	nl := len(m.Layers)
+	meta := make([]Layer, nl)
+	for i, l := range m.Layers {
+		meta[i] = Layer{name: l.Name, hidden: l.Hidden, locked: l.Locked, clear: min(max(l.Clear, 0), layerBlack), keep: l.Keep}
+	}
+	a.frames, a.cur, a.restructured = make([]Frame, len(m.Frames)), m.Cur, m.Restructured
+	var cur *Doc
+	for i, f := range m.Frames {
+		fd := slices.Clone(docs[i*nl : (i+1)*nl])
+		was := &Doc{cols: f.Cols, rows: max(1, f.Rows), bg: f.Bg, border: f.Border, ink: f.Ink, glyph0: f.Glyph0}
+		if m.Mode == "uni" {
+			was.uni = true
+		}
+		for k, d := range fd {
+			if d.cols != f.Cols {
+				fd[k] = d.withCols(f.Cols)
+			}
+		}
+		a.frames[i] = Frame{doc: flattenFrame(meta, fd, was), hold: f.Hold, name: f.Name, lower: f.Lower, seg: f.Seg, src: f.Src, layers: fd}
+		if i == m.Cur {
+			cur = was
+		}
+	}
+	if !layers { // what was seen, frame by frame
+		for i := range a.frames {
+			a.frames[i].layers = nil
+		}
+		a.doc = a.frames[a.cur].doc.clone()
+		a.showCase()
+		return
+	}
+	a.layers, a.lay = meta, m.Lay
+	for k := range a.layers {
+		a.layers[k].doc = a.frames[a.cur].layers[k]
+	}
+	a.liveLayer(a.lay, a.frames[a.cur].doc.rows, cur)
+	a.showCase()
 }

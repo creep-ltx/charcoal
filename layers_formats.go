@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"slices"
 )
 
 // layersKeptBy: format fmtID keeps the layers of a page of type mode. Playscii's
@@ -34,7 +35,13 @@ func layersKeptBy(fmtID, mode string) bool {
 // fileLayers gives the page its file's layers (a.doc is the file's page as read),
 // when they can be kept: not in CharView, on a page type with layers.
 func (a *App) fileLayers() {
-	if viewer != nil || !a.layered() || a.frames != nil || a.source == nil {
+	if viewer != nil || !a.layered() || a.source == nil {
+		return
+	}
+	if a.frames != nil {
+		if a.srcKind == "psci" && layersKeptBy("psci", a.mode) {
+			a.psciFramesLayers()
+		}
 		return
 	}
 	var ls []Layer
@@ -47,7 +54,7 @@ func (a *App) fileLayers() {
 		ls = xpFileLayers(a.source, a.doc)
 	case "psci":
 		if layersKeptBy("psci", a.mode) {
-			ls = psciFileLayers(a.source, a.doc)
+			ls = psciFileLayers(a.source, 0, a.doc)
 		}
 	}
 	if ls == nil {
@@ -323,16 +330,16 @@ func joinNotes(n []string) string {
 
 // ---------------------------------------------------------------- Playscii
 
-// psciFileLayers are a Playscii file's layers as CharEdit's (nil: they cannot be
-// kept), for a file of one frame: each layer is read as the file's only one (by
+// psciFileLayers are the layers of frame fi of a Playscii file as CharEdit's
+// (nil: they cannot be kept): each layer is read as the file's only one (by
 // z, as Playscii draws them); a layer with see-through backgrounds under its
 // characters is one where black shows below.
-func psciFileLayers(b []byte, flat *Doc) []Layer {
+func psciFileLayers(b []byte, fi int, flat *Doc) []Layer {
 	var f psciFile
-	if err := json.Unmarshal(b, &f); err != nil || len(f.Frames) != 1 {
+	if err := json.Unmarshal(b, &f); err != nil || fi >= len(f.Frames) {
 		return nil
 	}
-	layers := append([]psciLayer{}, f.Frames[0].Layers...)
+	layers := append([]psciLayer{}, f.Frames[fi].Layers...)
 	if len(layers) < 2 || len(layers) > maxLayers {
 		return nil
 	}
@@ -347,7 +354,7 @@ func psciFileLayers(b []byte, flat *Doc) []Layer {
 		g := f
 		lc := l
 		lc.Visible = &one
-		g.Frames = []psciFrame{{Delay: f.Frames[0].Delay, Layers: []psciLayer{lc}}}
+		g.Frames = []psciFrame{{Delay: f.Frames[fi].Delay, Layers: []psciLayer{lc}}}
 		js, err := json.Marshal(&g)
 		if err != nil {
 			return nil
@@ -402,12 +409,25 @@ func psciLayersOut(ls []Layer, page *Doc, w, h int, tile func(*Doc, int, int) ps
 	return out
 }
 
-// psciLayersOf are the layers a Playscii file of the page keeps (nil: it is put together).
-func (a *App) psciLayersOf(page *Doc) []Layer {
-	if !layersKeptBy("psci", a.mode) {
+// psciLayersOf are the layers of every frame (docs: the frames as seen) a
+// Playscii file of the page keeps (nil: they are put together).
+func (a *App) psciLayersOf(docs []*Doc) [][]Layer {
+	if !layersKeptBy("psci", a.mode) || a.layers == nil {
 		return nil
 	}
-	return a.layersOut(page)
+	out := make([][]Layer, len(docs))
+	for i, page := range docs {
+		ld := a.frameLayerDocs(i)
+		ls := make([]Layer, len(a.layers))
+		for k, l := range a.layers {
+			d := *ld[k] // the cells are only read
+			layerFields(&d, page)
+			l.doc = &d
+			ls[k] = l
+		}
+		out[i] = ls
+	}
+	return out
 }
 
 // icyLowerColour is the colour IcyDraw gives a transparent background over cell
@@ -430,4 +450,57 @@ func icyLowerColour(v uint32) int {
 		return fg
 	}
 	return 0
+}
+
+// psciFramesLayers gives a page of frames read from a Playscii file every
+// frame's layers (Playscii's frames all have the same layers), when they show
+// every frame as it is; else the frames stay as they are, put together.
+func (a *App) psciFramesLayers() {
+	n := len(a.frames)
+	per := make([][]Layer, n)
+	for i := range n {
+		if per[i] = psciFileLayers(a.source, i, a.frameDoc(i)); per[i] == nil || len(per[i]) != len(per[0]) {
+			return
+		}
+	}
+	// One layer list for every frame: a layer lets black show below if it does in any frame.
+	meta := slices.Clone(per[0])
+	for _, ls := range per[1:] {
+		for k, l := range ls {
+			if l.name != meta[k].name || l.hidden != meta[k].hidden {
+				return
+			}
+			meta[k].clear = max(meta[k].clear, l.clear)
+		}
+	}
+	cells := 0
+	for i, ls := range per {
+		for k := range ls {
+			ls[k].clear = meta[k].clear
+			cells += 2 * ls[k].doc.cols * ls[k].doc.rows
+		}
+		if layersKept(ls, a.frameDoc(i)) == nil {
+			return
+		}
+	}
+	if cells > maxPageCells {
+		return
+	}
+	for i, ls := range per {
+		docs := make([]*Doc, len(ls))
+		for k := range ls {
+			docs[k] = ls[k].doc
+		}
+		if i == a.cur {
+			continue
+		}
+		a.frames[i].layers = docs
+		a.frames[i].doc = flattenFrame(meta, docs, a.frames[i].doc)
+	}
+	top := len(meta) - 1
+	a.layers, a.lay = meta, top
+	for k := range a.layers {
+		a.layers[k].doc = per[a.cur][k].doc
+	}
+	a.liveLayer(top, a.doc.rows, a.doc)
 }

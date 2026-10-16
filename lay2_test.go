@@ -188,3 +188,272 @@ func TestLay2LockIcyDraw(t *testing.T) {
 		t.Fatalf("unlocked flags %b", f)
 	}
 }
+
+// ---------------------------------------------------------------- layers with frames
+
+// lay2FFrames gives a page (mode) of two frames of three layers: art at the
+// bottom, letters on the middle one (another in each frame), a hidden top one.
+func lay2FFrames(t *testing.T, mode string) *App {
+	t.Helper()
+	a := testApp(t, mode)
+	layFArt(a, 3)
+	a.dupFrame()
+	layFArt(a, 6)
+	a.goFrame(0)
+	a.newLayer(false)
+	if a.nLayers() != 2 || a.frames[1].layers == nil || len(a.frames[1].layers) != 2 {
+		t.Fatalf("a new layer on a page of frames: %d layers, frame 2 has %d", a.nLayers(), len(a.frames[1].layers))
+	}
+	ch := 'M'
+	if a.c64() || a.atari() {
+		ch = 13
+	}
+	cell := func(c rune, fg int) uint32 {
+		if a.uni() {
+			return uniCell(int(c), styleOf(fg, 0, 0))
+		}
+		return makeCell(int(c), fg, 0, 0)
+	}
+	a.pushUndo()
+	a.doc.set(2, 1, cell(ch, 7))
+	a.goFrame(1)
+	if a.lay != 1 || !a.doc.blankAt(a.doc.get(2, 1)) {
+		t.Fatalf("frame 2's new layer is not empty: layer %d, %08x", a.lay, a.doc.get(2, 1))
+	}
+	a.pushUndo()
+	a.doc.set(3, 1, cell(ch+1, 5))
+	a.newLayer(false)
+	a.doc.set(0, 0, cell(ch+2, 4))
+	a.toggleLayer(2)
+	a.goLayer(1)
+	return a
+}
+
+// lay2FFlat is a page of the same frames, one layer each, as a's frames are seen.
+func lay2FFlat(t *testing.T, a *App) *App {
+	b := testApp(t, a.mode)
+	b.frames = make([]Frame, a.nFrames())
+	for i := range b.frames {
+		b.frames[i] = Frame{doc: a.frameDoc(i).clone(), hold: a.holdOf(i), lower: -1, src: -1}
+	}
+	b.cur = a.cur
+	b.doc = b.frames[b.cur].doc.clone()
+	return b
+}
+
+func TestLay2FramesOfLayers(t *testing.T) {
+	a := lay2FFrames(t, "pc")
+	f0, f1 := a.frameDoc(0), a.frameDoc(1)
+	if f0.get(2, 1) != makeCell('M', 7, 0, 0) || f1.get(3, 1) != makeCell('N', 5, 0, 0) || f1.get(2, 1) == makeCell('M', 7, 0, 0) {
+		t.Fatal("each frame's own letters")
+	}
+	if f1.get(0, 0) == makeCell('O', 4, 0, 0) {
+		t.Fatal("a hidden layer is seen")
+	}
+	// the frame that is not current keeps the picture its layers make
+	if !sameLook(a.frames[0].doc, flatten(layersWith(a.layers, a.frames[0].layers), -1, a.frames[0].doc)) {
+		t.Fatal("frame 1's picture is not its layers put together")
+	}
+	// showing the hidden layer shows it in every frame
+	a.toggleLayer(2)
+	if a.frameDoc(1).get(0, 0) != makeCell('O', 4, 0, 0) {
+		t.Fatal("shown layer")
+	}
+	a.goFrame(0)
+	if a.seen().get(0, 0) == makeCell('O', 4, 0, 0) {
+		t.Fatal("frame 1's top layer has frame 2's cell")
+	}
+	// the strip's onion and playing read Frame.doc: as seen
+	a.goFrame(1)
+	if !sameLook(a.frames[0].doc, f0) {
+		t.Fatal("the onion's frame before is not as seen")
+	}
+	s1 := a.seen().clone()
+	a.playFrames()
+	if a.playing == nil || !sameLook(a.playing.frames[0], f0) || !sameLook(a.playing.frames[1], s1) {
+		t.Fatal("playing does not show the frames as seen")
+	}
+	a.stopPlay(false)
+	if a.cur != 1 || a.lay != 1 || a.layers == nil {
+		t.Fatal("after playing")
+	}
+}
+
+// layersWith is the layer list ls with the pictures docs.
+func layersWith(ls []Layer, docs []*Doc) []Layer {
+	out := make([]Layer, len(ls))
+	for k := range ls {
+		out[k] = ls[k]
+		out[k].doc = docs[k]
+	}
+	return out
+}
+
+func TestLay2FramesWriteAsSeen(t *testing.T) {
+	for _, c := range []struct{ mode, fmtID string }{{"pc", "ansi"}, {"pc", "gif"}, {"pc", "apng"}, {"c64", "seq"}, {"c64", "marq"}, {"c64", "petmate"}, {"atari", "ata"}, {"st", "vt52"}, {"uni", "uniansi"}, {"uni", "dur"}} {
+		a := lay2FFrames(t, c.mode)
+		b := lay2FFlat(t, a)
+		got, err := a.encodeFor(c.fmtID, "", nil)
+		if err != nil {
+			t.Fatalf("%s %s: %v", c.mode, c.fmtID, err)
+		}
+		want, _ := b.encodeFor(c.fmtID, "", nil)
+		if !bytesEq(got, want) {
+			t.Errorf("%s %s: frames of layers write %d bytes, their pictures %d", c.mode, c.fmtID, len(got), len(want))
+		}
+	}
+}
+
+func bytesEq(x, y []byte) bool { return string(x) == string(y) }
+
+func TestLay2FramesUndo(t *testing.T) {
+	a := testApp(t, "pc")
+	layFArt(a, 1)
+	a.dupFrame()
+	before := a.frameDoc(0).clone()
+	a.newLayer(false)
+	a.pushUndo()
+	a.doc.set(5, 5, makeCell('Z', 2, 0, 0))
+	a.goFrame(0)
+	// undoing frame 2's edit goes to frame 2's layer
+	a.doUndo()
+	if a.cur != 1 || a.lay != 1 || a.doc.get(5, 5) == makeCell('Z', 2, 0, 0) {
+		t.Fatalf("undo of frame 2's edit: frame %d layer %d", a.cur, a.lay)
+	}
+	a.doRedo()
+	if a.cur != 1 || a.doc.get(5, 5) != makeCell('Z', 2, 0, 0) {
+		t.Fatal("redo")
+	}
+	// undoing the new layer takes it out of every frame
+	a.doUndo()
+	a.doUndo()
+	if a.layers != nil || a.frames[0].layers != nil || !sameLook(a.frameDoc(0), before) {
+		t.Fatalf("undo of the new layer: layers %v", a.layers != nil)
+	}
+	a.doRedo()
+	if a.nLayers() != 2 || len(a.frames[1-a.cur].layers) != 2 {
+		t.Fatal("redo of the new layer")
+	}
+	// a new frame on a page of layers has every layer; deleting it and undoing
+	a.newFrame()
+	if a.nFrames() != 3 || a.nLayers() != 2 || a.cur != 2 {
+		t.Fatalf("new frame: %d frames at %d", a.nFrames(), a.cur)
+	}
+	a.doc.set(1, 1, makeCell('Y', 3, 0, 0))
+	a.goFrame(0)
+	if len(a.frames[2].layers) != 2 || a.frames[2].doc.get(1, 1) != makeCell('Y', 3, 0, 0) {
+		t.Fatal("the new frame's layers")
+	}
+	a.goFrame(2)
+	a.deleteFrame()
+	if a.nFrames() != 2 || a.nLayers() != 2 {
+		t.Fatal("delete frame")
+	}
+	a.doUndo()
+	if a.nFrames() != 3 {
+		t.Fatal("undo of delete frame")
+	}
+}
+
+func TestLay2FramesLayerOps(t *testing.T) {
+	a := lay2FFrames(t, "pc")
+	seen1 := a.frameDoc(1).clone()
+	// move the middle layer up in every frame: under the (shown) top layer it was over
+	a.toggleLayer(2)
+	a.moveLayer(1)
+	if a.lay != 2 || a.layers[2].name != "" || len(a.frames[0].layers) != 3 {
+		t.Fatal("move")
+	}
+	if a.frames[0].doc.get(2, 1) != makeCell('M', 7, 0, 0) {
+		t.Fatal("frame 1 after the move")
+	}
+	a.doUndo()
+	a.doUndo()
+	if !sameLook(a.frameDoc(1), seen1) {
+		t.Fatal("undo of the move")
+	}
+	// merge down in every frame
+	a.goLayer(1)
+	a.mergeDown()
+	if a.nLayers() != 2 || len(a.frames[0].layers) != 2 || !sameLook(a.frameDoc(0), a.frames[0].doc) {
+		t.Fatal("merge down")
+	}
+	if a.frames[0].layers[0].get(2, 1) != makeCell('M', 7, 0, 0) {
+		t.Fatal("frame 1's letters merged down")
+	}
+	// delete a layer: one left, every frame is one picture again
+	a.goLayer(1)
+	a.deleteLayer()
+	if a.layers != nil || a.frames[0].layers != nil || a.frames[0].doc.get(2, 1) != makeCell('M', 7, 0, 0) {
+		t.Fatal("delete down to one layer")
+	}
+	// merge all: every frame as it was seen
+	b := lay2FFrames(t, "pc")
+	s0, s1 := b.frameDoc(0).clone(), b.frameDoc(1).clone()
+	b.mergeAll()
+	if b.layers != nil || b.frames[0].layers != nil || !sameLook(b.frameDoc(0), s0) || !sameLook(b.frameDoc(1), s1) {
+		t.Fatal("merge all")
+	}
+	// the width is every frame's every layer's
+	c := lay2FFrames(t, "pc")
+	c.setCols(100)
+	for i := range c.frames {
+		for k, d := range c.frameLayerDocs(i) {
+			if d.cols != 100 {
+				t.Fatalf("frame %d layer %d: %d columns", i, k, d.cols)
+			}
+		}
+	}
+	c.doUndo()
+	if c.frames[0].layers[0].cols != 80 || c.doc.cols != 80 {
+		t.Fatal("undo of the width")
+	}
+}
+
+func TestLay2FramesKept(t *testing.T) {
+	for _, mode := range []string{"pc", "uni", "c64"} {
+		a := lay2FFrames(t, mode)
+		a.toggleLock(0)
+		a.path, a.name = "/nowhere/art.ans", "art.ans"
+		if err := writeAutosave(a.Tab); err != nil {
+			t.Fatal(err)
+		}
+		b := restart(t, mode)
+		files := leftAutosaves()
+		if len(files) != 1 {
+			t.Fatalf("%d autosaves", len(files))
+		}
+		if err := b.restoreAutosave(files[0]); err != nil {
+			t.Fatal(err)
+		}
+		removeAutosave(b.autoID)
+		if b.nFrames() != 2 || b.nLayers() != 3 || b.cur != a.cur || b.lay != a.lay || !b.layers[0].locked {
+			t.Fatalf("%s: %d frames %d layers", mode, b.nFrames(), b.nLayers())
+		}
+		for i := range 2 {
+			if !sameLook(b.frameDoc(i), a.frameDoc(i)) {
+				t.Fatalf("%s: frame %d", mode, i)
+			}
+		}
+	}
+	// Playscii keeps every frame's layers
+	a := lay2FFrames(t, "pc")
+	b := layFFormat(t, a, "psci", ".psci")
+	if b.nFrames() != 2 || b.nLayers() != 3 {
+		t.Fatalf("psci: %d frames, %d layers (%q)", b.nFrames(), b.nLayers(), b.message)
+	}
+	for i := range 2 {
+		if !sameLook(b.frameDoc(i), a.frameDoc(i)) {
+			t.Fatalf("psci: frame %d", i)
+		}
+	}
+	if !b.layers[2].hidden {
+		t.Fatal("psci: the hidden layer")
+	}
+	// a stream keeps the frames, not their layers: the page stays unsaved
+	c := lay2FFrames(t, "pc")
+	p := filepath.Join(t.TempDir(), "art.ans")
+	if !c.writeOut(p, "ansi") || !c.dirty || !strings.Contains(c.message, "not their layers") {
+		t.Fatalf("ansi: dirty %v %q", c.dirty, c.message)
+	}
+}

@@ -232,9 +232,9 @@ func TestLayRefusals(t *testing.T) {
 	a := testApp(t, "pc")
 	layFArt(a, 1)
 	layFSplit(a)
-	a.newFrame()
+	a.splitFrames(false) // (frames of their own are fine: lay2_test.go)
 	if a.frames != nil || !strings.Contains(a.message, "Merge the layers") {
-		t.Fatalf("a new frame on a layered page: %v %q", a.frames != nil, a.message)
+		t.Fatalf("split on a layered page: %v %q", a.frames != nil, a.message)
 	}
 	if err := a.collabHost(0, false, "x", ""); err == nil || !strings.Contains(err.Error(), "layers") {
 		t.Fatalf("hosting a layered page: %v", err)

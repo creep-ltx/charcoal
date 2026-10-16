@@ -1394,9 +1394,9 @@ type psciPage struct {
 	lower         bool
 	pal           [16]uint32 // the page's colours (cell order)
 	ice           bool
-	own           *psciOwn // a PC page's own Playscii charset and palette (psciown.go)
-	stPal         string   // an ST page's Playscii palette (its file's; psciown.go)
-	lays          []Layer  // a page of layers (one frame): every layer, docs[0] being the page (layers_formats.go)
+	own           *psciOwn  // a PC page's own Playscii charset and palette (psciown.go)
+	stPal         string    // an ST page's Playscii palette (its file's; psciown.go)
+	lays          [][]Layer // a page of layers: every frame's layers (layers_formats.go)
 }
 
 // psciNearest is the Playscii colour (1..) nearest to c.
@@ -1500,8 +1500,8 @@ func writePsci(docs []*Doc, holds []int, p psciPage) (out []byte, missed int) {
 		if i < len(holds) && holds[i] > 0 {
 			hold = holds[i]
 		}
-		if p.lays != nil { // every layer (layers_formats.go)
-			f.Frames = append(f.Frames, psciFrame{Delay: float64(hold) / 1000, Layers: psciLayersOut(p.lays, d, w, h, tile)})
+		if i < len(p.lays) { // every layer (layers_formats.go)
+			f.Frames = append(f.Frames, psciFrame{Delay: float64(hold) / 1000, Layers: psciLayersOut(p.lays[i], d, w, h, tile)})
 			continue
 		}
 		l := psciLayer{Name: "Layer 1", Tiles: make([]psciTile, 0, w*h)}
@@ -2061,9 +2061,7 @@ func (a *App) reparseEditor() bool {
 			a.msxSet = *art.msx
 			a.msxBrushColours()
 		}
-		if len(art.docs) == 1 {
-			a.fileLayers() // its layers, when CharEdit's layers show them as they are (layers_formats.go)
-		}
+		a.fileLayers() // its layers, when CharEdit's layers show them as they are (layers_formats.go)
 	case "pd", "td", "bsv":
 		a.othReparse() // othformats.go
 	case "pet", "pmjson":
@@ -2154,7 +2152,7 @@ func (a *App) encodeEditor(fmtID string, d *Doc) (out []byte, ok bool, err error
 			}
 		}
 		var missed int
-		out, missed = writePsci(docs, holds, psciPage{mode: a.mode, machine: a.machine, lower: a.lower(), pal: a.pal, ice: a.ice, own: a.psciOwnOf(), stPal: a.psciSTPalette(), lays: a.psciLayersOf(d)})
+		out, missed = writePsci(docs, holds, psciPage{mode: a.mode, machine: a.machine, lower: a.lower(), pal: a.pal, ice: a.ice, own: a.psciOwnOf(), stPal: a.psciSTPalette(), lays: a.psciLayersOf(docs)})
 		if missed > 0 {
 			a.msg(fmt.Sprintf("%d cells have characters Playscii's charset has not: written as spaces", missed))
 		}
