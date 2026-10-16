@@ -1012,3 +1012,153 @@ func TestOthPetmate9Machines(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------- SkyPix
+
+// IcyDraw's SkyPix bench files (icy_parser_core/benches/skypix_data) drawn as IcyDraw's engine
+// draws them (ccicy skypix, PNGs in CHARCOAL_SKYPIX_ICY): the pixels that differ are the
+// text's (IcyDraw's font is an Amiga 8x8 IBM set, CharEdit's the VGA's 8x8).
+//
+//	CHARCOAL_SKYPIX_FILES=<icy_tools>/crates/icy_parser_core/benches/skypix_data CHARCOAL_SKYPIX_ICY=<pngs> go test -run OthSkyPixIcyDraw -v .
+func TestOthSkyPixIcyDraw(t *testing.T) {
+	files, renders := os.Getenv("CHARCOAL_SKYPIX_FILES"), os.Getenv("CHARCOAL_SKYPIX_ICY")
+	if files == "" || renders == "" {
+		t.Skip("CHARCOAL_SKYPIX_FILES / CHARCOAL_SKYPIX_ICY not set")
+	}
+	// The Amiga fonts from icy_tools' data (CHARCOAL_SKYPIX_FONTS: its crates/icy_engine/data/fonts/Amiga).
+	if fd := os.Getenv("CHARCOAL_SKYPIX_FONTS"); fd != "" {
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		for _, f := range skyFontFiles {
+			b, err := os.ReadFile(filepath.Join(fd, f.file))
+			if err != nil || !sha1Is(b, f.sha1) {
+				t.Fatalf("%s: %v (or not the file expected)", f.file, err)
+			}
+			os.MkdirAll(filepath.Dir(skyFontPath(f.file)), 0o755)
+			os.WriteFile(skyFontPath(f.file), b, 0o644)
+		}
+	}
+	list, _ := filepath.Glob(filepath.Join(files, "*.ans"))
+	for _, f := range list {
+		b, _ := os.ReadFile(f)
+		if !isSkyPix(b) {
+			t.Errorf("%s: not taken for SkyPix", filepath.Base(f))
+		}
+		l := readSkyPix(b)
+		pf, err := os.Open(filepath.Join(renders, strings.TrimSuffix(filepath.Base(f), ".ans")+".png"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		img, err := png.Decode(pf)
+		pf.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		bad := 0
+		for y := 0; y < skyH; y++ {
+			for x := 0; x < skyW; x++ {
+				r, g, bb, _ := img.At(x, y*2).RGBA()
+				if l.pal[l.pix[y*skyW+x]]&0xFFFFFF != r>>8<<16|g>>8<<8|bb>>8 {
+					bad++
+				}
+			}
+		}
+		t.Logf("%-18s %6d of %d pixels differ (%.2f%%) %s", filepath.Base(f), bad, skyW*skyH, float64(bad)*100/float64(skyW*skyH), l.note)
+	}
+}
+
+// skyFDrawing is a small SkyPix drawing: a box filled, a line, an ellipse, a palette, text.
+const skyFDrawing = "\x1b[H\x1b[2J\x1b[0!made by hand!\x1b[15;3!\x1b[4;10;10;100;50!\x1b[15;4!\x1b[8;0;0!\x1b[2;639;199!" +
+	"\x1b[15;6!\x1b[5;320;100;60;30!\x1b[3;1;320;100!\x1b[10;0!\x1b[5;10HHello\r\n"
+
+// SkyPix commands draw what IcyDraw's engine draws (its sky_paint.rs): spot checks.
+func TestOthSkyPixDraws(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir()) // no Amiga fonts: the VGA's 8x8
+	b := []byte(skyFDrawing)
+	if !isSkyPix(b) {
+		t.Fatal("not taken for SkyPix")
+	}
+	l := readSkyPix(b)
+	at := func(x, y int) int { return int(l.pix[y*skyW+x]) }
+	if at(10, 10) != 3 || at(100, 50) != 3 || at(101, 50) == 3 || at(9, 10) == 3 {
+		t.Fatalf("filled box: %d %d %d %d", at(10, 10), at(100, 50), at(101, 50), at(9, 10))
+	}
+	if at(0, 0) != 4 || at(639, 199) != 4 {
+		t.Fatalf("line: %d %d", at(0, 0), at(639, 199))
+	}
+	if at(380, 100) != 6 || at(320, 70) != 6 || at(320, 100) != 6 { // the outline, and filled in colour mode
+		t.Fatalf("ellipse: %d %d %d", at(380, 100), at(320, 70), at(320, 100))
+	}
+	f := skyDefaultFace()
+	for r := 0; r < 8; r++ { // "H" at row 5, column 10 in pen 6 on pen 0 (the 8x8 font is back)
+		for x := 0; x < 8; x++ {
+			want := 0
+			if f.rows['H'][r]&(0x80>>x) != 0 {
+				want = 6
+			}
+			if got := at(72+x, 32+r); got != want {
+				t.Fatalf("H at %d,%d: %d, want %d", x, r, got, want)
+			}
+		}
+	}
+	// Hostile: a huge flood and lines stop at the work limit.
+	var h bytes.Buffer
+	h.WriteString("\x1b[15;1!")
+	for i := 0; i < 400; i++ {
+		fmt.Fprintf(&h, "\x1b[4;0;0;639;199!\x1b[8;0;0!\x1b[2;639;199!\x1b[3;1;5;5!")
+	}
+	if l := readSkyPix(h.Bytes()); !strings.Contains(l.note, "too long") {
+		t.Fatalf("a hostile file is drawn to the end: %q", l.note)
+	}
+}
+
+// Plain ANSI art is not taken for SkyPix; DECSTR (ESC [ ! p) is no command.
+func TestOthSkyPixDetection(t *testing.T) {
+	for _, s := range []string{"\x1b[0m\x1b[1;33mHello\x1b[!p", "\x1b[2J\x1b[!p\x1b[!p", "\x1b[12;40Hx\x1b[0;1m!"} {
+		if isSkyPix([]byte(s)) {
+			t.Errorf("%q taken for SkyPix", s)
+		}
+	}
+}
+
+// A SkyPix page in CharEdit: the drawing under the cells, Ctrl+S unchanged writes the file as it
+// came; typed cells are written after the drawing and come back as cells.
+func TestOthSkyPixInCharEdit(t *testing.T) {
+	a := testApp(t, "pc")
+	path := filepath.Join(t.TempDir(), "draw.spx")
+	src := []byte(skyFDrawing)
+	os.WriteFile(path, src, 0o644)
+	a.loadBytes(src, "draw.spx", path, "auto")
+	if !a.skyPage() || a.saveFmt != "skypix" || a.doc.cols != 80 || a.doc.rows != 25 || a.cellH() != 8 {
+		t.Fatalf("opened as %s, sky %v, saves %s, %dx%d, cell %d: %s", a.mode, a.sky != nil, a.saveFmt, a.doc.cols, a.doc.rows, a.cellH(), a.message)
+	}
+	if a.pal[3]&0xFFFFFF != 0xFF0000 {
+		t.Fatalf("the page's colours are not SkyPix's: %06x", a.pal[3])
+	}
+	fb := a.renderDoc(a.doc, 1)
+	if fb.px[12*fb.w+12]&0xFFFFFF != 0xFF0000 {
+		t.Fatalf("the picture is not under the cells: %06x", fb.px[12*fb.w+12])
+	}
+	out, _ := a.encode("skypix")
+	if !bytes.Equal(out, src) {
+		t.Fatal("an unchanged page is not saved as it came")
+	}
+	a.doc.set(2, 20, makeCell('Z', 6, 1, 0))
+	a.doc.set(3, 20, makeCell(10, 6, 1, 0)) // a control: written as a space
+	a.dirty = true
+	a.save(false)
+	b, _ := os.ReadFile(path)
+	if !bytes.HasPrefix(b, src) || !bytes.Contains(b, []byte(skyMarker)) {
+		t.Fatalf("saved: %q", b)
+	}
+	a.focusTab(a.newTab("pc"))
+	a.loadBytes(b, "draw.spx", path, "auto")
+	if v := a.doc.get(2, 20); cellCh(v) != 'Z' || cellFg(v) != 6 || cellBg(v) != 1 {
+		t.Fatalf("the typed cell came back as %08x", v)
+	}
+	if v := a.doc.get(3, 20); cellCh(v) != ' ' || cellBg(v) != 1 {
+		t.Fatalf("the control came back as %08x", v)
+	}
+	if a.sky.pix[10*skyW+10] != 3 {
+		t.Fatal("the drawing did not come back")
+	}
+}

@@ -437,6 +437,9 @@ func (a *App) encodeIGS(fmtID string, d *Doc) ([]byte, bool) {
 
 // drawCellXY draws the page's cell (x, y): an empty cell of an IGS page shows the picture under it.
 func (a *App) drawCellXY(fb *FB, px, py, z, x, y int, v uint32) {
+	if a.drawSkyCell(fb, px, py, z, x, y, v) { // a SkyPix page (skypix.go)
+		return
+	}
 	l := a.igs
 	if l == nil || !isBlank(v) || !a.igsPage() || x < 0 || y < 0 || (x+1)*8 > l.w || (y+1)*a.cellH() > l.h {
 		a.drawCell(fb, px, py, z, v)

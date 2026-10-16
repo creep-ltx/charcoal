@@ -43,6 +43,7 @@ func FuzzParsers(f *testing.F) {
 		pd, _ := writePD(d, pal, fontByID("vga"), true)
 		f.Add(pd)
 		f.Add(writeBSV(d))
+		f.Add([]byte(skyFDrawing))
 		for _, buf := range []int{icyPETSCII, icyATASCII, icyAtariST} { // other machines' pages (icymach.go)
 			o := &icyOut{buffer: buf, fontMod: 1, w: 3, h: 2, fontH: 8, pal: []uint32{0, 0xFFFFFF},
 				screen: icyScreenRecord(map[int]int{icyPETSCII: 5, icyATASCII: 9, icyAtariST: 8}[buf], 1, 3, 113),
@@ -187,6 +188,7 @@ func FuzzParsers(f *testing.F) {
 			return nil
 		})
 		check("td", func() []*Doc { pages, _ := parseTD(b); return pages })
+		check("skypix", func() []*Doc { isSkyPix(b); return one(readSkyPix(b).cells) }) // skypix.go
 		check("bsv", func() []*Doc { d, _ := parseBSV(b); return one(d) })
 		check("icy machine", func() []*Doc { // IcyDraw's pages of other machines (icymach.go)
 			if doc, err := parseIcyDraw(b); err == nil {

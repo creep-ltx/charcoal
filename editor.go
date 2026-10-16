@@ -200,6 +200,7 @@ type Tab struct {
 	cpcSet              cpcSetup    // an Amstrad CPC page's mode, inks and border (cpc.go)
 	vic                 vicSetup    // a C64 page's text mode (multicolour, ECM) and $D022-$D024 (c64x.go)
 	igs                 *igsLayer   // an IGS file's picture under the cells and what saving keeps (igs_page.go)
+	sky                 *skyLayer   // a SkyPix file's picture under the cells (skypix.go)
 }
 
 // App is the editor: the tab being worked on (its fields read as a's own),
@@ -470,6 +471,10 @@ func (a *App) setPalette() {
 	if a.cpc() { // the page's inks
 		a.cpcEnsure()
 		a.pal = a.cpcSet.palette()
+		return
+	}
+	if a.skyPage() { // the SkyPix file's colours (skypix.go)
+		a.pal = a.sky.pal
 		return
 	}
 	if a.ownPal != nil && a.paletteFor[a.mode] == "file" {
@@ -1357,7 +1362,7 @@ func (a *App) reparse() {
 	if a.reparseUni() {
 		return
 	}
-	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseVideotex() || a.reparseAtari8() || a.reparseZXTap() || a.reparseTED() {
+	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseSky() || a.reparseVideotex() || a.reparseAtari8() || a.reparseZXTap() || a.reparseTED() {
 		return
 	}
 	switch a.srcKind {
@@ -1452,7 +1457,7 @@ var seqExt = regexp.MustCompile(`(?i)\.(seq|pet)$`)
 // loadBytes reads a file into the current tab; as is "auto", "amiga", "pc" or "c64".
 func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.srcKind, a.ownFont, a.ownLower, a.ownPal = "", nil, nil, nil
-	a.codes = ""
+	a.codes, a.sky = "", nil
 	if a.loadUni(b, name, path, as) { // Unicode pages: UTF-8 ANSI, durdraw, mIRC (uniformats.go)
 		return
 	}
@@ -1470,6 +1475,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		return
 	}
 	if a.loadIGS(b, name, path, as) { // Atari ST IGS (igs_page.go)
+		return
+	}
+	if a.loadSkyPix(b, name, path, as) { // Amiga SkyPix (skypix.go)
 		return
 	}
 	if a.loadVideotex(b, name, path, as) { // Minitel .vdt, Viewdata .cpt/.bin/.json (minitel_ui.go)
@@ -2715,6 +2723,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		return out, err
 	}
 	if out, ok := a.encodeImageSeq(fmtID, board, ps, d); ok { // PETSCII with Image BBS's £ codes (c64bbs.go)
+		return out, nil
+	}
+	if out, ok := a.encodeSky(fmtID, d); ok { // Amiga SkyPix (skypix.go)
 		return out, nil
 	}
 	if out, ok := a.encodeIGS(fmtID, d); ok { // Atari ST IGS (igs_page.go)
