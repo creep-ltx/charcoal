@@ -15,8 +15,11 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
   runs-on-the-machine exports), then step 4/5 (docs/roadmap.md).
 - **Release how-to:** bump `const version` in main.go (X.YbN = beta), commit, push main, `git tag -a vX.YbN -m ...`,
   push the tag; GitHub Actions builds the three zips and a prerelease (tags with "b"). Check the run with
-  `gh run watch`, then `gh release view`. Before tagging: `go test ./...` and, after merges touching readers, the
-  big check (tools/bigcheck) compared with the previous report.
+  `gh run watch`, then `gh release view`. Before tagging: `go test ./...`, the same as CI runs it (Go 1.24 from
+  go.mod, no downloaded ROMs/fonts: `HOME=<empty> GOMODCACHE=$(go env GOMODCACHE) GOCACHE=$(go env GOCACHE)
+  GOPATH=$(go env GOPATH) XDG_DATA_HOME=<empty> XDG_CONFIG_HOME=<empty> GOTOOLCHAIN=go1.24.0 go test ./...` -
+  0.1b8's first tag failed in CI on exactly that), after merges touching readers the big check (tools/bigcheck)
+  compared with the previous report, and for machine programs `CHARCOAL_EMU=1 go test -run TestEmu .`.
 - **How the user wants work done:** showy new features are built on a local branch (git worktrees, never pushed),
   shown first (a video on the NAS /mnt/nas/home/*.mp4 and screenshots opened with Read: they show on the user's
   phone), released only after the user says yes. Several helpers in parallel worktrees, then one local integration
