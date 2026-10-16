@@ -228,7 +228,7 @@ func dirartSame(old []byte, d *Doc, y int) bool {
 }
 
 // dirartNote is what a DirArt save could not keep (for the status line).
-type dirartNote struct{ bad, cut, kept int }
+type dirartNote struct{ bad, cut, kept, plain int } // plain: header cells not reversed (dirarthead.go)
 
 func (n dirartNote) String() string {
 	var s []string
@@ -240,6 +240,9 @@ func (n dirartNote) String() string {
 	}
 	if n.kept > 0 {
 		s = append(s, fmt.Sprintf("the disk's %d files after the art stay listed", n.kept))
+	}
+	if n.plain > 0 {
+		s = append(s, fmt.Sprintf("%d characters of the first row (the disk's header line) show reversed, as LIST shows the header", n.plain))
 	}
 	if len(s) == 0 {
 		return ""
@@ -380,6 +383,12 @@ func (a *App) loadDirArt(b []byte, name, path, as string) bool {
 	a.paletteFor["c64"] = "dirart"
 	a.finishLoad(b, name, path, nil, "dirart")
 	a.setCase(false)
+	head := "the first row is the disk's header line (LIST shows it reversed)"
+	if a.message == "" {
+		a.msg(strings.ToUpper(head[:1]) + head[1:])
+	} else {
+		a.msg(a.message + "; " + head)
+	}
 	return true
 }
 
@@ -388,7 +397,7 @@ func (a *App) reparseDirArt() bool {
 	if a.srcKind != "dirart" {
 		return false
 	}
-	if d, err := readDirArt(a.source); err == nil {
+	if d, err := readDirArtPage(a.source); err == nil { // the header line first (dirarthead.go)
 		a.doc = d
 	}
 	a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
@@ -408,7 +417,7 @@ func (a *App) encodeDirArt(fmtID string, d *Doc) ([]byte, bool, error) {
 	if name == "" {
 		name = a.name
 	}
-	img, note := writeDirArt(d, src, name)
+	img, note := writeDirArtPage(d, src, name) // the first row is the header line (dirarthead.go)
 	dirartLastNote = note.String()
 	return img, true, nil
 }

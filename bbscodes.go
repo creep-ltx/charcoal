@@ -114,6 +114,9 @@ func bbsCodesKind(b []byte, name string) string {
 			if i+2 < len(b) && b[i+1] == '#' && isDigit(b[i+2]) {
 				seen("wwiv", b[i:i+3])
 			}
+			if i+2 < len(b) && b[i+1] == 'T' && isDigit(b[i+2]) && (i+3 >= len(b) || !isDigit(b[i+3])) {
+				seen("pipe", b[i+1:i+3]) // Mystic's theme colours (brdcodes.go)
+			}
 		case 0x01:
 			ctrlA++
 			if i+1 < len(b) && strings.IndexByte("KRGYBMCWHINkrgybmcwhin01234567", b[i+1]) >= 0 {
@@ -144,6 +147,9 @@ func bbsCodesKind(b []byte, name string) string {
 		if ok[k] && repeats && n[k] >= need[k] && (best == "" || n[k] > n[best]) {
 			best = k
 		}
+	}
+	if tg := telegardCodes(b); tg > 0 && (best == "" || tg > n[best]) { // brdcodes.go
+		best = "telegard"
 	}
 	return best
 }
@@ -204,8 +210,8 @@ func (c *codeTerm) feed(b []byte, final bool) {
 // code reads the code at the start of b: the bytes it takes (0 = not a code,
 // shown as text), or more = it may be a code but b ends before it can tell.
 func (c *codeTerm) code(b []byte, final bool) (n int, more bool) {
-	want := map[string]int{"pipe": 3, "ctrla": 2, "wwiv": 3, "wildcat": 5, "celerity": 2}[c.kind]
-	lead := map[string]string{"pipe": "|", "ctrla": "\x01", "wwiv": "|\x03", "wildcat": "@", "celerity": "|"}[c.kind]
+	want := map[string]int{"pipe": 3, "ctrla": 2, "wwiv": 3, "wildcat": 5, "celerity": 2, "telegard": 3}[c.kind]
+	lead := map[string]string{"pipe": "|^", "ctrla": "\x01", "wwiv": "|\x03", "wildcat": "@", "celerity": "|", "telegard": "`"}[c.kind]
 	if strings.IndexByte(lead, b[0]) < 0 {
 		return 0, false
 	}
@@ -223,6 +229,8 @@ func (c *codeTerm) code(b []byte, final bool) (n int, more bool) {
 		return c.wildcat(b), false
 	case "celerity":
 		return c.celerity(b), false
+	case "telegard":
+		return c.telegard(b), false // brdcodes.go
 	}
 	return 0, false
 }
@@ -252,12 +260,13 @@ func (c *codeTerm) setAttr(a int) {
 
 func (c *codeTerm) clearScreen() { c.Term.write([]byte("\x1b[2J\x1b[H")) }
 
-// pipeActs: "|" + x + y is a code the pipe reader acts on.
+// pipeActs: "|" + x + y is a code the pipe reader acts on (|T0-|T9: Mystic's
+// theme colours, brdcodes.go).
 func pipeActs(x, y byte) bool {
 	if isDigit(x) && isDigit(y) {
 		return int(x-'0')*10+int(y-'0') <= 31
 	}
-	return x == 'C' && y == 'L' || x == 'P' && y == 'I'
+	return x == 'C' && y == 'L' || x == 'P' && y == 'I' || x == 'T' && isDigit(y)
 }
 
 // pipe: |00-|15 set the foreground (background and blink kept: Renegade, WWIV,
@@ -267,10 +276,15 @@ func pipeActs(x, y byte) bool {
 // | + two characters (Mystic's |PO, |DE, |UN ... and Renegade's eaten |32-|99)
 // stays as text.
 func (c *codeTerm) pipe(b []byte) int {
+	if b[0] == '^' { // Renegade's user colours (brdcodes.go)
+		return c.renegadeColour(b)
+	}
 	if len(b) < 3 || !pipeActs(b[1], b[2]) {
 		return 0
 	}
 	switch {
+	case b[1] == 'T': // Mystic's theme colours (brdcodes.go)
+		c.setAttr(mysticThemeColours[b[2]-'0'])
 	case b[1] == 'C':
 		c.clearScreen()
 	case b[1] == 'P':
@@ -478,8 +492,12 @@ type bbsLoss struct {
 // change, rows ended with CR LF unless they fill the width, the board's clear
 // first when asked, normal colours at the end. ice: bit 7 is a bright
 // background (Ctrl-A E instead of I).
-func writeBBSCodes(kind string, d *Doc, clear, ice bool) ([]byte, bbsLoss) {
+func writeBBSCodes(kind string, d *Doc, clear, ice bool, themes ...map[int]string) ([]byte, bbsLoss) {
 	var out []byte
+	var theme map[int]string // attribute -> |T0-|T9 / ^0-^9 code to write it with (bbsThemes)
+	if len(themes) > 0 {
+		theme = themes[0]
+	}
 	var loss bbsLoss
 	if clear {
 		out = append(out, map[string]string{"pipe": "|CL", "ctrla": "\x01L", "wildcat": "@CLS@"}[kind]...)
@@ -520,7 +538,11 @@ func writeBBSCodes(kind string, d *Doc, clear, ice bool) ([]byte, bbsLoss) {
 				loss.bright++
 			}
 			if a != attr {
-				out = appendCodes(kind, out, attr, a, ice)
+				if code, ok := theme[a]; ok && kind == "pipe" { // a theme or user colour the file had (brdcodes.go)
+					out = append(out, code...)
+				} else {
+					out = appendCodes(kind, out, attr, a, ice)
+				}
 				attr = a
 			}
 			_, na := cellAt(x + 1)
@@ -564,6 +586,10 @@ func writeBBSCodes(kind string, d *Doc, clear, ice bool) ([]byte, bbsLoss) {
 				force = n2 >= 0 && isUpperHex(byte(n1)) && isUpperHex(byte(n2)) || n1 == 'C' && n2 == 'L' && n3 == 'S'
 			case kind == "celerity" && ch == '|':
 				force = n1 >= 0 && (n1 == 'S' || strings.IndexByte(celerityLetters, byte(n1)) >= 0)
+			case kind == "pipe" && ch == '^':
+				force = n1 >= 0 && isDigit(byte(n1)) // Renegade's user colour ^0-^9 (brdcodes.go)
+			case kind == "telegard" && ch == '`':
+				force = n2 >= 0 && isUpperHex(byte(n1)) && isUpperHex(byte(n2))
 			}
 			switch ch { // bytes a terminal acts on
 			case 0x00, 0x07, 0x08, 0x09, 0x0A, 0x0C, 0x0D, 0x1A, 0x1B:
@@ -616,6 +642,8 @@ func appendCodes(kind string, out []byte, prev, a int, ice bool) []byte {
 		if a>>4&7 != cur>>4&7 {
 			out = append(out, 0x01, byte('0'+biosANSI[a>>4&7])) // the digits go in ANSI order: 1 red
 		}
+	case "telegard": // `XY: the attribute (brdcodes.go)
+		out = fmt.Appendf(out, "`%02X", a)
 	case "celerity":
 		if prev < 0 || prev>>4 != a>>4 {
 			// |S makes the foreground's colour the background (and the foreground black).

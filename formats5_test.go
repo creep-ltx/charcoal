@@ -54,6 +54,9 @@ func TestFiveFormats(t *testing.T) {
 					bad++
 					continue
 				}
+				if e == "pcb" && cellAttr(r) == 0 {
+					continue // the file writes black on black as @X00, which keeps the colour on PCBoard (pcformats.go)
+				}
 				if (rc != 32 && !near(ref.pal[cellFg(r)], p.pal[cellFg(v)])) || !near(ref.pal[cellBg(r)], p.pal[cellBg(v)]) {
 					bad++
 				}

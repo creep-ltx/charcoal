@@ -98,7 +98,7 @@ func weightByName(n string) int {
 
 // batchKinds: the kinds of file a run can animate, for the requester and the report.
 var batchKinds = []struct{ id, name string }{
-	{"ansi", "ANSI (.ans .asc .txt .nfo .diz)"}, {"seq", "PETSCII (.seq)"}, {"ata", "ATASCII (.ata)"},
+	{"ansi", "ANSI (.ans .asc .txt .nfo .diz; .msg .bbs ... in BBS colour codes stay in them)"}, {"seq", "PETSCII (.seq)"}, {"ata", "ATASCII (.ata)"},
 	{"vt52", "Atari ST (.vt)"}, {"other", "other art (.bin .xb .pcb .avt ...: written as .ans / .seq)"},
 }
 
@@ -473,7 +473,7 @@ func batchNotArt(name string, b []byte) string {
 	if strings.HasSuffix(lname, ".c") && !isMarq(b) {
 		return "C source, not a screen"
 	}
-	if !batchArtExt.MatchString(name) && !bytes.Contains(b, []byte("\x1b[")) {
+	if !batchArtExt.MatchString(name) && !bytes.Contains(b, []byte("\x1b[")) && bbsCodesKind(b, name) == "" { // (a board's .msg / .bbs in its colour codes is art)
 		return "not an art file (no art ending, no ANSI codes)"
 	}
 	return ""
@@ -527,8 +527,10 @@ func (r *batchRun) animate(it *batchItem, root, rel, full string, b []byte) {
 		return
 	}
 	fmtID := a.pageStreamFormat()
-	kind := fmtID
-	if !streamFormats[a.saveFmt] && a.saveFmt != "text" {
+	kind, enc := fmtID, fmtID // enc: the format the versions are written in
+	if isBBSCodes(a.saveFmt) {
+		enc = a.saveFmt // a file in a board's colour codes stays in them (brdcodes.go)
+	} else if !streamFormats[a.saveFmt] && a.saveFmt != "text" {
 		kind = "other"
 	}
 	if r.spec.Types != nil && !r.spec.Types[kind] {
@@ -560,6 +562,8 @@ func (r *batchRun) animate(it *batchItem, root, rel, full string, b []byte) {
 		}
 	} else if a.saveFmt == "text" {
 		it.note = "plain text: now with ANSI codes"
+	} else if enc != fmtID {
+		it.note = "in its " + bbsCodeName[enc]
 	}
 	names, stub := r.spec.variantNames(r.board, outRel, r.spec.Variants)
 	if r.spec.Variants > len(names) {
@@ -603,7 +607,7 @@ func (r *batchRun) animate(it *batchItem, root, rel, full string, b []byte) {
 		var cost animCost
 		if r.spec.budgeted() {
 			var why string
-			if o, cost, why = r.pickFitting(fmtID); o == nil {
+			if o, cost, why = r.pickFitting(enc); o == nil {
 				if len(it.outs) == 0 {
 					it.skipped = why
 				} else {
@@ -612,14 +616,14 @@ func (r *batchRun) animate(it *batchItem, root, rel, full string, b []byte) {
 				return
 			}
 		} else if o = r.pick(); o != nil {
-			cost = a.costOf(fmtID, o, r.board)
+			cost = a.costOf(enc, o, r.board)
 		}
 		if o == nil {
 			it.skipped = "none of the chosen effects works on this page (" + a.fadeRefused() + ")"
 			return
 		}
 		a.order = o
-		data, err := a.encodeFor(fmtID, r.board, nil)
+		data, err := a.encodeFor(enc, r.board, nil)
 		if err != nil {
 			it.skipped = err.Error()
 			return
@@ -637,7 +641,7 @@ func (r *batchRun) animate(it *batchItem, root, rel, full string, b []byte) {
 			if i >= len(c.names) {
 				continue
 			}
-			if data, err := a.encodeFor(fmtID, c.b.id, nil); err == nil && write(copyPath(c.names[i], c.b.id), data, -1) {
+			if data, err := a.encodeFor(enc, c.b.id, nil); err == nil && write(copyPath(c.names[i], c.b.id), data, -1) {
 				it.effects = append(it.effects, "the same, with "+c.b.name+"'s codes")
 			}
 		}
@@ -1021,8 +1025,9 @@ folder, the names kept; the originals are never changed unless --replace is give
                         or telnet (only the pauses count); 14400 when not given
   --light               light effects only (at most 1.5x the screen's plain file)
   --weight light|medium no heavier than this
-  --bbs ID              amiexpress, mystic, pcboard, synchronet, tempest or none: the
-                        board whose pause codes the files get (default: My BBS in Settings)
+  --bbs ID              amiexpress, mystic, pcboard, synchronet, tempest, fame, cnet,
+                        imagebbs, imagebbsw, cbase or none: the board whose pause codes
+                        the files get (default: My BBS in Settings)
   --copies LIST         also a copy for these boards beside each file (name-<board>.ext)
   --every N --pause MS  a draw order pauses MS ms every N cells (40, 40)
   --hold MS             a frame effect holds each frame MS ms (its own)
@@ -1117,7 +1122,7 @@ func animateCLI(args []string, stdout, stderr *os.File) int {
 			if v, ok = val(); ok {
 				v = strings.ToLower(v)
 				if v != "none" && boardByID(v) == nil {
-					return bad("no board %q (amiexpress, mystic, pcboard, synchronet, tempest or none)", v)
+					return bad("no board %q (amiexpress, mystic, pcboard, synchronet, tempest, fame, cnet, imagebbs, imagebbsw, cbase or none)", v)
 				}
 				s.Board = v
 			}

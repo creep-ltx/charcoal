@@ -176,7 +176,7 @@ func (a *App) writeStreamFramesPaced(fmtID string, docs []*Doc, sauce bool) ([]b
 	var ps []pause
 	for i, d := range docs {
 		if i > 0 {
-			ps = append(ps, pause{len(out), a.holdOf(i - 1)})
+			ps = append(ps, pause{at: len(out), ms: a.holdOf(i - 1)})
 		}
 		clear := i > 0 || a.info.clear
 		switch fmtID {

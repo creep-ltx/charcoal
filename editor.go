@@ -1902,7 +1902,7 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		}
 	}
 	if a.codes != "" {
-		a.msg(bbsOpenNote(a.codes, a.saveFmt))
+		a.msg(bbsOpenNote(a.codes, a.saveFmt) + bbsThemeNote(a.codes, b))
 		if a.codes == "ctrla" && ctrlaUsesIce(b) {
 			a.ice = true // Ctrl-A E: bright backgrounds
 		}
@@ -1918,7 +1918,7 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 		// to WWIV) stays ANSI.
 		if _, l := writeBBSCodes(a.codes, a.doc, false, a.ice); l.blink > 0 || l.hearts > 0 {
 			a.saveFmt = "ansi"
-			a.msg(bbsOpenNote(a.codes, a.saveFmt))
+			a.msg(bbsOpenNote(a.codes, a.saveFmt) + bbsThemeNote(a.codes, b))
 		}
 	}
 	a.applyMode()
@@ -2875,7 +2875,7 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 	paced := func(out []byte, p []pause) []byte {
 		if b := boardByID(board); b != nil && b.shows(fmtID) {
 			if ps != nil {
-				*ps = p
+				*ps = b.waited(p) // what the board waits (whole seconds on some: boardswhole.go)
 			}
 			return b.pace(out, p)
 		}
@@ -3017,10 +3017,16 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		}
 		return out, nil
 	case "pcb":
+		if n := pcbLoss(d); n != "" {
+			a.msg("Saved, but " + n)
+		}
 		return writePCBoard(d, info.clear), nil
 	case "avt":
 		return writeAvatar(d, info.clear), nil
-	case "pipe", "ctrla", "wwiv", "wildcat", "celerity":
+	case "pipe", "ctrla", "wwiv", "wildcat", "celerity", "telegard":
+		if a.animatedCodes(fmtID, board) { // a draw order, or frames with a board's pauses (brdcodes.go)
+			return a.encodeCodesAnimated(fmtID, board, ps), nil
+		}
 		// Frames one after another, each after the board's clear (as a stream file's frames).
 		docs := []*Doc{d}
 		if a.nFrames() > 1 {
@@ -3029,7 +3035,7 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		var out []byte
 		var loss bbsLoss
 		for i, fd := range docs {
-			o, l := writeBBSCodes(fmtID, fd, info.clear || i > 0, a.ice)
+			o, l := writeBBSCodes(fmtID, fd, info.clear || i > 0, a.ice, a.bbsThemes(fmtID)) // (theme colours: brdcodes.go)
 			out, loss = append(out, o...), loss.add(l)
 		}
 		if n := loss.note(fmtID); n != "" {

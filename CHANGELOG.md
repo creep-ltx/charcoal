@@ -2,6 +2,25 @@
 
 Each version's section is also its release page on GitHub. Newest first.
 
+## Unreleased
+
+- **FAME, CNet and Image BBS 1.2 (whole seconds)** in Save for board, Animate and Animate a folder: these boards
+  can only wait whole seconds (FAME `~W`, CNet's `{W}`, Image's `£W`), so each frame's hold becomes the nearest
+  whole second (at least one), and the play times shown are what the board really waits.
+- **Animated files in a board's colour codes:** a menu in pipe codes, Synchronet Ctrl-A, WWIV, Wildcat!,
+  Celerity or Telegard codes, given a draw order or an effect, is saved as its animation in those same codes
+  (with your board's pauses). Animate a folder does the same: such files keep their codes and their names,
+  instead of becoming `.ans` files in ANSI colours.
+- **PCBoard `@X00` and `@XFF`** are read as PCBoard reads them: `@X00` keeps the current colour, `@XFF` brings it
+  back. **Changed:** a `.pcb` whose author meant `@X00` as black on black shows those characters in the colour
+  before. CharEdit writes black on black as `@X80` (it looks the same) and never writes either code.
+- **Telegard** `` `0E ``-style colour codes are read and written (Open as *PC: Telegard `XY*, Save as).
+- **Mystic's theme colours `|T0`-`|T9` and Renegade's user colours `^0`-`^9`** show in the boards' default
+  colours instead of as text, and are saved back as the same codes.
+- **DirArt: the disk's header line is part of the art.** The first row of a DirArt page is the disk's name, which
+  the C64 shows reversed above the files; the rows below are the files. **Changed:** a DirArt disk opens one row
+  taller (the header first).
+
 ## 0.1b13 (2026-10-16)
 
 - **Wide characters on Unicode pages:** Chinese, Japanese and Korean characters, fullwidth forms and emoji take

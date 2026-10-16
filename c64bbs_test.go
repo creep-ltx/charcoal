@@ -250,7 +250,7 @@ func TestCbbsPausesThroughBoards(t *testing.T) {
 // and the file ends with a RETURN.
 func TestCbbsImageLayout(t *testing.T) {
 	stream := append(bytes.Repeat([]byte("^"), 300), "AB\x0dCD"...)
-	ps := []pause{{0, 3200}, {79, 100}, {160, 900}, {301, 400}}
+	ps := []pause{{at: 0, ms: 3200}, {at: 79, ms: 100}, {at: 160, ms: 900}, {at: 301, ms: 400}}
 	file := boardByID("imagebbs").pace(stream, ps)
 	if !bytes.HasPrefix(file, []byte("\x5cSO^^\x5cS2^\x5cS0^")) {
 		t.Fatalf("3.2 s: %q", file[:20])
@@ -263,7 +263,7 @@ func TestCbbsImageLayout(t *testing.T) {
 		t.Fatalf("%d ms, %q", ms, got)
 	}
 	// A £ is ££ also in a slowed character.
-	file = boardByID("imagebbs").pace([]byte{pound, 'A'}, []pause{{0, 300}})
+	file = boardByID("imagebbs").pace([]byte{pound, 'A'}, []pause{{at: 0, ms: 300}})
 	if !bytes.Equal(file, []byte("\x5cS3\x5c\x5c\x5cS0A\x0d")) {
 		t.Fatalf("£: %q", file)
 	}
@@ -273,7 +273,7 @@ func TestCbbsImageLayout(t *testing.T) {
 // quote mode.
 func TestCbbsCBaseEscapes(t *testing.T) {
 	stream := []byte("\x5cN@:\"\x5cS@:\"\x0d")
-	ps := []pause{{1, 66}, {5, 99}}
+	ps := []pause{{at: 1, ms: 66}, {at: 5, ms: 99}}
 	file := boardByID("cbase").pace(stream, ps)
 	want := []byte("\x5c\x92\x10\x92\x10\x92N@\x92:\"\x10\x5c\x10S\x10@:\"\x0d")
 	if !bytes.Equal(file, want) {
@@ -292,8 +292,8 @@ var cbbsSGRs = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 func TestCbbsBoardColours(t *testing.T) {
 	a := testApp(t, "pc")
 	randomPage(a, rand.New(rand.NewSource(5)), 80, 25)
-	for i := range a.doc.cells { // no blink: Mystic 1.10 has no code for it
-		a.doc.cells[i] = makeCell(cellCh(a.doc.cells[i]), cellFg(a.doc.cells[i]), cellBg(a.doc.cells[i])&7, 0)
+	for i := range a.doc.cells { // no blink: Mystic 1.10 has no code for it; no black on black: PCBoard's @X00 saves a colour
+		a.doc.cells[i] = makeCell(cellCh(a.doc.cells[i]), max(1, cellFg(a.doc.cells[i])), cellBg(a.doc.cells[i])&7, 0)
 	}
 	a.order = &drawOrder{Pattern: "top"}
 	for id, code := range map[string]string{"mystic": "|14", "synchronet": "\x01Y", "pcboard": "@X0E"} {
@@ -452,7 +452,7 @@ func TestCbbsRealFiles(t *testing.T) {
 			}
 			return len(b)
 		}
-		ps := []pause{{at(len(b) / 3), 500}, {at(len(b) / 2), 2000}}
+		ps := []pause{{at: at(len(b) / 3), ms: 500}, {at: at(len(b) / 2), ms: 2000}}
 		for id, model := range map[string]func([]byte) ([]byte, int, error){"imagebbs": cbbsModelImage, "cbase": cbbsModelCBase} {
 			got, _, err := model(boardByID(id).pace(b, ps))
 			if err != nil {

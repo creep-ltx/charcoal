@@ -740,6 +740,9 @@ func TestChsDirArtEditor(t *testing.T) {
 	}
 	a.doc = chsFDirArtPage(7, 12)
 	d := a.doc.clone()
+	for x := 0; x < 16; x++ { // the first row is the header line: LIST shows it reversed (dirarthead.go)
+		d.set(x, 0, makeCell(cellCh(d.get(x, 0))|0x80, 1, 0, 0))
+	}
 	p := filepath.Join(t.TempDir(), "art.d64")
 	if !a.writeOut(p, "dirart") || a.srcKind != "dirart" {
 		t.Fatal(a.message)
@@ -754,7 +757,7 @@ func TestChsDirArtEditor(t *testing.T) {
 	if !b.writeOut(p, b.saveFmt) {
 		t.Fatal(b.message)
 	}
-	if c := chsFOpen(t, p); cellCh(c.doc.get(0, 0)) != 0x41 || c.doc.rows != 12 {
+	if c := chsFOpen(t, p); cellCh(c.doc.get(0, 0)) != 0xC1 || c.doc.rows != 12 {
 		t.Error("Ctrl+S")
 	}
 	// Other pages do not offer it; a disk with a screen program still opens as the screen.
@@ -772,8 +775,8 @@ func TestChsDirArtEditor(t *testing.T) {
 	raw, _ := os.ReadFile(p2)
 	e := c64xFApp(t)
 	e.loadBytes(raw, "screen.d64", p2, "dirart")
-	if !e.dirart() || e.doc.rows != 1 || cellCh(e.doc.get(0, 0)) != 19 { // "SCREEN"
-		t.Errorf("Open as DirArt: %s %d rows %d", e.machine, e.doc.rows, cellCh(e.doc.get(0, 0)))
+	if !e.dirart() || e.doc.rows != 2 || cellCh(e.doc.get(0, 1)) != 19 { // the header, then "SCREEN"
+		t.Errorf("Open as DirArt: %s %d rows %d", e.machine, e.doc.rows, cellCh(e.doc.get(0, 1)))
 	}
 	// Marq's and Petmate9's DirArt.
 	marq := []byte("unsigned char frame0000[]={\n" + strings.Repeat("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,\n", 2) + "};\n// META: 16 2 DIRART upper\n")

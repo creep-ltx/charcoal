@@ -55,7 +55,7 @@ Settings, keys and autosaves are kept in `%AppData%\Charcoal` on Windows,
 ## What it is
 
 An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, the BBS colour codes of Mystic,
-Renegade, Synchronet, WWIV, Wildcat! and Celerity, XBin, iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii),
+Renegade, Synchronet, WWIV, Wildcat!, Celerity and Telegard, XBin, iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii),
 Unicode terminal art (UTF-8 ANSI in 256 and 24-bit colours, durdraw) and IRC art (mIRC colour codes),
 Atari ATASCII, Atari ST VT52 and IGS, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens, Amstrad CPC
 text art (AMSCII), MSX (SCREEN 0 and 1), Sharp MZ-700, teletext (BBC Micro Mode 7, Ceefax), Viewdata (Prestel, Telstar) and Minitel (Videotex `.vdt`), drawn with the real bitmap fonts: Topaz
@@ -175,9 +175,11 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   as TEDSE saves it) and in the BASIC listing (the set POKEd to `$E000`) and ACME source (the set at `$2000`);
   all checked in VICE's xplus4, pixel for pixel.
 - **DirArt** (Model: DirArt): art made of a C64 disk's directory. `LOAD"$",8` and `LIST` show one line per file,
-  its 16-character name in quotes: the page is 16 columns wide, a row per file (up to 144), light blue on blue.
-  Save as *C64 disk whose directory shows it* (`.d64`): each row a DEL file of 0 blocks, the disk named after the
-  file. Characters a name cannot hold (the quote, and reversed characters other than the control codes: as Marq's
+  its 16-character name in quotes: the page is 16 columns wide, light blue on blue. The **first row is the disk's
+  header line** (its 16-character name, which `LIST` shows reversed before the files: the row reads and saves its
+  characters reversed), then a row per file (up to 144). Save as *C64 disk whose directory shows it* (`.d64`):
+  the first row the disk's name, each other row a DEL file of 0 blocks; the disk ID and DOS type (`CE 2A` on a new
+  disk) are kept from the disk the page came from. Characters a name cannot hold (the quote, and reversed characters other than the control codes: as Marq's
   editor and Petmate9 mark them) become spaces, and the save says how many. A `.d64` without a screen program
   of CharEdit's opens as a DirArt page (Open as "C64 DirArt" opens any disk's directory); saved again, it is
   written over that disk: its programs, and the names that did not change, stay as they were. Marq's `DIRART`
@@ -302,7 +304,9 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   one read from Telstar keeps every other field when saved, a new one is numbered by its name, `200a.json` is
   page 200 frame a). Teletext files open as Viewdata with Open as; a Viewdata page also saves as `.tti` and an
   edit.tf link. **Play** sends the stream to a Viewdata terminal on screen.
-- **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save; iCEDraw (.idf), ArtWorx (.adf) and
+- **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save (`@X00` keeps the colour and `@XFF`
+  brings it back, as PCBoard and Synchronet read them: black on black is written `@X80`, bright white on white
+  `@X7F`); iCEDraw (.idf), ArtWorx (.adf) and
   TundraDraw (.tnd) open with their own fonts and colours and save (see Files for other editors). The same art
   in five formats (ansilove's test files, `testdata/alove`) gives the same page in all of them. PC attribute
   bytes are in BIOS colour order and are converted.
@@ -312,7 +316,9 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   shortest codes. A file saves back in its codes, also one with ANSI escapes too (Save as has ANSI). Pipe codes
   write bright backgrounds and blink as `|24`-`|31` (WWIV, Synchronet and IcyDraw show them, Mystic 1.10 and
   Renegade do not: the save says how many cells), a `|` as Mystic's `|PI`. A board's code CharEdit cannot show (a pause, the caller's name, `|PO`, Ctrl-A `P`) stays on the
-  page as text and is written back as it came, so it still works on the board.
+  page as text and is written back as it came, so it still works on the board. Colours a sysop or caller sets
+  up (Mystic's theme colours `|T0`-`|T9`, Renegade's `^0`-`^9`) show in the boards' default colours and are
+  written back as those codes where the page has those colours.
 
   | Format | Codes | Read as |
   |---|---|---|
@@ -321,6 +327,7 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   | WWIV (`.msg`) | Ctrl-C (♥) + `0`-`9` (each caller's colours: the defaults are read), `\|nn`, `\|#n` | WWIV 5's `outstr`; written with `\|nn` only, since hearts differ per caller (a ♥ in the art becomes a space) |
   | Wildcat! (`.bbs`) | `@BF@`, background and foreground as capital hex digits, `@CLS@` | Synchronet's Wildcat! mode |
   | Celerity (`.ans`, Open as only) | `\|k \|b \|g \|c \|r \|m \|y \|w`, `\|d \|B ... \|W` bright, `\|S` swap | Synchronet's Celerity mode (no blink: it is dropped, and the save says so) |
+  | Telegard (`.msg`) | `` ` `` + the attribute as two capital hex digits (`` `0E `` yellow, `` `1F `` white on blue) | Telegard 3's sample screens (its `~XX` codes stay text) |
 - **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
   character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's
   ROM, not shipped: the first run offers to download it from the VICE emulator project (SourceForge, or its
@@ -630,12 +637,22 @@ Amiga page): then all the colours stay ANSI.
 | Tempest | | `~DELAY(n)` | 1/50 s | `~` as `~~` | manual only |
 | Image BBS (C64) | | `£Sx` before the next character that shows, `£S0` after it | 0.1 s, 1.5 s (longer: spread over the next characters) | `£` as `££`; never a code cut by its 80-byte lines, a line never starts with `↑` (it ends the file), a RETURN at the end (or the last line is lost) | source (1.2, 2.0) |
 | C*Base (C64) | | Ctrl-P and a reverse code that changes nothing | about 1/30 s (two jiffies) | `£` and `@` with a reverse code after them (`£N`, `@:` ... are codes); never cut by its 255-byte lines | source (3.3.8) |
+| FAME (whole seconds) | `~0\|` (the first byte must be `~`) | `~Wn\|` | 1 s, 10 | `~` as `~~` | its guide |
+| CNet (whole seconds) | Ctrl-Q `@6}` (no word wrap, no More?) | Ctrl-Q `Wn}` | 1 s | Ctrl-Q and Ctrl-Y (◄ ↓) become spaces: nothing escapes them | its MCI help (3.05c) |
+| Image BBS 1.2 (C64, whole seconds) | | `£Wx` | 1 s, 15 (the first second is short; Image 2.0 does not wait) | as Image's `£S` | source (1.2) |
+
+The boards marked *(whole seconds)* wait whole seconds only: each frame's hold becomes the nearest whole second
+(at least one), a draw order's short pauses are gathered into whole seconds (the total kept), and the play times
+CharEdit shows are what the board waits.
 
 Not offered: boards with no fixed delay code (System-X, Sigma Express, DayDream, ENiGMA½, Talisman, Wildcat,
-Logic), with only whole seconds (FAME `~W`, CNet `{W}`) or a fixed 0.8 s (Renegade `%DE`,
-Telegard `@8`), Hydra (its timed pause shows a prompt) and Ami-Express 4.x (its manual has no `~w`); on the C64,
-Image's `£W` (whole seconds, and in the 2.0 source no wait at all), Color 64 (only `£v`, a speed of unknown units),
-C-Net 64/128, DMBBS and Centipede (their codes are not known here). ATASCII and VT52 files get no codes.
+Logic), with a fixed 0.8 s (Renegade `%DE`, Telegard `@8`), Hydra (its timed pause shows a prompt) and Ami-Express
+4.x (its manual has no `~w`); on the C64, Color 64 (only `£v`, a speed of unknown units), C-Net 64/128, DMBBS and
+Centipede (their codes are not known here). ATASCII and VT52 files get no codes.
+
+A file in a board's colour codes (pipe, Ctrl-A, WWIV, Wildcat!, Celerity, Telegard) saved with a draw order, an
+effect, or frames with a board's pauses is written as its animation **in its own codes** (the board's pauses
+too), as is every such file in Animate a folder.
 
 ## Animate a folder
 
@@ -664,7 +681,7 @@ never touched unless you tick *Replace the originals*, and then each is kept as 
 | Ami-Express 5 | `001.LOGON.TXT`, `002.LOGON.TXT` ... | `LOGON.TXT` holds `~3SR_BBS:Node0/Screens/LOGON\|` (the screens folder is asked for) |
 | Mystic 1.10 | `logon.ans`, `logon.an1` ... `logon.an8` (9 at most) | by itself, when `logon.an1` is there |
 | Synchronet | `logon.ans`, `logon1.ans`, `logon2.ans` ... | a menu name with a wildcard: `bbs.menu("logon*")`, `@MENU:logon*@` (the stock logon.js shows `logon`, `logon1` ... one after another) |
-| PCBoard, Tempest, none | `LOGON.ANS`, `LOGON-2.ANS` ... | no random screens known: just numbered |
+| PCBoard, Tempest, FAME, CNet, none | `LOGON.ANS`, `LOGON-2.ANS` ... | no random screens known: just numbered (FAME's `~SR_` cycles `1-NAME`, `2-NAME` ...: not written yet) |
 
 - A **report** at the end: each file, the effect (and the seed of the effects with random parts), the size before
   and after, each output's size and play time at the budget's speed, and what was skipped and why (not art, a teletext or Spectrum page, already an animation, a
@@ -674,7 +691,7 @@ never touched unless you tick *Replace the originals*, and then each is kept as 
 For scripts, the same without a window:
 
 ```
-charedit --animate FOLDER|FILES... [--effect NAME|random] [--bbs amiexpress|mystic|pcboard|synchronet|tempest|none]
+charedit --animate FOLDER|FILES... [--effect NAME|random] [--bbs amiexpress|mystic|pcboard|synchronet|tempest|fame|cnet|imagebbs|imagebbsw|cbase|none]
                    [--variants N] [--seed N] [--out DIR] [--subfolders] [--replace]
                    [--detail small|medium|large] [--max-kb N] [--max-seconds N --at BPS|telnet] [--light] ...
 ```
@@ -849,6 +866,7 @@ resizing and chat went both ways in each.
 | `c64x.go`, `c64x_prg.go`, `c64x_d64.go`, `c64x_ctm.go` | C64 multicolour and ECM, CharEdit's own `.prg`, `.d64`, the ACME/BASIC exports with modes and sets, CharPad `.ctm` (`c64x_test.go` runs every program in a 6502) |
 | `c64bbs.go`, `boardcolours.go` | the C64 boards' pauses (Image BBS, C*Base) and Image's £ codes read and written; the PC boards' own colour codes in their animated files (`c64bbs_test.go` with models of Image's and C*Base's display code) |
 | `bbscodes.go` | BBS colour codes: pipe, Synchronet Ctrl-A, WWIV, Wildcat!, Celerity, read in front of the ANSI terminal and written (`bbscodes_test.go`; real files when fetched, see HANDOFF) |
+| `boardswhole.go`, `brdcodes.go`, `dirarthead.go` | the whole-second boards (FAME, CNet, Image BBS's `£W`); animated files in a board's colour codes, Telegard's codes, Mystic's theme and Renegade's user colours; the DirArt header line (`brd_test.go`) |
 | `editorformats.go` | other editors' files: iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii, Marq's `.pet`/`.bas`/`.s`, Petmate JSON (`editorformats_test.go`; `editorformats_ext_test.go` checks against ansilove, IcyDraw's engine and Playscii's loader when they are there) |
 | `icymach.go`, `psciown.go`, `othformats.go`, `petmate9.go` | IcyDraw's PETSCII/ATASCII/ST pages, Playscii's other sets and palettes, PabloDraw `.pd` / TheDraw `.td` / BSAVE `.bsv`, Petmate9's machines (`oth_test.go`) |
 | `skypix.go`, `skyfonts.go` | SkyPix pages and the Amiga fonts they name (`oth_test.go`) |

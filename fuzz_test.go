@@ -356,6 +356,19 @@ func FuzzParsers(f *testing.F) {
 			}
 			return one(d)
 		})
+		check("dirart page", func() []*Doc { // with the header line first (dirarthead.go), written back the same
+			d, err := readDirArtPage(b)
+			if err != nil {
+				return nil
+			}
+			if d.rows <= dirartMax+1 {
+				img, _ := writeDirArtPage(d, b, "x")
+				if back, err := readDirArtPage(img); err != nil || chsFSameCodes(d, back) != "" {
+					t.Fatalf("dirart page written again: %v %s", err, chsFSameCodes(d, back))
+				}
+			}
+			return one(d)
+		})
 		check("d64", func() []*Doc {
 			if f, _, err := d64Art(b); err == nil {
 				d, _, _ := readC64Prg(f.data)

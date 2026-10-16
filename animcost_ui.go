@@ -55,7 +55,7 @@ func (d *AnimReq) cost(pat int, compute bool) (animCost, bool) {
 	if len(d.costs) > 400 {
 		d.costs = map[string]animCost{}
 	}
-	c := a.costOf(f, d.orderFor(pat), d.board())
+	c := a.costOf(a.animFormat(f), d.orderFor(pat), d.board()) // (a file in BBS colour codes: in them, brdcodes.go)
 	d.costs[key] = c
 	return c, true
 }

@@ -30,9 +30,12 @@ func hexVal(c byte) int {
 }
 
 // parsePCBoard reads PCBoard's @X colour codes, @CLS@ and @POS:n@; the rest prints as on an 80-column screen.
+// @X00 and @XFF are no colours: @X00 keeps the current colour, @XFF brings
+// it back (one is kept; light grey before any; PCBoard's PPL guide, Synchronet's putmsg.cpp).
 func parsePCBoard(b []byte, cols int) *Doc {
 	d := newDoc(cols, 25)
 	x, y, attr := 0, 0, 0x07
+	saved := 0x07
 	put := func(c byte) {
 		d.set(x, y, attrCell(c, byte(attr)))
 		if x++; x >= cols {
@@ -43,7 +46,14 @@ func parsePCBoard(b []byte, cols int) *Doc {
 		c := b[i]
 		switch {
 		case c == '@' && i+3 < len(b) && (b[i+1] == 'X' || b[i+1] == 'x') && isHex(b[i+2]) && isHex(b[i+3]):
-			attr = hexVal(b[i+2])<<4 | hexVal(b[i+3])
+			switch v := hexVal(b[i+2])<<4 | hexVal(b[i+3]); v {
+			case 0x00:
+				saved = attr
+			case 0xFF:
+				attr = saved
+			default:
+				attr = v
+			}
 			i += 3
 		case c == '@' && bytes.HasPrefix(b[i:], []byte("@CLS@")):
 			fillCells(d.cells[:d.rows*d.cols], blank)
@@ -89,11 +99,11 @@ func writePCBoard(d *Doc, clear bool) []byte {
 		last := d.lastCol(y)
 		for x := 0; x <= last; x++ {
 			v := d.get(x, y)
-			if a := int(cellAttr(v)); a != attr {
+			a, c := pcbCell(v)
+			if a != attr {
 				attr = a
 				out = append(out, fmt.Sprintf("@X%02X", a)...)
 			}
-			c := byte(cellCh(v))
 			switch c { // the bytes parsePCBoard acts on
 			case 0, 0x09, 0x0A, 0x0D, 0x1A:
 				c = ' '
@@ -112,6 +122,38 @@ func writePCBoard(d *Doc, clear bool) []byte {
 		}
 	}
 	return append(out, "@X07"...)
+}
+
+// pcbCell is how a cell is written with @X codes: @X00 and @XFF save and
+// restore the colour, so black on black is written @X80 (blinking black on
+// black: it looks the same on PCBoard's screens, which blink, not iCE), and
+// bright white on white loses its blink (@X7F).
+func pcbCell(v uint32) (attr int, c byte) {
+	attr, c = int(cellAttr(v)), byte(cellCh(v))
+	switch attr {
+	case 0x00:
+		attr = 0x80
+	case 0xFF:
+		attr = 0x7F
+	}
+	return attr, c
+}
+
+// pcbLoss says what a page loses in @X codes ("" nothing): bright white on
+// white cells lose their blink.
+func pcbLoss(d *Doc) string {
+	white := 0
+	for y := 0; y < d.rows; y++ {
+		for x := 0; x <= d.lastCol(y); x++ {
+			if cellAttr(d.get(x, y)) == 0xFF {
+				white++
+			}
+		}
+	}
+	if white == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d bright white on white cells lost their blink (@XFF brings back a saved colour on PCBoard)", white)
 }
 
 // safeByte: bytes a terminal would act on are written as spaces.
