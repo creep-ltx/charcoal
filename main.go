@@ -52,7 +52,7 @@ func dropFinderArgs() {
 }
 
 // version is Charcoal's version: X.YbN is a beta, X.Y a release. Tag releases as vX.YbN.
-const version = "0.1b9"
+const version = "0.1b10"
 
 func main() {
 	runtime.LockOSThread()
