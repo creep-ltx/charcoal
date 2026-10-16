@@ -667,7 +667,10 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   with ted (PetTerm.ted: `tedByte`; also Petmate9's 0x16+byte "tedFull" colour and ESC + one byte skipped),
   `petWriter.ted` for Animate's draw orders, `splitStream(... "plus4" ...)` via `a.tedMode()`, `newPetTermOn`;
   Marq `.c` (META PLUS4, colours 0-127, no flash) and Petmate (`c16Upper`/`c16Lower`, attribute bytes) in
-  export.go by `PetScreen.machine`. PNG/GIF border 32/40/48 (VICE's 384x288). Open as "Plus/4 PETSCII".
+  export.go by `PetScreen.machine`. Marq's BASIC 3.5 listing (`writeTEDBas`, POKE 65305/65301/65299, DATA
+  code,attribute x4 a line) and ACME source (`writeTEDAsm`; data only off 40x25) as "marqbas"/"marqasm" with
+  "c64 (Plus/4)" entries; attributes keep the flash bit. PNG/GIF border 32/40/48 (VICE's 384x288). Open as
+  "Plus/4 PETSCII".
   A PNG (every page type) now draws flashing and blinking cells in their "on" look, as GIF/APNG did; before,
   it showed the phase the screen was in when saved.
 - **Tests** (`ted_test.go`, helpers `tedF*`): palette spot values and order, KERNAL tables and ROM glyphs (with
@@ -682,9 +685,11 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   --without-alsa --without-pulse`, needs xa and dos2unix; run `xplus4 -default -sounddev dummy -warp
   -autostartprgmode 1 -limitcycles 30000000 -exitscreenshot out.png -autostart in.prg` from a folder holding the
   ROMs, with the real HOME: another HOME made it crash): CharEdit's PNG and VICE's screenshot are identical,
-  pixel for pixel, on a random page in both cases and on the 128-colour grid.
+  pixel for pixel, on a random page in both cases and on the 128-colour grid; with `CHARCOAL_PETCAT` (VICE's
+  petcat) and ACME the BASIC listing and the ACME program too (`TestTEDAsmAndBasic` checks DATA and runs ACME's
+  program in the 6502 without VICE).
 - Not done: custom character sets on Plus/4 pages (TEDSE's .chrs, a .prg with a set; the font editor works for
-  the page only), Marq's Plus/4 BASIC/ACME exports, the screen editor's ESC commands (skipped when read),
+  the page only), the screen editor's ESC commands (skipped when read),
   Petmate9's own c16 .prg player output (assembled at run time; not read), multicolour text mode (TED $FF07
   bit 4), blocks pasted from a C64 page keep their 4-bit colours (shown at luminance 0), Marq's editor not run (needs Java).
 

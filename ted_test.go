@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -570,8 +572,10 @@ func TestTEDAnimate(t *testing.T) {
 // TestTEDInXplus4 runs CharEdit's .prg in VICE's xplus4 and compares its
 // screenshot with CharEdit's picture, pixel for pixel, border included.
 // CHARCOAL_XPLUS4 is a program taking (prg, png): it runs the program and
-// saves the screen (e.g. xplus4 -autostartprgmode 1 -limitcycles 30000000
-// -exitscreenshot png -autostart prg, with the ROMs in its folder).
+// saves the screen (e.g. xplus4 -autostartprgmode 1 -limitcycles 150000000
+// -exitscreenshot png -autostart prg, with the ROMs in its folder). With
+// CHARCOAL_PETCAT (VICE's petcat) and ACME (CHARCOAL_ACME or in PATH), the
+// BASIC listing and the ACME source run there too.
 func TestTEDInXplus4(t *testing.T) {
 	run := os.Getenv("CHARCOAL_XPLUS4")
 	if run == "" {
@@ -592,6 +596,10 @@ func TestTEDInXplus4(t *testing.T) {
 			g.cells[i] = tedCell(0xA0, i/2)
 		}
 	}
+	petcat, acme := os.Getenv("CHARCOAL_PETCAT"), os.Getenv("CHARCOAL_ACME")
+	if acme == "" {
+		acme, _ = exec.LookPath("acme")
+	}
 	for i, d := range pages {
 		for c := range d.cells { // no flashing: the screenshot's moment is not known
 			d.cells[c] &^= 0x8000
@@ -599,33 +607,54 @@ func TestTEDInXplus4(t *testing.T) {
 		a.doc = d
 		for _, lower := range []bool{false, true} {
 			a.setCase(lower)
-			prg := filepath.Join(dir, fmt.Sprintf("p%d%v.prg", i, lower))
-			shot := filepath.Join(dir, fmt.Sprintf("p%d%v.png", i, lower))
-			os.WriteFile(prg, writeTEDPrg(d, lower), 0o644)
-			if out, err := exec.Command(run, prg, shot).CombinedOutput(); err != nil {
-				t.Fatalf("%v: %s", err, out)
-			}
-			r, _ := os.Open(shot)
-			img, err := png.Decode(r)
-			r.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-			fb := a.renderDoc(d, 1)
-			if img.Bounds().Dx() != fb.w || img.Bounds().Dy() != fb.h {
-				t.Fatalf("VICE %v, CharEdit %dx%d", img.Bounds(), fb.w, fb.h)
-			}
-			bad := 0
-			for y := 0; y < fb.h; y++ {
-				for x := 0; x < fb.w; x++ {
-					r, gg, b, _ := img.At(x, y).RGBA()
-					if uint32(r>>8)<<16|uint32(gg>>8)<<8|uint32(b>>8) != fb.px[y*fb.w+x]&0xFFFFFF {
-						bad++
+			for _, kind := range []string{"prg", "bas", "acme"} {
+				prg := filepath.Join(dir, fmt.Sprintf("p%d%v%s.prg", i, lower, kind))
+				shot := filepath.Join(dir, fmt.Sprintf("p%d%v%s.png", i, lower, kind))
+				switch kind {
+				case "prg":
+					os.WriteFile(prg, writeTEDPrg(d, lower), 0o644)
+				case "bas":
+					if petcat == "" || i > 0 {
+						continue
+					}
+					os.WriteFile(prg+".bas", writeTEDBas(d, lower), 0o644)
+					if out, err := exec.Command(petcat, "-w3", "-o", prg, "--", prg+".bas").CombinedOutput(); err != nil {
+						t.Fatalf("petcat: %v %s", err, out)
+					}
+				case "acme":
+					if acme == "" || i > 0 {
+						continue
+					}
+					os.WriteFile(prg+".s", writeTEDAsm(d, lower), 0o644)
+					if out, err := exec.Command(acme, "-o", prg, "-f", "cbm", prg+".s").CombinedOutput(); err != nil {
+						t.Fatalf("acme: %v %s", err, out)
 					}
 				}
-			}
-			if bad > 0 {
-				t.Errorf("page %d lower %v: %d pixels differ", i, lower, bad)
+				if out, err := exec.Command(run, prg, shot).CombinedOutput(); err != nil {
+					t.Fatalf("%v: %s", err, out)
+				}
+				r, _ := os.Open(shot)
+				img, err := png.Decode(r)
+				r.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				fb := a.renderDoc(d, 1)
+				if img.Bounds().Dx() != fb.w || img.Bounds().Dy() != fb.h {
+					t.Fatalf("VICE %v, CharEdit %dx%d", img.Bounds(), fb.w, fb.h)
+				}
+				bad := 0
+				for y := 0; y < fb.h; y++ {
+					for x := 0; x < fb.w; x++ {
+						r, gg, b, _ := img.At(x, y).RGBA()
+						if uint32(r>>8)<<16|uint32(gg>>8)<<8|uint32(b>>8) != fb.px[y*fb.w+x]&0xFFFFFF {
+							bad++
+						}
+					}
+				}
+				if bad > 0 {
+					t.Errorf("page %d lower %v %s: %d pixels differ", i, lower, kind, bad)
+				}
 			}
 		}
 	}
@@ -752,5 +781,69 @@ func TestTEDPetmate9Checkout(t *testing.T) {
 		if !a.ted() || a.nFrames() != len(scr) || a.doc.inkCells() == 0 {
 			t.Errorf("%s: %s %s, %d frames of %d", f, a.mode, a.machine, a.nFrames(), len(scr))
 		}
+	}
+}
+
+// Marq's BASIC and ACME exports for the Plus/4: the DATA hold every cell; ACME's
+// program (when ACME is here: CHARCOAL_ACME or acme in PATH) puts up the page.
+func TestTEDAsmAndBasic(t *testing.T) {
+	a := tedFApp(t)
+	acme := os.Getenv("CHARCOAL_ACME")
+	if acme == "" {
+		acme, _ = exec.LookPath("acme")
+	}
+	for i, lower := range []bool{false, true} {
+		a.doc = tedFPage(int64(30+i), 40, 25, false)
+		a.setCase(lower)
+		bas, _ := a.encode("marqbas")
+		var data []int
+		for _, m := range regexp.MustCompile(`(?m)^\d+ data (.*)$`).FindAllStringSubmatch(string(bas), -1) {
+			for _, v := range strings.Split(m[1], ",") {
+				n, _ := strconv.Atoi(v)
+				data = append(data, n)
+			}
+		}
+		if len(data) != 2000 {
+			t.Fatalf("BASIC: %d numbers", len(data))
+		}
+		for c, v := range a.doc.cells {
+			if data[2*c] != cellCh(v) || data[2*c+1] != tedAttr(v) {
+				t.Fatalf("BASIC: cell %d", c)
+			}
+		}
+		if !strings.Contains(string(bas), fmt.Sprintf("40 poke 65301,%d\n", a.doc.bg)) || strings.Contains(string(bas), "65299,212") != lower {
+			t.Fatal("BASIC: the registers")
+		}
+		src, _ := a.encode("marqasm")
+		if acme == "" {
+			continue
+		}
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "x.s"), src, 0o644)
+		if out, err := exec.Command(acme, "-o", filepath.Join(dir, "x.prg"), "-f", "cbm", filepath.Join(dir, "x.s")).CombinedOutput(); err != nil {
+			t.Fatalf("acme: %v\n%s", err, out)
+		}
+		prg, _ := os.ReadFile(filepath.Join(dir, "x.prg"))
+		mem := make([]byte, 65536)
+		mem[0xFF13] = 0xD0 // the KERNAL's
+		copy(mem[0x1001:], prg[2:])
+		c64xF6502(t, mem, 0x100D)
+		if mem[0xFF15] != byte(a.doc.bg) || mem[0xFF19] != byte(a.doc.border) || mem[0xFF13] != map[bool]byte{true: 212, false: 0xD0}[lower] {
+			t.Fatal("ACME: the registers")
+		}
+		for c, v := range a.doc.cells {
+			if mem[0x0C00+c] != byte(cellCh(v)) || mem[0x0800+c] != byte(tedAttr(v)) {
+				t.Fatalf("ACME: cell %d", c)
+			}
+		}
+	}
+	// Another size: the data only.
+	a.doc = tedFPage(33, 12, 3, false)
+	src, _ := a.encode("marqasm")
+	if !strings.Contains(string(src), "; Border, bg, chars, colors (12 x 3)") || strings.Contains(string(src), "*=$1001") {
+		t.Fatal("ACME data only")
+	}
+	if acme == "" {
+		t.Log("ACME not found (set CHARCOAL_ACME): the sources were not assembled")
 	}
 }

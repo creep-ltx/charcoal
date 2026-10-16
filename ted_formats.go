@@ -357,6 +357,13 @@ func (a *App) encodeTED(fmtID string, d *Doc) ([]byte, bool, error) {
 		return writeTEDSE(d), true, nil
 	case "seq":
 		return writeSeqOn(d, a.lower(), a.info.clear, true), true, nil
+	case "marqbas":
+		if d.cols != 40 || d.usedRows() > 25 {
+			a.msg("Only the first 40x25 cells fit the BASIC listing")
+		}
+		return writeTEDBas(d, a.lower()), true, nil
+	case "marqasm":
+		return writeTEDAsm(d, a.lower()), true, nil
 	}
 	return nil, false, nil
 }
@@ -404,4 +411,83 @@ func newPetTermOn(d *Doc, ted bool) *PetTerm {
 		t.ted, t.fg = true, tedSeqInk
 	}
 	return t
+}
+
+// ---------------------------------------------------------------- Marq's BASIC and ACME exports
+
+// writeTEDBas gives the BASIC listing Marq's PETSCII editor exports for a
+// Plus/4 (m_plus4.pde save_bas; BASIC 3.5: `petcat -w3`): POKEs of the border
+// ($FF19 = 65305), the screen colour ($FF15 = 65301) and, for the lower case
+// set, $FF13 = 212, then each cell's code and attribute from DATA (4 cells a
+// line). The attribute keeps its flash bit (Marq's editor has none). 40x25 only.
+func writeTEDBas(d *Doc, lower bool) []byte {
+	var s strings.Builder
+	s.WriteString("10 rem petcat -text -w3 -o export.prg export.bas\n")
+	s.WriteString("20 print chr$(147)\n")
+	fmt.Fprintf(&s, "30 poke 65305,%d\n", d.borderColour()&127)
+	fmt.Fprintf(&s, "40 poke 65301,%d\n", d.bg&127)
+	if lower {
+		s.WriteString("45 poke 65299,212\n")
+	}
+	s.WriteString("50 for i=0 to 999:read a:poke 3072+i,a:read a:poke 2048+i,a:next\n")
+	s.WriteString("60 goto 60\n")
+	line := 70
+	for i := 0; i < 1000; i += 4 {
+		fmt.Fprintf(&s, "%d data ", line)
+		for j := 0; j < 4; j++ {
+			v := d.get((i+j)%40, (i+j)/40)
+			fmt.Fprintf(&s, "%d,%d", cellCh(v), tedAttr(v))
+			if j != 3 {
+				s.WriteString(",")
+			}
+		}
+		s.WriteString("\n")
+		line += 10
+	}
+	fmt.Fprintf(&s, "%d end\n", line)
+	return []byte(s.String())
+}
+
+// writeTEDAsm gives the ACME source Marq's PETSCII editor exports for a Plus/4
+// (save_asm): a 40x25 page is a program (10 SYS4109, $FF13 for the lower case
+// set, $FF19 and $FF15, the copy loop of the .prg); any other size is the data
+// only: border, background, the codes and the attributes.
+func writeTEDAsm(d *Doc, lower bool) []byte {
+	var s strings.Builder
+	self := d.cols == 40 && max(1, d.rows) == 25
+	if self {
+		s.WriteString("; Compile with: acme -o export.prg -f cbm export.s\n\n")
+		s.WriteString("\t*=$1001\n\t!byte $0b,$10,$0a, $00,$9e,$34,$31, $30,$39,$00,$00,$00\n\n")
+		if lower {
+			s.WriteString("\tlda\t#212\n\tsta\t$ff13\n")
+		}
+		fmt.Fprintf(&s, "\tlda\t#%d\n\tsta\t$ff19\n\tlda\t#%d\n\tsta\t$ff15\n", d.borderColour()&127, d.bg&127)
+		s.WriteString("\n\tldx\t#0\n\tldy\t#250\nkopy:\n")
+		for _, p := range []struct{ src, dst int }{{0, 0xC00}, {250, 0xC00 + 250}, {500, 0xC00 + 500}, {750, 0xC00 + 750},
+			{1000, 0x800}, {1250, 0x800 + 250}, {1500, 0x800 + 500}, {1750, 0x800 + 750}} {
+			fmt.Fprintf(&s, "\tlda\timg+%d,x\n\tsta\t$%x,x\n", p.src, p.dst)
+		}
+		s.WriteString("\n\tinx\n\tdey\n\tbne\tkopy\n\njumi:\tjmp jumi\n\nimg:\n")
+	} else {
+		fmt.Fprintf(&s, "; Border, bg, chars, colors (%d x %d)\nimg:\n\t!byte %d,%d\n", d.cols, max(1, d.rows), d.borderColour()&127, d.bg&127)
+	}
+	for part, name := range []string{"; Character data\n", "; Color data\n"} {
+		s.WriteString(name)
+		for y := 0; y < max(1, d.rows); y++ {
+			s.WriteString("\t!byte ")
+			for x := 0; x < d.cols; x++ {
+				v := d.get(x, y)
+				if x > 0 {
+					s.WriteString(",")
+				}
+				if part == 0 {
+					fmt.Fprintf(&s, "%d", cellCh(v))
+				} else {
+					fmt.Fprintf(&s, "%d", tedAttr(v))
+				}
+			}
+			s.WriteString("\n")
+		}
+	}
+	return []byte(s.String())
 }

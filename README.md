@@ -149,7 +149,7 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   shows the page; checked in VICE's xplus4: its screenshot and CharEdit's PNG are identical, pixel for pixel,
   border included), a **`.d64`** holding it, **`.scrn`** (TED Screen Editor's screen, with its `.proj` for the
   size and colours, written next to it), Marq's **`.c`** (`PLUS4`), Petmate9's **`.petmate`** (`c16Upper` /
-  `c16Lower` screens), **`.seq`** as a Plus/4 prints it (the colour codes give the KERNAL's luminance of each
+  `c16Lower` screens), Marq's BASIC listing and ACME source (both also checked in xplus4), **`.seq`** as a Plus/4 prints it (the colour codes give the KERNAL's luminance of each
   hue, FLASH ON / OFF are 0x82 / 0x84; the save says how many cells show another luminance), PNG / GIF / APNG
   as VICE's screenshots (384x288, the screen at 32,40). Open as "Plus/4 PETSCII" reads any file as a Plus/4
   prints it; changing a page between the C64 and the Plus/4 turns its colours into the nearest (Ctrl+Z
@@ -304,7 +304,7 @@ open again become the page's file (Save writes the same format again).
 | Marq's PETSCII editor | `.bas`, `.s` | C64 | a BASIC listing (for petcat) and an ACME program of a 40x25 screen (data only for other sizes); with a custom set, multicolour or ECM: the registers and the set (BASIC: VIC bank 3, screen `$C400`, set `$C800`; ACME: the set at `$2000`) | no | its source; the ACME output assembled by ACME 0.97 and run in a 6502 (c64x_test.go) |
 | CharPad | `.ctm` (v5-v9) | C64 | (read only) the character set, mode, colours; the map laid out as characters | yes, as a font or a page | CharPad 2.7's format pages; c64lib's test projects (`testdata/charpad`), every version the same page |
 | Petmate | `.json` | PETSCII | every screen (Petmate's JSON export) | yes | its source (exporters/json.ts) |
-| Marq's PETSCII editor | `.prg`, `.c` | Plus/4 | the program of its Plus/4 template (screen codes, attributes, border, background, case); the C array with `PLUS4` (no flash: the editor has none) | yes | its source (m_plus4.pde) and template; the `.prg` run in VICE's xplus4 |
+| Marq's PETSCII editor | `.prg`, `.c`, `.bas`, `.s` | Plus/4 | the program of its Plus/4 template (screen codes, attributes, border, background, case); the C array with `PLUS4` (no flash: the editor has none); its BASIC 3.5 listing (`petcat -w3`) and ACME source (data only for sizes other than 40x25), attributes with their flash bit | `.prg` and `.c` | its source (m_plus4.pde) and template; the `.prg`, the BASIC listing (tokenised by VICE's petcat) and the ACME program (ACME 0.96.4) run in VICE's xplus4: screenshots identical to CharEdit's PNG |
 | TED Screen Editor | `.scrn` + `.proj` | Plus/4 | attributes, its 24-byte signature, screen codes ("save screen"); the project's size, colours, case | yes (without a `.proj`: 40 columns, black) | its source and README; its own title and help screens |
 | Petmate9 | `.petmate` | Plus/4 | `c16Upper` / `c16Lower` screens with the TED's attribute bytes and colours | yes | its source |
 

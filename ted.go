@@ -30,6 +30,8 @@ func init() {
 		Format{"prg", "Plus/4 program that shows it (.prg)", ".prg", "c64 (Plus/4)"},
 		Format{"d64", "Plus/4 disk with the program (.d64)", ".d64", "c64 (Plus/4)"},
 		Format{"tedse", "TED Screen Editor screen (.scrn)", ".scrn", "c64 (Plus/4)"})
+	formats = append(formats, Format{"marqbas", "For other editors: PETSCII editor BASIC (.bas)", ".bas", "c64 (Plus/4)"},
+		Format{"marqasm", "For other editors: PETSCII editor ACME (.s)", ".s", "c64 (Plus/4)"})
 	editorOwn["tedse"] = true
 	marqMachines["PLUS4"] = "plus4"
 }
