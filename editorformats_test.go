@@ -612,7 +612,7 @@ func TestPsciRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := art.docs[0]
-	if got.bg != d.bg || got.ink != d.ink {
+	if got.bg != d.bg || atariText(got) != atariText(d) { // Playscii keeps the colour the text shows
 		t.Fatalf("atari colours %d/%d read back as %d/%d", d.ink, d.bg, got.ink, got.bg)
 	}
 	for i, v := range d.cells {

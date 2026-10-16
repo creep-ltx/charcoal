@@ -2,7 +2,7 @@ package main
 
 // ATASCII: the Atari 8-bit computers' text screen. A cell's byte is the
 // ATASCII code (128-255 inverse); the screen has one background, one text
-// colour (Doc.ink) and a border, as in GRAPHICS 0. Files are .ata: the bytes
+// colour (Doc.ink) and a border, as in GRAPHICS 0: the colour registers, see gtia.go. Files are .ata: the bytes
 // sent to the screen editor, with EOL (0x9B) between lines and ESC (0x1B)
 // before a control character that should show as its glyph.
 //
@@ -49,13 +49,6 @@ func init() {
 		atariFont("atari", "Atari (AltirraOS)", atariFontStd),
 		atariFont("atarixl", "Atari XL international (AltirraOS)", atariFontIntl))
 }
-
-// An Atari has 128 colours; these are 16 of them, close to the NTSC ones.
-var atariPalette = pal("atari", "Atari", 0x000000, 0xFFFFFF, 0x1C3F9E, 0x8EB4F0, 0x555555, 0xAAAAAA, 0xA83224, 0xE07A3A,
-	0xD6C840, 0x3E9A3A, 0x9AE07A, 0x2E8C8C, 0x7A3AA8, 0xD07AD0, 0x6B4A1E, 0xE8D8A8)
-
-// The Atari's own start-up screen: blue background, light blue text, black border.
-const atariBg, atariInk = 2, 3
 
 var atariFkeys = [][]int{
 	{0xA0, 0x19, 0x99, 0x15, 0x95, 0x0D, 0x0E, 0x16, 0x02, 0x82},
@@ -161,7 +154,7 @@ func parseAta(b []byte, cols int) *Doc {
 		cols = atariWidth(b)
 	}
 	d := newDoc(cols, 24)
-	d.bg, d.ink, d.border, d.glyph0 = atariBg, atariInk, 0, true
+	d.bg, d.ink, d.border, d.glyph0 = atariBg, atariInk, atariBorder, true
 	t := newAtariTerm(d)
 	var f fullest
 	t.beforeClear = func() { f.look(t.doc) }

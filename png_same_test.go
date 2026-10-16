@@ -18,8 +18,8 @@ func TestPNGExportUnchanged(t *testing.T) {
 		"amigapng2": "7fc4461b34e0fe5c",
 		"c64png":    "5028ddc5d9d10f57",
 		"c64png2":   "1ad74a2c9afc0660",
-		"ataripng":  "c149a8edb3b42b86",
-		"ataripng2": "9cd565a280a93053",
+		"ataripng":  "e7777fec6d995ff2", // GTIA register colours since 2026-10-16 (gtia.go)
+		"ataripng2": "6ff248e515ca4e7b",
 		"zxpng":     "7c4ceb4be0ac6498",
 		"zxpng2":    "4745b6d35ab871a2",
 		"ttpng":     "15fcee4a4128e027",

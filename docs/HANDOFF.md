@@ -46,13 +46,13 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 |---|---|
 | Amiga ANSI | .ans .asc .txt .nfo .diz, XBin, PNG/HTML; Amiga or PC guessed by learned byte weights (core.go) |
 | PC ANSI | + .bin (BIOS colour order!), XBin, PCBoard .pcb, Avatar .avt; iCEDraw .idf, ArtWorx .adf, Tundra .tnd, IcyDraw .icy, REXPaint .xp, Playscii .psci (see Other editors' files) |
-| Atari (ATASCII) | .ata (width 38/40 guessed); AltirraOS font built in |
+| Atari (ATASCII) | .ata (width 38/40 guessed); .xex and boot .atr (2026-10-16); AltirraOS font built in, an OS ROM's when present; GTIA colour registers |
 | Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL) |
 | PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form, or CharEdit's for sets/modes) .d64, CharPad .ctm read; multicolour and ECM (C64, C128 40); ROMs from VICE on first use |
 
 | Atari ST (VT52) | .vt; low/medium/high; EmuTOS font downloaded on first use (GPL); IGS .ig (2026-10-16): the drawing as a picture under the cells, see "Atari ST IGS" below |
 | PETSCII | PET 40/80, VIC-20, C64, C128 40/80; .seq .c .petmate .prg (Petmate form); ROMs from VICE on first use |
-| ZX Spectrum | .scr (6912 bytes); 48K ROM font built in (Amstrad allows passing it on) |
+| ZX Spectrum | .scr (6912 bytes), .tap (2026-10-16: loader + SCREEN$); 48K ROM font built in (Amstrad allows passing it on) |
 | Amstrad CPC | modes 0/1/2; .bin (AMSDOS program), .dsk, Playscii .psci (Logiker's exporter); firmware ROM font built in (Amstrad's permission) |
 | Teletext | .tti .ep1, edit.tf links (.url), Mode 7 dumps; Bedstead font (CC0) built in; a .tti carousel opens as frames (one per subpage) and saving rewrites only changed subpages' OL 0-24 rows, every other line kept (teletext.go writeTTIFrames) |
 | Minitel (2026-10-16) | .vdt (Videotex stream; screens a clear ends become frames); Bisson's Minitel font (CC0) built in; see "Minitel and Viewdata pages" |
@@ -637,6 +637,57 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   scroll), autosave keeps the cells only (the picture comes back when the file is opened again), Split/frames
   on IGS pages, the Animate draw orders in .ig. A space on pen 0 in the text part shows the picture (on the ST it
   paints pen 0): the only place the page differs from the ST.
+
+## Files that run on the machine, Atari colours (2026-10-16, branch r3-machines)
+
+- **Atari colours** (`gtia.go`): an Atari page's `Doc.bg/ink/border` are now the machine's registers as values
+  0-255: COLOR2 (710, the screen), COLOR1 (709: only its luminance shows, the text takes the screen's hue:
+  `atariText(d)` = bg&$F0 | ink&$0E) and COLOR4 (712). Start-up 148 / 202 / 0 (`atariBg`, `atariInk`,
+  `atariBorder`). Before, they were numbers 0-15 into a 16-colour list: old autosaves (no `gtia` flag in the
+  meta) go through `atariFromOld`. RGB: `a.atariRGB(v)` = `a.gtia()[v&$FE]` (luminance bit 0 ignored in text
+  modes); **never `a.pal[d.bg]` on an Atari page** (it panics on values > 15): the sites that did (drawCell,
+  borderPx, HTML, strip, paperRGB, paperColour, convertFromMachine, Playscii) have an atari case. `a.pal` on
+  an Atari page is 16 hues at luminance 8 (for code that wants some palette). Palettes `atari` (PAL, default) and
+  `atarintsc`, tables `gtiaPAL`/`gtiaNTSC` made at start by atari800's model (standard preset: gamma 2.35, levels
+  16-235, delay 26.8 / 23.2 degrees, PAL's even/odd delay table; *read* from its colours_ntsc.c / colours_pal.c,
+  written anew). They come out darker than measured palettes (atari800's act/jakub.act, Real.act: $94 is
+  #2D769D there, #034653 here): the model is what atari800 shows by default, not a measurement.
+- Colour UI (`drawAtariColours`): 16 hues x 8 luminances; left = COLOR1, right = COLOR2, middle = COLOR4 (all
+  undoable); under it "709: n 710: n 712: n". Keys: `atariColourKey` (Ctrl+0-7 = text luminance 0-14, background
+  keys = screen hue), `atariStep` (luminance / the 128 in order); `defaultColours` resets the start-up registers.
+  Playscii: its `atari` palette is GTIA's 128 in order (16 hues a row, a row a luminance): `psciGTIA` /
+  `gtiaOfPsci` map exactly.
+- **.xex / .atr** (`atari8.go`): `atariXexCode` at $2000 sets SDMCTL 0, SDLSTL/H = $2060, COLOR1/2/4, CHBAS ($E0 =
+  ROM font, else $24 = the own font at $2400), CHACT 2, SDMCTL $22, then `loop: LDA #0 STA ATRACT JMP loop`
+  (attract mode off), an RTS (the .atr's DOSINI) and "CharEdit" + width + rows (how it is read back). Display list
+  3x$70, $42 $3000, 23x$02, $41. Screen $3000 in ANTIC's screen codes (`atariInternal`); a 38-wide page from
+  column 2. Segments: code+DL, font (if any), screen, RUNAD. `.atr`: 720 x 128-byte sectors, boot header at
+  $1FFA (count, load, DOSINI) so the image from $2000 is the same memory; the OS calls $2000, which never
+  returns. The font goes in the file unless it is the standard set (`atari`, `atarirom`): the international set
+  is carried (no $CC set on a 400/800). Reading: `readAtariProgram` (only ours: code template + mark), opens as
+  the page (`loadAtari8`, srcKind xex/atr, own font restored by `useOwnFont`).
+- **OS ROM font**: `loadAtariROMFonts` (main, headlessApp) looks for ATARIXL.ROM / ATARIOSB.ROM / ATARIOSA.ROM in
+  the data dir, ~/.atari800, ~/.config/atari800, /usr/share/atari800, /usr/local/share/atari800; 10 KB (set at
+  $0800) or 16 KB (set at $2000, international at $0C00); fonts `atarirom` / `atarixlrom`. Not offered as a
+  download (Atari's ROMs may not be passed on). Not the default font: the user picks it.
+- **.tap** (`zxtap.go`): program header + `10 BORDER b: LOAD ""SCREEN$` / `20 PAUSE 0: GO TO 20` (autostart 10)
+  + CODE header (6912 at 16384) + the .scr (`writeSCRFont`, so the page's own font). Name = the saved file's
+  (`cpcTarget`), 10 characters. Reading: the first SCREEN$ (header + data, or a headerless 6912-byte block) and
+  the BORDER of a BASIC block before it.
+- Glue: formats inserted after `ata` / `scr` by `init()`; editorOwn xex/atr/tap; `loadAtari8 || loadZXTap` after
+  loadCPC; `reparseAtari8 || reparseZXTap` after reparseVideotex; `encodeAtari8`, `encodeZXTap` after
+  encodeCPC; `loadAtariROMFonts` in main.go and batch.go's headlessApp; help text in dialogs.go.
+- Tests (`mach_test.go`): palettes (greys, rising luminance, blue start-up screen, gold hue 1); colour UI and
+  keys, undo, NTSC switch, PNG colours; old autosave; **every .xex/.atr combination (38/40, ROM/own font, short
+  pages) loaded as DOS / booted as the OS does, run in a 6502 (`machF6502`), drawn by a model of ANTIC
+  (`machFAntic`: display list, CHBAS, CHACT, colour registers) and compared with the PNG export pixel for
+  pixel, border included**; round trips; editor save/open/Ctrl+S with an own font; ROM font detection;
+  .tap blocks byte for byte (headers, the tokenised BASIC, checksums), other tapes' loading screens, editor round
+  trip with the border. FuzzParsers has xex/atr and tap.
+- Not run in an emulator: none installed. atari800 was built from source in ~/.cache/charcoal-mach/src
+  (`--target=libatari800`, needs `CFLAGS=-Wno-error`), but running it was not allowed in that session; fuse is
+  not installed. Not done: pages taller than 24 rows in the .xex (only the first 24), a DOS 2 disk with the .xex
+  as a file, a tape loader for an own Spectrum font (the .scr carries the pixels anyway), .tzx.
 
 ## Keys and safety (2026-10-13, evening)
 

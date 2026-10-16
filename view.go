@@ -45,6 +45,8 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	var fgc, bgc uint32
 	smear := false
 	switch {
+	case a.atari(): // the colour registers (gtia.go)
+		bgc, it, ul = a.atariRGB(a.doc.bg), false, false
 	case a.screen():
 		bgc, it, ul = a.pal[a.doc.bg], false, false
 	case a.st():
@@ -67,7 +69,7 @@ func (a *App) drawCell(fb *FB, px, py, z int, v uint32) {
 	}
 	switch {
 	case a.atari():
-		fgc = a.pal[a.doc.ink]
+		fgc = a.atariRGB(atariText(a.doc))
 	case a.c64() && a.mach().mono: // the PET: one colour on the screen
 		fgc = a.pal[1]
 	case a.c64() && a.mach().colours == 8: // the VIC-20 shows 8 text colours

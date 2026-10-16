@@ -75,6 +75,10 @@ against each platform's best editor. Each step says what it wins.
 - **Party rule check**: size limits (Revision 80x500), no iCE/blink for PC, ROM font for PETSCII.
 - **Runs on the machine**: C64 .prg (done) and .d64 (done 2026-10-16), Atari .xex, Spectrum .tap, a matching screenshot PNG
   with the border.
+  - [x] Atari .xex and a boot .atr (2026-10-16, atari8.go): the page in its colour registers and font on any
+    400/800/XL/XE, checked in a 6502 + ANTIC model against the PNG pixel for pixel; not yet run in an emulator.
+  - [x] Spectrum .tap (2026-10-16, zxtap.go): BASIC loader + SCREEN$, blocks checked byte for byte; any tape's
+    SCREEN$ opens. Not yet run in an emulator (no fuse here).
 
 ## Step 4: PC artists feel at home (the biggest group)
 
@@ -114,7 +118,8 @@ against each platform's best editor. Each step says what it wins.
   real-CPC/emulator run of CharEdit's .bin, Caprice's 768x544 screenshot size, play the stream, custom
   characters (SYMBOL, not allowed in the compos).
 - **Spectrum**: UDG/charset editing; attributes-only painting.
-- **Atari 8-bit**: the real OS ROM font when present, the 128-colour palette, custom fonts.
+- [x] **Atari 8-bit** (2026-10-16, gtia.go, atari8.go): the real OS ROM font when present, the 128-colour palette
+  (PAL and NTSC, atari800's model) with the machine's colour registers, custom fonts (load, edit, save .fnt; in the .xex).
 - [x] **Atari ST IGS** (done 2026-10-16, igs.go, docs/igs-design.md): IGS files (the ST BBS graphics language) shown
   exactly (IcyDraw's engine ported; every one of IcyDraw's passing test renders matched pixel for pixel) as a
   picture under the ST page's cells; type VT52 text over it and save `.ig` with the drawing, sounds and closing
