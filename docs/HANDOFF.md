@@ -52,6 +52,8 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | ZX Spectrum | .scr (6912 bytes); 48K ROM font built in (Amstrad allows passing it on) |
 | Amstrad CPC | modes 0/1/2; .bin (AMSDOS program), .dsk, Playscii .psci (Logiker's exporter); firmware ROM font built in (Amstrad's permission) |
 | Teletext | .tti .ep1, edit.tf links (.url), Mode 7 dumps; Bedstead font (CC0) built in; a .tti carousel opens as frames (one per subpage) and saving rewrites only changed subpages' OL 0-24 rows, every other line kept (teletext.go writeTTIFrames) |
+| Minitel (2026-10-16) | .vdt (Videotex stream; screens a clear ends become frames); Bisson's Minitel font (CC0) built in; see "Minitel and Viewdata pages" |
+| Viewdata (2026-10-16) | a teletext page of 24 rows: .cpt streams (.car carousels as frames), 960-byte .bin frames, Telstar .json frames, and .tti / edit.tf |
 | Unicode (2026-10-16) | UTF-8 ANSI (256/24-bit SGR), durdraw .dur (frames), mIRC .irc (also written from PC pages), HTML; GNU Unifont's art blocks built in (OFL); see "Unicode page" below |
 
 CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide art shrunk to fit, m plays.
@@ -451,6 +453,74 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 - Not done: CharEdit's .bin has not run on a real CPC or an emulator (no CPC emulator here; the stub is checked by
   the Z80 test only); play (m) of the stream;
   BASIC listing; flashing inks shown as their first colour; custom characters (SYMBOL) ignored.
+
+## Minitel and Viewdata pages (2026-10-16, branch r2-videotex)
+
+- **Minitel** (`minitel.go`, `minitel_ui.go`): page type "mt" (`a.mt()`), 40x25 cells of 8x10 (`mtW`, `mtH`), row 0
+  the status row. The model is the Minitel's page memory as the STUM 1B gives it (the spec is online as text:
+  jbellue.github.io/stum1b; its tables are SVGs under img/p100-p104): a cell is a letter (`cellCh` 0x20-0x7F G0,
+  0x80+ the 30 characters of `mtExtra`: G2 signs and the accented letters a VGP5 Minitel shows) with colour,
+  `mtBlink`, `mtInv`, `mtDW`/`mtDH` and which part (`mtRight`, `mtTop`); or with `mtG1` a mosaic (code as teletext
+  writes sixels, 0x20-0x3F/0x60-0x7F) with colour, background, `mtLine` (= separated) and flash. **Zones**: a
+  letter has no background of its own; `mtDecode`/`mtRow` give it the background, underline (`mtLine`) and
+  conceal (`mtMask`) of the nearest space or mosaic to its left (a space whose zone bits differ from the zone it is
+  in starts a zone; a mosaic gives its background and ends underlining). `mtSettle` writes those into letters and
+  plain spaces, so a page's cells say what is shown. Empty cell `mtBlank` = black mosaic space (what FF fills
+  with). Colours in Minitel order (0 black, 1 red, 2 green, 3 yellow, 4 blue, 5 magenta, 6 cyan, 7 white);
+  palettes `minitelgrey` (the STUM's grey levels, the default) and `minitel`.
+- Brush codes 0xC0-0xFF are the 64 mosaics (0xC0 + blocks): the character table's last quarter, the F-keys
+  (`mtFkeys`), `mtCellOf`/`mtBrushOf`; `mtCellAlone` draws one. Typing (`mtType`) puts big letters on two or four
+  cells, written from the bottom row like the Minitel (not on rows 0-1, not at column 39); toggles in the tool
+  rail (`drawMTToggles`): Flash, Inv, Line, Mask, size, Reveal (= `showCodes`). Sixel tool: `mtPaintSixel`.
+- **Reading** (`mtTerm`, `parseVDT`): a small Minitel: C0 codes (BS HT LF VT CR FF RS US CAN SO SI REP SS2 SUB),
+  ESC + C1 attributes, CSI (cursor, J/K clears, P/@ characters, M/L rows), PRO1-3, the whole-screen mask, US to the
+  status row and LF back, DRCS definitions skipped (US 0x23 ... up to the next US). It keeps which spaces were
+  delimiters (`delim`) and settles at the end. Traps found on real pages: **G1 codes 0x40-0x5F show the mosaics
+  0x60-0x7F** (pages use `_` for the full block; the STUM table leaves them blank, MiEdit and VDT2BMP show them);
+  **0x16 works as SS2** (TF1's page writes "Télématique" so; VDT2BMP does the same); a control code after SS2
+  drops the SS2 (the STUM; a fuzz find). Screens a clear (FF, CSI 2J) ends become frames (`maxSplitFrames` cap).
+- **Writing** (`mtWrite`): FF, rows 1-24 left to right, then the status row (US 0x40 0x41 ... LF back). The writer
+  runs its own stream on an `mtTerm` as it goes (`mtWriter.emit`), so it always knows the Minitel's state: cursor
+  moves by HT, CR LF or US (US resets the attributes, CSI C is not used: VDT2BMP ignores it); a space that must
+  start a zone gets its ESC 0x5x/Z/Y/X/_ first (and one forced if nothing differs: the STUM's "the first space
+  after an attribute is a delimiter"); runs of 4+ use REP; big letters are written from their origin. Before a
+  letter, `context` makes the terminal's current background/underline/conceal those of the letter's zone by
+  writing the zone's start again, so a terminal that keeps attributes per cell (VDT2BMP) shows it the same.
+  Then up to 4 passes put right any cell still wrong (big letters over each other, lone parts: written from
+  their origin). 149 real pages: all come back cell for cell, CharEdit's streams are 15% smaller.
+- **What is not certain** (verify on a real Minitel or MAME's minitel2): VDT2BMP (jfdelnero's converter,
+  github.com/jfdelnero/minitel) draws 25 of the 149 pages differently from CharEdit and MiEdit: it keeps the
+  background and underline current when a letter is written (per cell) and resets the mosaic background on CR,
+  where the STUM's zones take them from the page. Example for the STUM's reading: 3614.vdt cycles a delimiter's
+  background to white so that "3614" shows white on the banner; VDT2BMP never shows it. CharEdit's own streams
+  differ in VDT2BMP on 19 of 148 pages.
+- **Viewdata** (`viewdata.go`): page type "vd", and `a.tt()` is true on it too (everything teletext does); only
+  24 rows (`newVDDoc`, `maxRows`, `vdCut` for a teletext file opened as Viewdata). `vdScreen`/`parseVDStream`
+  (CS starts a frame), `writeVDStream` (rows trimmed, CR LF only after a row shorter than 40, as Telstar's
+  RawTToRawV; 7 bits), `parseVDBin`/`writeVDBin` (960 bytes; attributes written 0x80-0x9F), Telstar frames
+  (`isTelstar`, `parseTelstar`: content types rawV/raw, rawT, edit.tf; markup is not read; `writeTelstar` keeps
+  the old frame's fields, a new one gets pid from the name `200a.json`). Telstar keeps row 0 for its header and
+  row 23 for system messages. Hold times on Viewdata frames are in seconds, as teletext's.
+- Glue (kept small): `init()` in both files adds to pageModes, modeOrder, modeNames, openAs, modeNoStream,
+  mirrorPairs, formats (and " mt"/" vd" to png/png2/gif/apng/utf8, " vd" to tti/tturl), fonts and palettes;
+  editor.go: `tt()` covers "vd", cell size/font/palette/printable/runes/maxRows/nColours/typing/pick/sixel/
+  setMode/makeTab/setRows/setCols/blockOp cases, `loadVideotex` after loadCPC, `reparseVideotex` with the
+  others, `encodeVideotex` before encodeFor's switch, Play (`videotexPlayer`, `videotexPlayBytes`); small cases
+  in view.go, panel.go (eight colours on Minitel), rowscols, start (two tiles; tile text at 2x for 10-row
+  cells), menus, main, frames, shapes, transitions, streams, fontfile/fontedit, uni_ui, prefs (defaults),
+  dialogs (help), viewer (`.vdt .cpt .car` in a folder).
+- Tests: `minitel_test.go` (font, stream basics, random pages round trip, big letters, `TestMinitelRealFiles`
+  with `CHARCOAL_VDT_FILES=dir` (and `CHARCOAL_VDT_OUT=dir` to keep CharEdit's streams), `TestMinitelLooksRight`
+  with `CHARCOAL_VDT_REF=dir` of x.vdt + x.bmp made by VDT2BMP (`-bmp:x.bmp x.vdt`; it reports, the models
+  differ; `CHARCOAL_VDT_DUMP=dir` writes side-by-side PNGs), the editor, Play, `FuzzVideotex` (any stream is
+  written back so it shows the same); `viewdata_test.go` (round trips of all three formats, MacViewdata bytes,
+  carousels, Telstar fields, `TestViewdataTelstarFrames` with `CHARCOAL_TELSTAR_FILES`); FuzzParsers reads
+  .vdt/.cpt/.bin/Telstar and checks the .vdt write-back. Samples used (not in the repo): 151 .vdt from
+  github.com/ludosevilla/minipaviCli, BwanaFr/minitel-server, jfdelnero/minitel, cquest/pynitel,
+  iodeo/Minitel-ESP32; Telstar's own frames from github.com/johnnewcombe/telstar-2.
+- Not done: DRCS characters (skipped), the 80-column (Mixte/Téléinformatique) mode, Telstar markup, a .car of
+  960-byte frames as frames (only streams), Viewdata pages from IcyDraw files, a run on a real Minitel. Play
+  goes at the toolbar's speed (2400 is the slowest; a Minitel is 1200).
 
 ## Keys and safety (2026-10-13, evening)
 

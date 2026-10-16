@@ -91,8 +91,15 @@ against each platform's best editor. Each step says what it wins.
 
 ## Step 5: platform by platform
 
-- **Teletext**: edit.tf's Esc+letter code entry and Esc ? table; reveal concealed text; Viewdata/Prestel
-  pages (40x24, same characters); Minitel/Videotex (.vdt) reusing the teletext code.
+- **Teletext**: edit.tf's Esc+letter code entry and Esc ? table; reveal concealed text.
+- [x] **Viewdata/Prestel** (done 2026-10-16, viewdata.go): a teletext page of 24 rows; .cpt streams (carousels as
+  frames), 960-byte .bin frames, Telstar .json frames (other fields kept); Play. Later: Telstar markup content,
+  the Prestel character set's differences if any (it is the SAA5050's here).
+- [x] **Minitel/Videotex** (done 2026-10-16, minitel.go): 40x25 with the status row, G0/G2/accents, G1 mosaics,
+  zones (background, underline, conceal) as the STUM 1B gives them, flash, inverse, big letters, grey levels or
+  colour; .vdt read and written (149 real pages round-trip), Play; Bisson's CC0 font. Later: DRCS (downloaded
+  characters, skipped when read), the 80-column mode, a run on a real Minitel (VDT2BMP draws 25 of 149 pages
+  differently: see HANDOFF).
 - **PETSCII**: Plus/4 and C16 (TED, 121 colours); C64 custom charsets, multicolour and ECM; dirart and
   .d64; pages wider than the screen for scrollers; asm/BASIC exports.
 - [x] **Amstrad CPC (AMSCII)** (done 2026-10-16, cpc.go): mode 1 40x25 4 inks, mode 0 20x25 16 inks, mode 2

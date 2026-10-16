@@ -2850,6 +2850,9 @@ func (a *App) playBytes() []byte {
 	if a.nFrames() > 1 && !a.zx() && !a.tt() && !a.mt() { // every frame, a clear between them
 		return a.writeStreamFrames(map[string]string{"c64": "seq", "atari": "ata", "st": "vt52"}[a.mode], a.allDocs(), false)
 	}
+	if b := a.videotexPlayBytes(); b != nil { // minitel_ui.go
+		return b
+	}
 	switch {
 	case a.c64():
 		return writeSeq(a.doc, a.lower(), false)
@@ -2866,7 +2869,7 @@ func (a *App) play() {
 		a.stopPlay(true)
 		return
 	}
-	if (a.source != nil && a.sourceBin && !a.dirty) || a.zx() || a.tt() || a.cpc() || a.mt() {
+	if (a.source != nil && a.sourceBin && !a.dirty) || a.zx() || a.tt() && !a.vd() || a.cpc() {
 		a.msg("This file has no codes to play: it is a picture of the screen")
 		return
 	}
@@ -2884,6 +2887,9 @@ func (a *App) play() {
 	}
 	if a.st() {
 		em = newSTTerm(d, a.res())
+	}
+	if a.mt() || a.vd() { // a Minitel or a Viewdata terminal (minitel_ui.go)
+		d, em = a.videotexPlayer()
 	}
 	a.playing = &Play{bytes: b, term: em, saved: a.snapshot(), last: time.Now(), pauses: a.playPauses(b)}
 	a.doc, a.sel, a.float = d, nil, nil

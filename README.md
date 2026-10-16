@@ -1,7 +1,7 @@
 # Charcoal
 
 Drawing with characters: **CharEdit**, the editor, and **CharView**, the viewer, for text art on every
-platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum, Amstrad CPC and teletext, each with its real font, colours
+platform: Amiga, PC, Commodore, Atari, Atari ST, ZX Spectrum, Amstrad CPC, teletext, Viewdata and Minitel, each with its real font, colours
 and file formats.
 
 ![CharEdit with a PC ANSI by Platinum](docs/screenshots/hero.png)
@@ -56,7 +56,7 @@ An art viewer and editor for Amiga ANSI, PC ANSI (and PCBoard, Avatar, the BBS c
 Renegade, Synchronet, WWIV, Wildcat! and Celerity, XBin, iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii),
 Unicode terminal art (UTF-8 ANSI in 256 and 24-bit colours, durdraw) and IRC art (mIRC colour codes),
 Atari ATASCII, Atari ST VT52, Commodore PETSCII (PET, VIC-20, C64, C128), ZX Spectrum screens, Amstrad CPC
-text art (AMSCII) and teletext (BBC Micro Mode 7, Ceefax), drawn with the real bitmap fonts: Topaz
+text art (AMSCII), teletext (BBC Micro Mode 7, Ceefax), Viewdata (Prestel, Telstar) and Minitel (Videotex `.vdt`), drawn with the real bitmap fonts: Topaz
 1/1+/2/2+, MicroKnight, MicroKnight+, P0T-NOoDLE and mO'sOul on an Amiga page (Latin-1), IBM VGA, EGA 8x14,
 VGA 8x8 (80x50) and the code pages 850 and 866 on a PC page (CP437), the C64's two character sets on a C64 page;
 or a font of your own, drawn in its font editor.
@@ -180,6 +180,30 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   CPC's text codes. All 2024 AMSCII Compo entries open. Pictures (`.png`, GIF, APNG) are 768x544 in every mode,
   the size and place of Caprice Forever's screenshots that the compos use, so a saved PNG matches the other
   entries' pixel for pixel. Typing `^` gives the caret (0xA0; the CPC's 0x5E is an up arrow).
+- **Minitel page** (MT): the Minitel's 40x25 screen (row 0 is its status row) in 8x10 cells, as the STUM 1B
+  (the Minitel's specification) describes it. A cell is a letter (G0, the G2 signs £ § ← ↑ → ↓ ° ± ÷ ¼ ½ ¾ Œ œ ß
+  and the accented letters à â ä è é ê ë î ï ô ö ù û ü ç) in a colour, or a mosaic of 2x3 blocks (the character
+  table's last quarter, the **Sixel** tool) in a colour on a background. A letter shows the background,
+  underline and concealing of its zone: a zone starts at a space with other zone attributes (type a space with
+  a background to start one) or at a mosaic, as on the Minitel. The tool rail's toggles go with what you type:
+  **Flash**, **Inv** (inverse), **Line** (underline; separated blocks on mosaics), **Mask** (conceal), the size
+  (**1x**, **Wide**, **Tall**, **2x**: big letters are written from their bottom row, the cursor stays there) and
+  **Reveal** (show concealed cells). Palettes: the Minitel 1's grey levels (the default) or colour. Files:
+  **`.vdt`**, the Videotex stream MiniPavi, MiEdit and the 3615 servers keep pages in: read by running it on a
+  small Minitel (screens a clear ends become frames), written so a Minitel shows the page (FF, the rows with REP
+  for runs, the status row last; the stream is run on the same Minitel as it is made and checked cell by cell).
+  **Play** (m) sends it to a Minitel on screen at the chosen speed. 149 `.vdt` pages from MiniPavi's examples,
+  MiEdit-era servers and VDT2BMP's samples open and come back cell for cell after saving. The font is Frédéric
+  Bisson's Minitel font (CC0), `fonts/minitel-NOTICE.txt`.
+- **Viewdata page** (VD): a teletext page of 24 rows, as Prestel and today's Viewdata boards (Telstar, CCl4,
+  NXtel) send it: the same codes, attributes, Codes view and Sixel tool. Files: a **stream** (`.cpt`, as the
+  Amiga's vtx datatype names it: CS, the rows with trailing spaces left out and CR LF, attributes as ESC and a
+  letter; a `.car` carousel or any stream with several CS opens as frames), a **960-byte frame** (`.bin`;
+  attributes read as 0x00-0x1F, 0x80-0x9F or MacViewdata's 0xC0-0xDF, written as 0x80-0x9F so no CS byte
+  appears) and a **Telstar frame** (`.json`: the page in `content` as rawV; rawT and edit.tf content are read;
+  one read from Telstar keeps every other field when saved, a new one is numbered by its name, `200a.json` is
+  page 200 frame a). Teletext files open as Viewdata with Open as; a Viewdata page also saves as `.tti` and an
+  edit.tf link. **Play** sends the stream to a Viewdata terminal on screen.
 - **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save; iCEDraw (.idf), ArtWorx (.adf) and
   TundraDraw (.tnd) open with their own fonts and colours and save (see Files for other editors). The same art
   in five formats (ansilove's test files, `testdata/alove`) gives the same page in all of them. PC attribute
@@ -490,7 +514,7 @@ Delete, Insert, Esc. The defaults, the PC ANSI editors' (Moebius, PabloDraw, The
 | Alt+F, Ctrl+K | fill the selection with the brush (nothing selected: Fill tool), crop to the selection (Amiga, PC) |
 | Ctrl+Home, Ctrl+End | top, bottom of the page |
 | Alt+Up / Alt+Down, Alt+Left / Alt+Right | delete / insert a row, delete / insert a column |
-| Alt+T, D, K, L, P, S, B | tools: Type, Draw, Colour, Fill, Pick, Select, Half (PC, Unicode) / Sixel (teletext) |
+| Alt+T, D, K, L, P, S, B | tools: Type, Draw, Colour, Fill, Pick, Select, Half (PC, Unicode) / Sixel (teletext, Viewdata, Minitel) |
 | Ctrl+Alt+PgUp / PgDn | Unicode page: the character table's previous / next block |
 | Ctrl+Up / Ctrl+Down, Ctrl+Left / Ctrl+Right | foreground -/+, background -/+ |
 | Ctrl+0-7, Alt+0-7 | foreground, background colour (again: the bright one) |
@@ -573,6 +597,7 @@ come back cell for cell after saving in their own format.
 | `editorformats.go` | other editors' files: iCEDraw, ArtWorx, TundraDraw, IcyDraw, REXPaint, Playscii, Marq's `.pet`/`.bas`/`.s`, Petmate JSON (`editorformats_test.go`; `editorformats_ext_test.go` checks against ansilove, IcyDraw's engine and Playscii's loader when they are there) |
 | `atari.go` | ATASCII: the Atari fonts, `.ata` reader and writer, recognising and width guessing (`atari_test.go`) |
 | `pet.go` | PETSCII: the C64 fonts, the `.seq` reader and writer, typing (`pet_test.go`) |
+| `minitel.go`, `minitel_ui.go`, `viewdata.go` | Minitel pages (the screen, a small Minitel that reads `.vdt`, the `.vdt` writer) and Viewdata pages (streams, 960-byte frames, Telstar frames); the editor's side of both (`minitel_test.go`, `viewdata_test.go`) |
 | `keys.go` | the table of actions and their default keys, the keys file, the help's key list |
 | `rowscols.go`, `blockjobs.go` | insert/delete rows and columns; fill, move and crop a block |
 | `frames.go`, `strip.go`, `streams.go` | frames and their undo, the frame strip and onion skin, cutting streams into frames |
@@ -599,6 +624,7 @@ Charcoal's own code is under the MIT licence (`LICENSE`), copyright Tobias Karls
 | ZX Spectrum font | the 48K ROM's character set | © Amstrad, who allow passing it on, `fonts/zx-spectrum-NOTICE.txt` |
 | Amstrad CPC font | the CPC firmware ROM's character set (the same in the 464, 664 and 6128) | © Amstrad; Amstrad has kindly given its permission for its copyrighted material to be redistributed but Amstrad retains its copyright, `fonts/amstrad-cpc-NOTICE.txt` |
 | Teletext font | Bedstead, Ben Harris | CC0, `fonts/bedstead-NOTICE.txt` |
+| Minitel font (`minitel_font.go`) | Minitel-Canvas's Minitel font, Frédéric Bisson (github.com/Zigazou/Minitel-Canvas), drawn into 8x10 cells by `tools/minitel-font.py` | CC0, `fonts/minitel-NOTICE.txt` |
 | Unicode page font (`fonts/unifont-art.hex.gz`) | GNU Unifont 17.0.05, Roman Czyborra, Paul Hardy et al. (unifoundry.com): the blocks text art uses, cut by `tools/unifont.sh` | SIL Open Font License 1.1 (Unifont is dual-licensed OFL / GPL-2+ with the font exception; used under the OFL), `fonts/unifont-NOTICE.txt` |
 | durdraw's colour numbers and file format (`uniformats.go`) | durdraw, Sam Foster (github.com/cmang/durdraw), read from its source; no code copied | BSD 3-clause |
 | PETSCII flip and turn tables (`cbmturn.go`) | Marq's PETSCII editor, Marq / Fit^L!T, tables by Dr. TerrorZ | WTFPL, `third_party/marq-petscii-LICENSE.txt` |

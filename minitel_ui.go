@@ -260,3 +260,54 @@ func (a *App) drawMTToggles(toggle func(label string, on bool, hint string) bool
 	}
 	a.showCodes = toggle("Reveal", a.showCodes, "Show concealed cells")
 }
+
+// mtPlayer shows a Minitel stream as it comes: the Minitel's screen, settled
+// into the page shown after every piece.
+type mtPlayer struct {
+	t *mtTerm
+	d *Doc
+}
+
+func (p *mtPlayer) write(b []byte) {
+	p.t.feed(b)
+	copy(p.d.cells, p.t.page().cells)
+}
+
+func (p *mtPlayer) cursor() (int, int) { return p.t.x, p.t.y }
+
+// vdPlayer does the same for a Viewdata terminal.
+type vdPlayer struct {
+	s *vdScreen
+	d *Doc
+}
+
+func (p *vdPlayer) write(b []byte) {
+	p.s.feed(b)
+	copy(p.d.cells, p.s.d.cells)
+}
+
+func (p *vdPlayer) cursor() (int, int) { return p.s.x, p.s.y }
+
+// videotexPlayer is the page Play shows and the terminal that draws it.
+func (a *App) videotexPlayer() (*Doc, emulator) {
+	if a.mt() {
+		d := newMTDoc()
+		return d, &mtPlayer{t: newMTTerm(), d: d}
+	}
+	d := newVDDoc()
+	return d, &vdPlayer{s: newVDScreen(), d: d}
+}
+
+// videotexPlayBytes is what Play sends on a Minitel or Viewdata page: the file
+// as read, or the page (every frame) written as a stream; nil on other pages.
+func (a *App) videotexPlayBytes() []byte {
+	switch {
+	case a.mt() && a.source != nil && !a.dirty && a.srcKind == "vdt",
+		a.vd() && a.source != nil && !a.dirty && a.srcKind == "vdcpt":
+		return a.source
+	case a.mt() || a.vd():
+		out, _, _ := a.encodeVideotex(map[bool]string{true: "vdt", false: "vdcpt"}[a.mt()], a.doc)
+		return out
+	}
+	return nil
+}

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // mtFRandom is a page of random cells a Minitel can show: mosaics, letters
@@ -492,5 +493,41 @@ func TestViewdataEditor(t *testing.T) {
 	b.openPath(filepath.Join(dir, "a.url"), "vd")
 	if !b.vd() || b.doc.rows != 24 {
 		t.Fatalf("as Viewdata: %s, %d rows", b.mode, b.doc.rows)
+	}
+}
+
+// TestVideotexPlay: Play sends the page's stream to a Minitel (or a Viewdata
+// terminal) and shows what it draws; at its end the page is as it was.
+func TestVideotexPlay(t *testing.T) {
+	for _, mode := range []string{"mt", "vd"} {
+		a := testApp(t, mode)
+		a.fg, a.bg = 2, 5
+		for _, r := range " Play it" {
+			a.typeByte(a.charToByte(r))
+		}
+		want := a.doc.clone()
+		a.play()
+		if a.playing == nil {
+			t.Fatalf("%s: %s", mode, a.message)
+		}
+		a.playing.stepLine(time.Now().Add(time.Hour), 1200)
+		got := a.doc
+		if mode == "mt" {
+			if diff := mtFDiff(mtFull(want), got); diff != "" {
+				t.Fatalf("mt: %s", diff)
+			}
+		} else {
+			for i := range want.cells {
+				if cellCh(want.cells[i]) != cellCh(got.cells[i]) {
+					t.Fatalf("vd: cell %d", i)
+				}
+			}
+		}
+		a.stopPlay(false)
+		for i := range want.cells {
+			if a.doc.cells[i] != want.cells[i] {
+				t.Fatalf("%s: the page is not back", mode)
+			}
+		}
 	}
 }
