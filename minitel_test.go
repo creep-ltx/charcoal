@@ -531,3 +531,44 @@ func TestVideotexPlay(t *testing.T) {
 		}
 	}
 }
+
+// TestVideotexAutosaveAndPicture: an autosave brings a Minitel or Viewdata page
+// back as it was; a Minitel picture is the screen's 320 x 250, a Viewdata one 40 x 24 teletext cells.
+func TestVideotexAutosaveAndPicture(t *testing.T) {
+	for _, mode := range []string{"mt", "vd"} {
+		a := testApp(t, mode)
+		a.fg, a.bg = 1, 6
+		for _, r := range " Saved" {
+			a.typeByte(a.charToByte(r))
+		}
+		a.dirty = true
+		if err := writeAutosave(a.Tab); err != nil {
+			t.Fatal(err)
+		}
+		b := restart(t, "pc")
+		files := leftAutosaves()
+		if len(files) != 1 || b.restoreAutosave(files[0]) != nil {
+			t.Fatalf("%s: autosave", mode)
+		}
+		if b.mode != mode || b.doc.rows != a.doc.rows {
+			t.Fatalf("autosave: %s, %d rows", b.mode, b.doc.rows)
+		}
+		for i := range a.doc.cells[:a.doc.rows*40] {
+			if a.doc.cells[i] != b.doc.cells[i] {
+				t.Fatalf("%s: cell %d", mode, i)
+			}
+		}
+		pngb, err := a.encode("png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		img, err := png.Decode(bytes.NewReader(pngb))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := map[string][2]int{"mt": {320, 250}, "vd": {480, 480}}[mode] // 12x20 teletext cells
+		if w, h := img.Bounds().Dx(), img.Bounds().Dy(); w != want[0] || h != want[1] {
+			t.Fatalf("%s picture %dx%d", mode, w, h)
+		}
+	}
+}

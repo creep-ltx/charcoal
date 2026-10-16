@@ -226,7 +226,7 @@ func init() {
 		{"tool_fill", "Alt+L", "Fill tool", func() { a.toolKey("fill") }},
 		{"tool_pick", "Alt+P", "Pick tool", func() { a.toolKey("pick") }},
 		{"tool_select", "Alt+S", "Select tool", func() { a.toolKey("select") }},
-		{"tool_half", "Alt+B", "Half tool (PC pages), Sixel tool (teletext)", func() { a.toolKey("half") }},
+		{"tool_half", "Alt+B", "Half tool (PC pages), Sixel tool (teletext, Minitel)", func() { a.toolKey("half") }},
 
 		// Shapes and brushes (shapes.go).
 		{"shape_line", "Alt+Shift+L", "Shape tool: line (drag; the shape tool's choices are under the brush)", func() { a.shapeKey(shapeLine) }},

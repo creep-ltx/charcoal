@@ -806,6 +806,8 @@ func (a *App) paintOne(x, y, button int, fx, fy bool) {
 		switch {
 		case a.shade && a.shadeSteps() != nil:
 			a.shadeAt(x, y, button != 3)
+		case button == 3 && a.mt(): // the cleared screen's black mosaic space
+			a.setCell(x, y, mtBlank)
 		case button == 3:
 			a.setCell(x, y, blank)
 		default:
