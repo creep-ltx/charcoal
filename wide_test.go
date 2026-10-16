@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -421,4 +422,44 @@ func TestWideColumns(t *testing.T) {
 		t.Errorf("narrower: %q", r)
 	}
 	wideFCheck(t, a.doc, "W")
+}
+
+func TestWideLayersAndConversions(t *testing.T) {
+	a := wideFApp(t, 6, "中字ab")
+	a.newLayer(false)
+	a.setCell(1, 0, uniCell('x', 7)) // on the layer above: covers 中's right half
+	seen := a.seen()
+	if r := wideFRow(seen, 0); r != " x字|ab" {
+		t.Errorf("flattened %q", r)
+	}
+	wideFCheck(t, seen, "flatten")
+	a.mergeDown()
+	if r := wideFRow(a.doc, 0); r != " x字|ab" {
+		t.Errorf("merged %q", r)
+	}
+	wideFCheck(t, a.doc, "merge down")
+	// Back to a PC page: a question mark and a space.
+	d, changed := docFromUni(wideFDoc(t, 4, "中a"), false, &vga16)
+	if changed != 1 || cellCh(d.get(0, 0)) != '?' || cellCh(d.get(1, 0)) != ' ' || cellCh(d.get(2, 0)) != 'a' {
+		t.Errorf("to PC: %d changed, %v", changed, d.cells[:3])
+	}
+	// An old autosave's wide character in one cell gets the blank after it.
+	old := newDoc(4, 1)
+	old.uni = true
+	old.cells[0], old.cells[2] = uniCell('⭐', 7), uniCell('☕', 7)
+	old.cells[3] = uniCell('x', 7)
+	wideMendOld(old)
+	if r := wideFRow(old, 0); r != "⭐|☕x" {
+		t.Errorf("mended %q", r)
+	}
+	// Transitions never leave half a character.
+	b := testApp(t, "uni")
+	from, to := wideFDoc(t, 8, "中中中中", "字字字字"), wideFDoc(t, 8, "abcdefgh", "かかかか")
+	for _, pat := range []int{patMatrix, patDecrypt, patDrop, patAssemble, patShine, patShadeIn, patMelt, patPowerOn} {
+		for i, f := range b.effectFrames(from, to, pat, 1, 0) {
+			if f != nil {
+				wideFCheck(t, f, fmt.Sprintf("effect %d frame %d", pat, i))
+			}
+		}
+	}
 }

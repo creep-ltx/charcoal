@@ -103,6 +103,23 @@ func wideOK(d *Doc) (x, y int) {
 	return -1, -1
 }
 
+// wideMendOld gives a wide character alone in its cell (typed into one cell
+// before wide characters, kept in an autosave) the blank cell after it as its
+// right half. One with no blank after it stays alone, drawn squeezed.
+func wideMendOld(d *Doc) {
+	if !d.uni {
+		return
+	}
+	for y := 0; y < d.rows; y++ {
+		for x := 0; x+1 < d.cols; x++ {
+			v, next := d.get(x, y), d.get(x+1, y)
+			if uniIsLead(v) && !uniIsCont(next) && uniBlank(next) {
+				d.set(x+1, y, uniContOf(v))
+			}
+		}
+	}
+}
+
 // wideAny: does a text hold a wide character?
 func wideAny(s string) bool {
 	for _, r := range s {

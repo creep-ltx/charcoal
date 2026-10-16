@@ -335,6 +335,11 @@ func (a *App) effectFramesAt(d, e *Doc, pat int, seed int64, k, detail int) []*D
 	}
 	gen(x, frames)
 	frames[k-1] = d.clone()
+	for _, f := range frames {
+		if f != nil && f.uni {
+			wideNormal(f) // a wide character a frame cuts in half (wide.go)
+		}
+	}
 	return frames
 }
 

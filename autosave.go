@@ -321,6 +321,9 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	}
 	if mode == "uni" {
 		uniRemapPairs(docs, m.UniPairs) // this run's table numbers them differently
+		for _, d := range docs {
+			wideMendOld(d) // a wide character in one cell, from before wide characters (wide.go)
+		}
 	}
 	a.mode, a.doc = mode, docs[m.Cur]
 	if len(m.Layers) > 0 {

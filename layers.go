@@ -145,6 +145,7 @@ func flatten(ls []Layer, cur int, d *Doc) *Doc {
 			}
 		}
 	}
+	wideNormal(out) // a wide character half covered by a layer above: a space, as a terminal would show it (wide.go)
 	return out
 }
 
@@ -438,6 +439,7 @@ func (a *App) mergeDown() {
 		}
 	}
 	layerFields(below, cur)
+	wideNormal(below) // a wide character half covered (wide.go)
 	a.layers = slices.Delete(a.layers, a.lay, a.lay+1)
 	a.lay--
 	a.layers[a.lay].doc = below
