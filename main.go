@@ -176,6 +176,9 @@ func main() {
 		os.Exit(1)
 	}
 	sdl.StartTextInput()
+	imeAt = func(r Rect) { // an input method's window next to the cursor (window points)
+		sdl.SetTextInputRect(&sdl.Rect{X: int32(r.x * scale), Y: int32(r.y * scale), W: int32(r.w * scale), H: int32(r.h * scale)})
+	}
 	sdl.EventState(sdl.DROPFILE, sdl.ENABLE)
 
 	nextBlink := time.Now().Add(500 * time.Millisecond)

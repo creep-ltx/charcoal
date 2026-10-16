@@ -149,6 +149,11 @@ var uniBlocks = []struct {
 	{"Arrows, mathematics", 0x2900},
 	{"Mathematics", 0x2A00},
 	{"Symbols and arrows", 0x2B00},
+	{"CJK symbols, kana (wide)", 0x3000},             // wide characters: two cells each (wide.go)
+	{"Bopomofo, Hangul jamo, kanbun (wide)", 0x3100}, //
+	{"Fullwidth forms (wide)", 0xFF00},               //
+	{"CJK ideographs (wide)", 0x4E00},                //
+	{"Hangul syllables (wide)", 0xAC00},              //
 }
 
 // uniHeaderH is the height of the block switch above the character table.

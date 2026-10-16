@@ -247,6 +247,10 @@ func uniWideSmall(r rune) ([]byte, bool) {
 	return g, true
 }
 
+// imeAt places an input method's window at a rectangle of the window (main.go sets it; nothing in tests).
+var imeAt = func(Rect) {}
+var imeLast Rect
+
 // ---------------------------------------------------------------- editing
 
 // wideSet writes cell v at (x, y) as a terminal would: a wide character takes

@@ -492,3 +492,35 @@ func TestWideDur(t *testing.T) {
 		t.Errorf("the right half has colour %d", f0)
 	}
 }
+
+func TestWideCharacterTable(t *testing.T) {
+	a := testApp(t, "uni")
+	for _, name := range []string{"CJK symbols, kana (wide)", "Fullwidth forms (wide)", "CJK ideographs (wide)", "Hangul syllables (wide)"} {
+		found := false
+		for _, b := range uniBlocks {
+			if b.name == name {
+				found = true
+				shown := 0
+				for c := b.base; c < b.base+256; c++ {
+					if a.uniHas(c) {
+						shown++
+					}
+				}
+				if shown < 64 {
+					t.Errorf("%s: %d characters shown", name, shown)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("no block %q", name)
+		}
+	}
+	// The brush from the table types a wide character.
+	a.doc = wideFDoc(t, 6, "")
+	a.cx, a.cy = 0, 0
+	a.brush, _ = uniCodeOf('ア')
+	a.typeByte(a.brush)
+	if r := wideFRow(a.doc, 0); r != "ア|    " || a.cx != 2 {
+		t.Errorf("typed %q", r)
+	}
+}

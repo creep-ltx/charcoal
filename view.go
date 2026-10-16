@@ -981,6 +981,10 @@ func (a *App) drawPage(u *UI, id string) {
 		if a.uni() && uniIsLead(a.doc.get(a.cx, a.cy)) && uniIsCont(a.doc.get(a.cx+1, a.cy)) {
 			r.w *= 2 // on a wide character: over both its cells
 		}
+		if a.uni() && r != imeLast { // an input method (kanji, kana, Hangul) shows its choices at the cursor
+			imeLast = r
+			imeAt(r)
+		}
 		if a.insert {
 			h := max(2*z, r.h/4)
 			r.y, r.h = r.y+r.h-h, h
