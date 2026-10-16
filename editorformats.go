@@ -2031,6 +2031,7 @@ func (a *App) reparseEditor() bool {
 	switch a.srcKind {
 	case "icy", "xp":
 		if a.srcKind == "icy" && a.reparseIcyMachine() { // another machine's page (icymach.go)
+			a.fileLayers() // its layers, kept as on a PC page (layers_formats.go)
 			break
 		}
 		if d, _, _, err := parseEditorPC(a.srcKind, a.source); err == nil {

@@ -22,8 +22,8 @@ import (
 // the file).
 func layersKeptBy(fmtID, mode string) bool {
 	switch fmtID {
-	case "icy":
-		return mode == "pc" || mode == "amiga"
+	case "icy": // (IcyDraw's PETSCII, ATASCII and ST pages: icymach.go)
+		return mode == "pc" || mode == "amiga" || mode == "c64" || mode == "atari" || mode == "st"
 	case "xp":
 		return mode == "pc"
 	case "psci":
@@ -48,7 +48,7 @@ func (a *App) fileLayers() {
 	switch a.srcKind {
 	case "icy":
 		if doc, err := parseIcyDraw(a.source); err == nil {
-			ls = icyFileLayers(doc, a.doc)
+			ls = icyFileLayers(doc, a.doc, a.icyLayerPage(doc))
 		}
 	case "xp":
 		ls = xpFileLayers(a.source, a.doc)
@@ -116,7 +116,7 @@ func (t *Tab) layersOut(page *Doc) []Layer {
 // kept): each layer is read as the file's only one, a cell IcyDraw leaves
 // invisible is empty, a layer whose cells have a transparent background is one
 // where black shows below.
-func icyFileLayers(doc *icyDoc, flat *Doc) []Layer {
+func icyFileLayers(doc *icyDoc, flat *Doc, page func(*icyDoc) *Doc) []Layer {
 	if len(doc.layers) < 2 || len(doc.layers) > maxLayers || len(doc.skipped) > 0 {
 		return nil
 	}
@@ -128,7 +128,10 @@ func icyFileLayers(doc *icyDoc, flat *Doc) []Layer {
 		one, lc := *doc, *l
 		lc.visible = true
 		one.layers = []*icyLayer{&lc}
-		d, _, _ := icyPage(&one)
+		d := page(&one)
+		if d == nil || d.cols != flat.cols {
+			return nil
+		}
 		clear := layerNormal
 		for _, c := range l.cells {
 			if i > 0 && c.visible && c.bg.kind == 't' {
@@ -160,17 +163,7 @@ func writeIcyLayers(t *Tab, page *Doc, pal [16]uint32, f *Font, ice bool, previe
 		if !bottom && clear == layerBlack {
 			below = flatten(ls[:i], 0, ls[0].doc)
 		}
-		flags := uint32(0) // the file's other bits kept; visible and the edit lock are the layer's
-		if l.keep != nil {
-			flags = l.keep.IcyFlags &^ (icyVisible | icyEditLock)
-		}
-		if !l.hidden {
-			flags |= icyVisible
-		}
-		if l.locked {
-			flags |= icyEditLock
-		}
-		ol := icyOutLayer{title: t.layerName(i), flags: flags}
+		ol := icyOutLayer{title: t.layerName(i), flags: icyLayerFlags(l)}
 		if l.keep != nil {
 			ol.colour = l.keep.IcyColour
 		}
@@ -503,4 +496,85 @@ func (a *App) psciFramesLayers() {
 		a.layers[k].doc = per[a.cur][k].doc
 	}
 	a.liveLayer(top, a.doc.rows, a.doc)
+}
+
+// icyLayerFlags are IcyDraw's flags of a layer: the file's other bits kept;
+// visible and the edit lock are the layer's.
+func icyLayerFlags(l Layer) uint32 {
+	flags := uint32(0)
+	if l.keep != nil {
+		flags = l.keep.IcyFlags &^ (icyVisible | icyEditLock)
+	}
+	if !l.hidden {
+		flags |= icyVisible
+	}
+	if l.locked {
+		flags |= icyEditLock
+	}
+	return flags
+}
+
+// icyLayerPage is how one layer of an IcyDraw file reads on this page: as a PC
+// page, or as the page of the file's machine (as reparseIcyMachine reads it).
+func (a *App) icyLayerPage(doc *icyDoc) func(*icyDoc) *Doc {
+	if !icyMachineBuffer(doc.buffer) {
+		return icyPCPage
+	}
+	return icyMachLayerPage(a.gtia(), a.mode, a.doc.cols)
+}
+
+// icyPCPage is an IcyDraw document read as a PC page.
+func icyPCPage(doc *icyDoc) *Doc {
+	d, _, _ := icyPage(doc)
+	return d
+}
+
+// icyMachLayerPage reads an IcyDraw document as a page of type mode, cols wide
+// (nil: the file is of another machine).
+func icyMachLayerPage(gtia *[256]uint32, mode string, cols int) func(*icyDoc) *Doc {
+	return func(one *icyDoc) *Doc {
+		m := icyMachinePage(one, gtia)
+		if m == nil || m.mode != mode {
+			return nil
+		}
+		if m.doc.cols != cols {
+			return m.doc.withCols(cols)
+		}
+		return m.doc
+	}
+}
+
+// icyMachineLayers are the IcyDraw layers of a PETSCII, Atari or ST page of
+// layers (page: them put together), cellOf giving a picture's cells as the
+// machine's page: an empty cell of a layer above the bottom one is invisible;
+// on a layer where black shows below (ST pages) the background is written as it
+// is seen (IcyDraw's transparent background takes another colour: layers_formats.go).
+func icyMachineLayers(t *Tab, page *Doc, cellOf func(*Doc) func(x, y int) (uint32, int, int, byte, uint16)) []icyOutLayer {
+	ls := t.layersOut(page)
+	var out []icyOutLayer
+	for i, l := range ls {
+		d := l.doc
+		if i > 0 && l.clear == layerBlack {
+			below := flatten(ls[:i], 0, ls[0].doc)
+			d = d.clone()
+			for k, v := range d.cells[:d.cols*d.rows] {
+				if !page.blankAt(v) && cellBg(v) == 0 {
+					d.cells[k] = v&^0xF000 | below.get(k%d.cols, k/d.cols)&0xF000
+				}
+			}
+		}
+		cell, bottom := cellOf(d), i == 0
+		ol := icyOutLayer{title: t.layerName(i), flags: icyLayerFlags(l)}
+		if l.keep != nil {
+			ol.colour = l.keep.IcyColour
+		}
+		ol.cell = func(x, y int) (uint32, int, int, byte, uint16) {
+			if !bottom && layerClearAt(page, d.get(x, y)) {
+				return 32, 0, 0, 0, icyInvisible
+			}
+			return cell(x, y)
+		}
+		out = append(out, ol)
+	}
+	return out
 }

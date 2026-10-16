@@ -261,7 +261,10 @@ func FuzzParsers(f *testing.F) {
 			}
 			if doc, err := parseIcyDraw(b); err == nil {
 				flat, _, _ := icyPage(doc)
-				keep(icyFileLayers(doc, flat), flat)
+				keep(icyFileLayers(doc, flat, icyPCPage), flat)
+				if m := icyMachinePage(doc, &gtiaPAL); m != nil { // a machine's page (icymach.go)
+					keep(icyFileLayers(doc, m.doc, icyMachLayerPage(&gtiaPAL, m.mode, m.doc.cols)), m.doc)
+				}
 			}
 			if flat, _, err := parseXP(b); err == nil {
 				keep(xpFileLayers(b, flat), flat)

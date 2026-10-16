@@ -624,6 +624,8 @@ func (a *App) icyCaseFont(lower bool) *Font {
 // false on other pages.
 func (a *App) writeIcyMachine(d *Doc, preview image.Image) (out []byte, ok bool) {
 	o := &icyOut{fontMod: 1, w: d.cols, h: max(1, d.rows), fontH: 8}
+	// cellOf gives the cells of a picture of the page (the page, or one of its layers).
+	var cellOf func(d *Doc) func(x, y int) (uint32, int, int, byte, uint16)
 	switch {
 	case a.c64():
 		mach := a.mach()
@@ -674,19 +676,21 @@ func (a *App) writeIcyMachine(d *Doc, preview image.Image) (out []byte, ok bool)
 			mode = 1
 		}
 		o.screen = icyScreenRecord(icyMachineNumber(a.machine), mode, border, bg)
-		o.cell = func(x, y int) (uint32, int, int, byte, uint16) {
-			v := d.get(x, y)
-			ch := uint32(cellCh(v))
-			switch {
-			case ted:
-				at := tedAttr(v)
-				return ch, at & 127, bg, 0, uint16(at>>7) * icyBlinkAttr
-			case vdc:
-				return ch, vdcOfC64[cellFg(v)], bg, map[bool]byte{true: 1}[lower], 0
-			case mach.mono:
-				return ch, 1, 0, 0, 0
+		cellOf = func(d *Doc) func(x, y int) (uint32, int, int, byte, uint16) {
+			return func(x, y int) (uint32, int, int, byte, uint16) {
+				v := d.get(x, y)
+				ch := uint32(cellCh(v))
+				switch {
+				case ted:
+					at := tedAttr(v)
+					return ch, at & 127, bg, 0, uint16(at>>7) * icyBlinkAttr
+				case vdc:
+					return ch, vdcOfC64[cellFg(v)], bg, map[bool]byte{true: 1}[lower], 0
+				case mach.mono:
+					return ch, 1, 0, 0, 0
+				}
+				return ch, cellFg(v), bg, 0, 0
 			}
-			return ch, cellFg(v), bg, 0, 0
 		}
 	case a.atari():
 		o.buffer = icyATASCII
@@ -694,8 +698,10 @@ func (a *App) writeIcyMachine(d *Doc, preview image.Image) (out []byte, ok bool)
 		o.pal[0], o.pal[7] = a.gtia()[d.bg&0xFE]&0xFFFFFF, a.gtia()[atariText(d)&0xFE]&0xFFFFFF
 		o.screen = icyScreenRecord(9, 0, -1, -1)
 		o.fonts = []icyFontRec{icyFontOf("Atari ATASCII", a.font(), 8)}
-		o.cell = func(x, y int) (uint32, int, int, byte, uint16) {
-			return uint32(cellCh(d.get(x, y))), 7, 0, 0, 0
+		cellOf = func(d *Doc) func(x, y int) (uint32, int, int, byte, uint16) {
+			return func(x, y int) (uint32, int, int, byte, uint16) {
+				return uint32(cellCh(d.get(x, y))), 7, 0, 0, 0
+			}
 		}
 	case a.st():
 		r := a.res()
@@ -713,12 +719,18 @@ func (a *App) writeIcyMachine(d *Doc, preview image.Image) (out []byte, ok bool)
 		o.fontH = h
 		o.fonts = []icyFontRec{icyFontOf(name, a.font(), h)}
 		o.screen = icyScreenRecord(8, map[string]int{"stlow": 0, "stmed": 1, "sthigh": 2}[r.id], -1, -1)
-		o.cell = func(x, y int) (uint32, int, int, byte, uint16) {
-			v := d.get(x, y)
-			return uint32(cellCh(v)), cellFg(v) % r.colours, cellBg(v) % r.colours, 0, 0
+		cellOf = func(d *Doc) func(x, y int) (uint32, int, int, byte, uint16) {
+			return func(x, y int) (uint32, int, int, byte, uint16) {
+				v := d.get(x, y)
+				return uint32(cellCh(v)), cellFg(v) % r.colours, cellBg(v) % r.colours, 0, 0
+			}
 		}
 	default:
 		return nil, false
+	}
+	o.cell = cellOf(d)
+	if a.layers != nil { // every layer (layers_formats.go)
+		o.layers = icyMachineLayers(a.Tab, d, cellOf)
 	}
 	return o.encode(preview), true
 }

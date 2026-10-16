@@ -1,6 +1,9 @@
 package main
 
 import (
+	"math/rand"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -574,5 +577,125 @@ func TestLay2MachineClearCells(t *testing.T) {
 	c.toggleBlackClear()
 	if c.seen().get(0, 0) != makeCell('Z', 2, 3, 0) {
 		t.Fatal("cpc: black shows below")
+	}
+}
+
+// ---------------------------------------------------------------- .icy layers of other machines
+
+func TestLay2IcyMachines(t *testing.T) {
+	withFonts(t, true)
+	r := rand.New(rand.NewSource(7))
+	for _, p := range []othFPage{{"c64", "c64", "", false}, {"c64", "plus4", "", true}, {"c64", "c128vdc", "", false}, {"c64", "vic20", "", false}, {"atari", "", "", false}, {"st", "", "stlow", false}, {"st", "", "stmed", false}} {
+		a := othFApp(t, p)
+		othFRandom(r, a, a.doc.rows)
+		a.newLayer(false)
+		for i := range 30 {
+			x, y := r.Intn(a.doc.cols), r.Intn(a.doc.rows)
+			var v uint32
+			switch {
+			case a.ted():
+				v = tedCell(1+i, r.Intn(256))
+			case a.st():
+				v = makeCell(65+i, 1+r.Intn(3), 0, 0)
+			case a.c64() && a.mach().mono:
+				v = makeCell(1+i, 1, 0, 0)
+			case a.c64():
+				v = makeCell(1+i, r.Intn(a.mach().colours), 0, 0)
+			default:
+				v = makeCell(1+i, 7, 0, 0)
+			}
+			a.doc.set(x, y, v)
+		}
+		a.renameLayer(1, "Letters")
+		a.toggleLock(1)
+		if a.st() {
+			a.toggleBlackClear() // written with the backgrounds as seen
+		}
+		a.newLayer(false)
+		a.doc.set(0, 0, makeCell(5, map[bool]int{true: 7, false: 1}[a.atari()], 0, 0)) // (an Atari cell's colour is the screen's)
+		a.toggleLayer(2)
+		want := a.Tab
+		path := filepath.Join(t.TempDir(), "art.icy")
+		if !a.writeOut(path, "icy") {
+			t.Fatalf("%v: %s", p, a.message)
+		}
+		if _, err := os.Stat(layersSideFile(path)); err == nil {
+			t.Fatalf("%v: a side file for an .icy", p)
+		}
+		b, _ := os.ReadFile(path)
+		a.focusTab(a.newTab("pc"))
+		a.hasC64 = true
+		a.loadBytes(b, "art.icy", path, "auto")
+		if a.mode != p.mode || a.nLayers() != 3 {
+			t.Fatalf("%v: opened as %s with %d layers: %q", p, a.mode, a.nLayers(), a.message)
+		}
+		if a.layerName(1) != "Letters" || !a.layers[1].locked || !a.layers[2].hidden || a.layers[0].locked {
+			t.Fatalf("%v: names, locks, hidden: %+v", p, a.layers)
+		}
+		if !sameLook(a.seen(), want.seen()) {
+			t.Fatalf("%v: the page does not look the same", p)
+		}
+		a.toggleLayer(2)
+		want.layers[2].hidden = false
+		if !sameLook(a.seen(), want.seen()) {
+			t.Fatalf("%v: the hidden layer", p)
+		}
+	}
+}
+
+// IcyDraw's engine reads CharEdit's machine pages of layers as they are seen
+// (the same command as TestOthIcyExternal):
+//
+//	CHARCOAL_ICYMACH="$HOME/.cache/charcoal-others/sandbox.sh target/release/examples/ccicy dump" \
+//	CHARCOAL_ICYDIR=$HOME/.cache/charcoal-others/out go test -run Lay2IcyExternal .
+func TestLay2IcyExternal(t *testing.T) {
+	cmd, dir := os.Getenv("CHARCOAL_ICYMACH"), os.Getenv("CHARCOAL_ICYDIR")
+	if cmd == "" || dir == "" {
+		t.Skip("CHARCOAL_ICYMACH / CHARCOAL_ICYDIR not set")
+	}
+	os.MkdirAll(dir, 0o755)
+	withFonts(t, true)
+	r := rand.New(rand.NewSource(44))
+	for _, p := range othFPages {
+		a := othFApp(t, p)
+		othFRandom(r, a, a.doc.rows)
+		a.newLayer(false)
+		for i := range 40 {
+			v := makeCell(1+i, 1, 0, 0)
+			switch {
+			case a.ted():
+				v = tedCell(1+i, r.Intn(256))
+			case a.st():
+				v = makeCell(65+i%26, 1+r.Intn(min(3, a.res().colours-1)), r.Intn(2), 0) // (pens the resolution has)
+			case a.atari():
+				v = makeCell(1+i, 7, 0, 0)
+			}
+			a.doc.set(r.Intn(a.doc.cols), r.Intn(a.doc.rows), v)
+		}
+		if a.st() {
+			a.toggleBlackClear()
+		}
+		a.toggleLock(1)
+		path := filepath.Join(dir, "lay2-"+strings.ReplaceAll(p.String(), "/", "-")+".icy")
+		if !a.writeOut(path, "icy") {
+			t.Fatal(a.message)
+		}
+		args := append(strings.Fields(cmd), path)
+		out, err := exec.Command(args[0], args[1:]...).Output()
+		if err != nil {
+			t.Fatalf("%v: %v", p, err)
+		}
+		dump := othFReadDump(t, string(out))
+		b, _ := os.ReadFile(path)
+		doc, _ := parseIcyDraw(b)
+		m := icyMachinePage(doc, a.gtia())
+		othFCompare(t, p.String(), m, dump)
+		seen := a.seen()
+		for i, v := range seen.cells[:seen.cols*seen.rows] {
+			if p.mode != "atari" && m.doc.cells[i] != v || p.mode == "atari" && cellCh(m.doc.cells[i]) != cellCh(v) {
+				t.Fatalf("%v: cell %d: IcyDraw's page %08x, seen %08x", p, i, m.doc.cells[i], v)
+			}
+		}
+		t.Logf("%v: IcyDraw reads %d layers as seen", p, len(doc.layers))
 	}
 }

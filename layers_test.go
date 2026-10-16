@@ -714,7 +714,7 @@ func TestLayFileFallsBack(t *testing.T) {
 	// a visible black space on the top layer covers what is below in IcyDraw
 	doc.layers[1].cells[0] = icyCell{ch: ' ', fg: icyColour{'p', 7}, bg: icyColour{'p', 0}, visible: true}
 	flat, _, _ := icyPage(doc)
-	if icyFileLayers(doc, flat) != nil {
+	if icyFileLayers(doc, flat, icyPCPage) != nil {
 		t.Fatal("kept layers that do not look the same")
 	}
 	// the real IcyDraw file of one layer: one layer
