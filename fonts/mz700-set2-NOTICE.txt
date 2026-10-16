@@ -1,0 +1,19 @@
+mz700-set2.font: CharEdit's own look-alike of the Sharp MZ-700's second character set
+(display codes 0-255 with the attribute's bit 7 set), 256 glyphs of 8x8, the top bit the
+leftmost pixel, in display code order.
+
+Drawn by hand for CharEdit (2026-10-16) in tools/mz700-set2.txt, from what each character
+means (the Unicode names of the characters the MZ-700's sets map to, Symbols for Legacy
+Computing Supplement) with the MZ-700's published character table (sharpmz.net, "Display
+code table part II") as a picture of the look. The outlined letters and digits are made by
+tools/mz700-set2.py as the wall around a hand-drawn middle line; turned and mirrored
+characters (rockets, planes, arrows, snake heads ...) are turned copies. Nothing was copied
+from Sharp's character ROM. Where a character is a plain shape (a line, a square, a filled
+circle) any 8x8 drawing of it comes out much the same.
+
+Licence: CC0 1.0 Universal (public domain dedication). To the extent possible under law,
+the authors have waived all copyright and related rights to this font.
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Sharp's own character ROM (mz700fon.int, both sets) is used instead when it is found on the
+computer (fonts/mz700-NOTICE.txt).

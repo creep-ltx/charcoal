@@ -114,6 +114,11 @@ func FuzzParsers(f *testing.F) {
 		f.Add(writeMarq(d, false, "plus4"))
 		f.Add(writePetmateFrames(nil, []PetScreen{{doc: d, fb: -1, machine: "plus4"}}))
 		f.Add([]byte("\x1cA\x82B\x16\xc6\x1bQ\x0d\x84\x9aF\x16"))
+		f.Add(tedxPrg(d, chsFTEDSet(1, true))) // with a set of its own (tedchars.go)
+	}
+	{ // DirArt (dirart.go)
+		img, _ := writeDirArt(chsFDirArtPage(1, 9), nil, "x")
+		f.Add(img)
 	}
 	{ // Atari ST IGS (igs.go)
 		f.Add([]byte(igsFSample))
@@ -299,6 +304,20 @@ func FuzzParsers(f *testing.F) {
 		check("viewdata bin", func() []*Doc { return one(parseVDBin(b)) })
 		check("telstar", func() []*Doc { d, _ := parseTelstar(b); return one(d) })
 		check("c64 prg", func() []*Doc { d, _, _, _, _ := parseC64xPrg(b); return one(d) })
+		check("plus4 own prg", func() []*Doc { d, _, _ := parseTEDxPrg(b); return one(d) })
+		check("dirart", func() []*Doc { // and written back over the same disk, it shows the same
+			d, err := readDirArt(b)
+			if err != nil {
+				return nil
+			}
+			if d.rows <= dirartMax {
+				img, _ := writeDirArt(d, b, "x")
+				if back, err := readDirArt(img); err != nil || chsFSameCodes(d, back) != "" {
+					t.Fatalf("dirart written again: %v %s", err, chsFSameCodes(d, back))
+				}
+			}
+			return one(d)
+		})
 		check("d64", func() []*Doc {
 			if f, _, err := d64Art(b); err == nil {
 				d, _, _ := readC64Prg(f.data)

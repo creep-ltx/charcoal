@@ -62,7 +62,7 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 | Viewdata (2026-10-16) | a teletext page of 24 rows: .cpt streams (.car carousels as frames), 960-byte .bin frames, Telstar .json frames, and .tti / edit.tf |
 | Plus/4, C16 (2026-10-16) | a PETSCII model: Marq's Plus/4 .prg and .c, .d64, TED Screen Editor .scrn (+ .proj), Petmate9 c16 screens, .seq; TED colours and flash; see "Plus/4 and C16 pages" |
 | MSX (2026-10-16) | SCREEN 0 (40x24), SCREEN 1 (32x24, colours per 8 characters), MSX2 WIDTH 80; .rom cartridge and BLOAD .bin (both read back), Playscii .psci; C-BIOS fonts (BSD) built in; see "MSX and Sharp MZ-700 pages" |
-| Sharp MZ-700 (2026-10-16) | 40x25, two character sets, 8 colours per cell; .mzf (CharEdit's, and other pictures that copy to $D000/$D800); a public domain look-alike of the first set built in, Sharp's ROM when found |
+| Sharp MZ-700 (2026-10-16) | 40x25, two character sets, 8 colours per cell; .mzf (CharEdit's, and other pictures that copy to $D000/$D800); a public domain look-alike of the first set and CharEdit's own (CC0) of the second built in, Sharp's ROM when found |
 | Unicode (2026-10-16) | UTF-8 ANSI (256/24-bit SGR), durdraw .dur (frames), mIRC .irc (also written from PC pages), HTML; GNU Unifont's art blocks built in (OFL); see "Unicode page" below |
 | SkyPix (2026-10-16) | Amiga BBS graphics (.spx, .ans with `ESC[n!`) on a PC page: the drawing under the cells; also IcyDraw's PETSCII/ATASCII/ST .icy, PabloDraw .pd, TheDraw .td, BSAVE .bsv, Playscii's other sets: see "The rest of other editors' files" |
 
@@ -641,7 +641,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   chain / directory; CharPad files of every version give version 5's page; editor (undo, ECM painting, .prg/.d64
   save/open/Ctrl+S, .seq keeps the mode, autosave); `TestC64xMutations` (20000 mutated files; the fuzz engine
   stalls in this package), `FuzzC64x`, FuzzParsers has prg/d64/ctm.
-- Not done: DirArt (directory art) on the .d64; a run on a real C64 (VICE: see "Machine files in real emulators"); Petmate/Marq .c files with modes
+- Not done: ~~DirArt (directory art) on the .d64~~ (done 2026-10-16: "Character sets: MZ-700, Plus/4, DirArt"); a run on a real C64 (VICE: see "Machine files in real emulators"); Petmate/Marq .c files with modes
   (neither editor has them); CharPad writing; Petmate JSON with a custom charset.
 
 ## Atari ST IGS (2026-10-16, branch r2-igs; design: docs/igs-design.md)
@@ -752,8 +752,8 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   pixel for pixel, on a random page in both cases and on the 128-colour grid; with `CHARCOAL_PETCAT` (VICE's
   petcat) and ACME the BASIC listing and the ACME program too (`TestTEDAsmAndBasic` checks DATA and runs ACME's
   program in the 6502 without VICE).
-- Not done: custom character sets on Plus/4 pages (TEDSE's .chrs, a .prg with a set; the font editor works for
-  the page only), the screen editor's ESC commands (skipped when read),
+- Not done: ~~custom character sets on Plus/4 pages~~ (done 2026-10-16: "Character sets: MZ-700, Plus/4,
+  DirArt"), the screen editor's ESC commands (skipped when read),
   Petmate9's own c16 .prg player output (assembled at run time; not read), multicolour text mode (TED $FF07
   bit 4), blocks pasted from a C64 page keep their 4-bit colours (shown at luminance 0), Marq's editor not run (needs Java).
 
@@ -984,7 +984,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   ROM font; only an own font travels); MSX pictures at openMSX's 320x240, MZ at the bare 320x200; the MSX .bin
   loads at $9000 and resets to SCREEN 0 on a key, the cartridge never returns; MZ display codes 0x00/0x20 swapped
   inside CharEdit (files hold the real codes). The MZ second set without Sharp's ROM: drawing a free look-alike is
-  on the roadmap (real MZ art uses it a lot; hex boxes until then). CharView lists .mzf .xex .atr .tap .dur .irc
+  on the roadmap (real MZ art uses it a lot; hex boxes until then). **Done 2026-10-16**: CharEdit's own look-alike. CharView lists .mzf .xex .atr .tap .dur .irc
   .ig .igs .psci .icy .xp .msg too.
 
 - **MSX** (`msx.go`): page type "msx" (`a.msx()`). `Tab.msxSet msxSetup` = mode (0 SCREEN 0 40x24, 1 SCREEN 1
@@ -1021,7 +1021,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   table shows 512 (panel.go `drawCharset`). Empty cell: space, white on blue (the monitor's $71).
 - **Font**: Sharp's CG ROM is copyrighted (MAME needs it, nobody may ship it). Built in: Russell Marks's public
   domain look-alike of the first set (mz700em's font.txt, in github.com/mkoeppe/mz800em; `fonts/mz700-NOTICE.txt`);
-  the second set is drawn as its code in a box (`mzHexFont`). `loadMZROMFonts` finds `mz700fon.int` (or `.jpn`)
+  the second set is CharEdit's own look-alike, `mzFreeSet2` (2026-10-16; until then its code in a box). `loadMZROMFonts` finds `mz700fon.int` (or `.jpn`)
   in the data folder, ~/.mame/roms, /usr/share/mame/roms, as a file or in `mz700.zip`, and adds "MZ-700 (Sharp
   ROM)" with its second set (`mzROMSet2`; MAME's layout: 512 glyphs, the low bit the leftmost pixel). Own fonts
   and the font editor are refused (the MZ-700 has no programmable characters).
@@ -1057,7 +1057,72 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   monitor's own loading of the .mzf on a real MZ-700 (MAME ran it through the stand-in monitor), the MZ-700
   "Character Graphics Editor"'s files (a Japanese Windows tool seen in a Shadow Party 2024 entry's work stages;
   not found), Playscii's "sharp" charset (another layout), flips of second-set characters (they use the first
-  set's mirror table), the 2nd set's look without Sharp's ROM (codes in boxes).
+  set's mirror table). (The 2nd set's look without Sharp's ROM: done 2026-10-16.)
+
+## Character sets: MZ-700, Plus/4, DirArt (2026-10-16, branch r5-charsets)
+
+- **MZ-700 second set** (`mz.go`, `fonts/mz700-set2.font`, `tools/mz700-set2.txt` + `tools/mz700-set2.py`):
+  `mzFreeSet2` replaces the hex boxes (`mzHexFont` is gone) when Sharp's ROM is not found; the ROM still wins
+  (`mzSet2Font`). Drawn by hand for CharEdit from each character's meaning (the Unicode names `mzRunes` gives:
+  rockets, snake heads, chess quarters, faces...) with sharpmz.net's "Display code table part II" (a GIF of the
+  ROM's glyphs) as the picture of the look, never extracted from it. Outlined letters/digits: `skel` lines (a
+  5x6 middle line; the glyph is its 8-neighbour wall), turned families (`= cw/ccw/180/flipx/flipy`), 2x2 pictures
+  (`big`), the four pie circles computed. CC0 (`fonts/mz700-set2-NOTICE.txt`). `TestChsMZFontFile` checks the
+  .font is what the script makes of the .txt (needs python3; run `python3 tools/mz700-set2.py` after editing the
+  .txt; `--png sheet.png` draws the table, needs Pillow). Princess (Demodulation 2021) looks right with it (its
+  83 second-set cells: bushes, bishop/rook quarters, the pie circles). MAME's mz700 runs the .mzf with this font
+  as its CG ROM (TestEmuMZ, pixel for pixel).
+- **Plus/4 own sets** (`tedchars.go`): the TED reads characters from RAM when $FF12 bit 2 = 0, at $FF13's bits
+  7-2 (1 KB steps); $FF07 bit 7 = 1 turns the hardware reverse off: 256 characters, 2 KB aligned (*read* in
+  VICE's ted.c / ted-draw.c, *verified* in xplus4). `tedSetBytes`: 1024 bytes when 128-255 are the inverse of
+  0-127 (`tedHalfReversed`), else 2048. **CharEdit's Plus/4 .prg** (`tedxPrg`, only when the page has its own
+  set; plain pages keep Marq's form): `10 SYS4109`, SEI, colours, Marq's copy loop (codes $1080, attributes
+  $1468), $FF12 &= $FB, $FF07 AND #$7F / ORA #$80, $FF13 = $20 | its low bits, JMP *; "CHAREDIT PLUS/4" mark;
+  the set at $2000 (file padded; 5121 or 6145 bytes). `parseTEDPrg` falls back to `parseTEDxPrg`, so
+  `.prg`/`.d64` detection, `tedScreen` and `d64Art` take it; `tedCharsAfterLoad` (after `c64xAfterLoad`) gives
+  the page the set. **TEDSE**: its project byte 0 ("charset changed") = 1 and `NAME.chrs` (PRG from $B800, 128
+  characters, as its `savecharset`) written by `tedSaved`; read back in `loadTED` (`tedseChrs`). A 256-character
+  set saved there loses its own reversed half (the note says so). `.chrs` is also a font file (load/save,
+  `fontExts`). **BASIC** (`writeTEDBasSet`): the set's DATA first (lines renumbered by 1 from 70), POKEd to
+  $E000 (RAM under the KERNAL: BASIC's DATA reach far past $2000), $FF12/$FF07/$FF13 POKEd; **ACME**
+  (`writeTEDAsmSet`): SEI + the registers after `sta $ff15`, the set at `*=$2000`. `carriesFont` now includes
+  "tedse". **Font editor**: on a Plus/4 page a change to a character also sets its partner (c^128) to the
+  inverse (`tedFollow` in `FontEd.change`, `tedFollowGlyph` in the drag path), so the page shows what the TED
+  shows; a C64 page's characters stay apart.
+- **DirArt** (`dirart.go`): machine "dirart" (family c64, 16 columns, mono, palette "dirart" = monoPal light
+  blue 6C5EB5 with colour 0 = blue 352879; `newMachineDoc` border 1). Format "dirart" ("c64 (DirArt)", .d64),
+  shown only on DirArt pages, which hide prg/d64 (`dirartHides` in `modeFormats`); `editorOwn`. Names:
+  Petmate9's `petsciiToScreen`; `screenToName` writes 0-31 +64, 64-126 +128 (192-254, never $A0), 127 as 191,
+  reversed control codes 129-159 as $01-$1F and 192-223 as $80-$9F; forbidden (Marq's/Petmate9's list: 34,
+  128, 141, 148, 160-191, 205, 224-255) become spaces, counted in the note (`dirartSaved`, appended to
+  writeOut's note). `writeDirArt(d, src, name)`: over the source disk when the page came from one (rows map to
+  entries in order; a row whose cells equal the entry's decoded name keeps its bytes, $A0s and all; new rows go
+  in free slots after the last entry, then new track-18 sectors in the 1541's interleave-3 order, BAM updated;
+  entries past the page: DEL/0 blocks are cleared, files stay and are counted), else a fresh disk
+  (`writeD64Empty`: writeD64 minus its file). 144 rows at most. Reading (`readDirArt`): every entry with a type
+  byte != 0, $A0 as space. `loadDirArt` (before loadTED): a .d64 with no screen program of ours (d64Art fails)
+  or Open as "C64 DirArt". Marq's `DIRART` META and Petmate9's "dirart" charset map to the page; `marqName`
+  writes `DIRART` without colours.
+- **Tests** (`chs_test.go`, helpers `chsF*`): the MZ set (complete, distinct, turned copies, quarters meet, ROM
+  wins, .font = script output); the Plus/4 program in a small 6502 (`chsF6502`: registers, $2000, screen) for
+  128/256, editor round trips (.prg, .d64, .scrn + .chrs + .proj flag), .chrs as a font file, the font editor's
+  reverse (and a C64 page's not), BASIC DATA order and ACME output assembled and run (`CHARCOAL_ACME`);
+  DirArt: names table vs Marq's list, disks of 1-144 rows (BAM, 664 blocks free, sectors), over a disk with a
+  program (kept byte for byte, $A0 names kept, a ninth row adds sector 18/4), the editor (formats shown, save,
+  Ctrl+S over the same disk, a screen's .d64 still a screen, Open as DirArt, Marq's .c). FuzzParsers: "plus4
+  own prg", "dirart" (written back over itself). **Emulators** (CHARCOAL_EMU=1): `TestEmuChsPlus4` (xplus4
+  3.10: .prg 128/256, .d64, BASIC via petcat, ACME, a readable text page: all pixel for pixel),
+  `TestEmuChsDirArt` (x64sc with `-8 disk -keybuf 'load"$",8\nlist\n'`: the listing's lines, built as screen
+  codes, found on VICE's screen). Samples: `CHARCOAL_CHS_SAMPLES=dir` (a DirArt disk, a Plus/4 program with a
+  set).
+- Traps: a reversed T (screen code 148 = DEL) or M (141 = RETURN) cannot be in a name, so reversed words in
+  DirArt lose those letters; LIST shows a name's bytes after an $A0 outside the quotes (CharEdit shows them as
+  in the name and keeps them when the row is unchanged); CharEdit's PETSCII terminal does not model LIST's
+  quote mode, so the emulator test builds the expected listing from screen codes.
+- Not done: the disk's header line as part of the art (kept from the source disk, else the file's name), the
+  block counts and file types as art (always `0 ... DEL` for new rows), DirArt in lower case (the .d64 keeps
+  no case: the note says the listing shows the upper set), a Plus/4 set in Petmate9/Marq files (neither has
+  one), MZ second-set flips (they use the first set's mirror table).
 
 ## TheDraw fonts: the Logo tool (2026-10-16, branch r5-tdf)
 

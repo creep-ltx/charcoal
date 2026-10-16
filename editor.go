@@ -1444,7 +1444,7 @@ func (a *App) reparse() {
 	if a.reparseUni() {
 		return
 	}
-	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseSky() || a.reparseVideotex() || a.reparseAtari8() || a.reparseZXTap() || a.reparseTED() || a.reparseMSX() || a.reparseMZ() {
+	if a.reparseEditor() || a.reparseCPC() || a.reparseCTM() || a.reparseIGS() || a.reparseSky() || a.reparseVideotex() || a.reparseAtari8() || a.reparseZXTap() || a.reparseTED() || a.reparseMSX() || a.reparseMZ() || a.reparseDirArt() {
 		return
 	}
 	switch a.srcKind {
@@ -1568,6 +1568,9 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 	if a.loadVideotex(b, name, path, as) { // Minitel .vdt, Viewdata .cpt/.bin/.json (minitel_ui.go)
 		return
 	}
+	if a.loadDirArt(b, name, path, as) { // a disk's directory as a DirArt page (dirart.go)
+		return
+	}
 	if a.loadTED(b, name, path, as) { // TED Screen Editor's .scrn, Open as Plus/4 (ted_formats.go)
 		return
 	}
@@ -1679,7 +1682,8 @@ func (a *App) loadBytes(b []byte, name, path, as string) {
 				a.useOwnFont(f, nil, false)
 			}
 		}
-		a.c64xAfterLoad(b, kind) // CharEdit's .prg and .d64: mode and character set
+		a.c64xAfterLoad(b, kind)     // CharEdit's .prg and .d64: mode and character set
+		a.tedCharsAfterLoad(b, kind) // the Plus/4's with a character set (tedchars.go)
 		if len(scr) > 1 {
 			a.msg(fmt.Sprintf("%s: %d screens, opened as frames (%s and %s go through them)", name, len(scr),
 				keyName("frame_previous"), keyName("frame_next")))
@@ -2746,6 +2750,9 @@ func (a *App) modeFormats() []Format {
 		if a.tedHides(f) { // the Plus/4's own, and what it cannot have (ted_formats.go)
 			continue
 		}
+		if a.dirartHides(f) { // DirArt's .d64 on DirArt pages only (dirart.go)
+			continue
+		}
 		if strings.Contains(f.modes, a.mode) {
 			out = append(out, f)
 		}
@@ -2818,6 +2825,9 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		return out, nil
 	}
 	if out, ok, err := a.encodeUni(fmtID, d); ok { // uniformats.go
+		return out, err
+	}
+	if out, ok, err := a.encodeDirArt(fmtID, d); ok { // DirArt .d64 (dirart.go)
 		return out, err
 	}
 	if out, ok, err := a.encodeTED(fmtID, d); ok { // the Plus/4's .prg, .d64, .scrn and .seq (ted_formats.go)
@@ -3098,7 +3108,7 @@ func (a *App) writeOut(path, fmtID string) bool {
 	}
 	a.lastDir = filepath.Dir(path)
 	savePrefs()
-	note := a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID) + a.tedSaved(path, fmtID)
+	note := a.keepArtFont(path, fmtID) + a.keepVICMode(path, fmtID) + a.tedSaved(path, fmtID) + a.dirartSaved(fmtID)
 	if a.animatedSave(fmtID) {
 		note += pacedNote(a.pageBoard(), ps) + a.writeCopies(path, fmtID)
 	}

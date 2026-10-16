@@ -23,6 +23,8 @@ func petmate9Machine(charset string, width int) string {
 			return "pet80"
 		}
 		return "pet"
+	case cs == "dirart": // 16 columns, the directory's names (dirart.go)
+		return "dirart"
 	case strings.HasPrefix(cs, "c128"):
 		if width >= 80 {
 			return "c128vdc"
@@ -43,6 +45,8 @@ func petmate9Charset(machine string, lower bool) string {
 		return map[bool]string{true: "petBiz", false: "petGfx"}[lower]
 	case "c128", "c128vdc":
 		return map[bool]string{true: "c128Lower", false: "c128Upper"}[lower]
+	case "dirart":
+		return "dirart"
 	}
 	return map[bool]string{true: "lower", false: "upper"}[lower]
 }
@@ -62,7 +66,7 @@ func petmate9VDCCell(code, color int, attr *int) uint32 {
 // petmate9Known: a charset name of the machines' own sets (not a custom font's).
 func petmate9Known(cs string) bool {
 	switch strings.ToLower(cs) {
-	case "upper", "lower", "c128upper", "c128lower", "c128vdc", "vic20upper", "vic20lower", "petgfx", "petbiz", "c16upper", "c16lower":
+	case "upper", "lower", "c128upper", "c128lower", "c128vdc", "vic20upper", "vic20lower", "petgfx", "petbiz", "c16upper", "c16lower", "dirart":
 		return true
 	}
 	return false

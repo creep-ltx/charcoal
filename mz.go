@@ -9,9 +9,11 @@ package main
 // the files hold the real display codes (mzCode).
 //
 // The font: Sharp's character ROM may not be passed on, so CharEdit has Russell
-// Marks's public domain MZ-700-like first set (fonts/mz700-NOTICE.txt); the
-// second set is drawn as its codes in a box. The real ROM (mz700fon.int, both
-// sets) is used when it is in CharEdit's data folder or MAME's ROMs.
+// Marks's public domain MZ-700-like first set (fonts/mz700-NOTICE.txt) and its
+// own look-alike of the second set, drawn for CharEdit (CC0,
+// fonts/mz700-set2-NOTICE.txt; tools/mz700-set2.txt). The real ROM
+// (mz700fon.int, both sets) is used when it is in CharEdit's data folder or
+// MAME's ROMs.
 //
 // Files: a tape file (.mzf) whose program copies the screen into the video RAM
 // (L from the monitor, or loaded in an emulator); CharEdit reads it back, and
@@ -33,6 +35,9 @@ import (
 
 //go:embed fonts/mz700-rjm.font
 var mzRJMFont []byte
+
+//go:embed fonts/mz700-set2.font
+var mzSet2Data []byte
 
 const (
 	mzCols, mzRows = 40, 25
@@ -65,22 +70,9 @@ func mzFontFrom(id, name, kind string, glyph func(c, r int) byte) *Font {
 
 var mzFont = mzFontFrom("mz700", "MZ-700 (public domain look-alike)", "mz", func(c, r int) byte { return mzRJMFont[c*8+r] })
 
-// mzHexFont: the second set without Sharp's ROM, each character its code in a
-// box (3x5 digits).
-var mzHexFont = func() *Font {
-	digits := [16][5]byte{{7, 5, 5, 5, 7}, {2, 6, 2, 2, 7}, {7, 1, 7, 4, 7}, {7, 1, 3, 1, 7}, {5, 5, 7, 1, 1}, {7, 4, 7, 1, 7},
-		{7, 4, 7, 5, 7}, {7, 1, 1, 2, 2}, {7, 5, 7, 5, 7}, {7, 5, 7, 1, 7}, {2, 5, 7, 5, 5}, {6, 5, 6, 5, 6},
-		{3, 4, 4, 4, 3}, {6, 5, 5, 5, 6}, {7, 4, 6, 4, 7}, {7, 4, 6, 4, 4}}
-	return mzFontFrom("mz700set2", "MZ-700 second set (codes)", "mz2", func(c, r int) byte {
-		switch r {
-		case 0, 7:
-			return 0xFF
-		case 6:
-			return 0x81
-		}
-		return 0x80 | digits[c>>4][r-1]<<4 | digits[c&15][r-1]<<1 | 1
-	})
-}()
+// mzFreeSet2 is the second set without Sharp's ROM: CharEdit's own look-alike,
+// drawn by hand from what each character means (tools/mz700-set2.txt).
+var mzFreeSet2 = mzFontFrom("mz700set2", "MZ-700 second set (CharEdit's look-alike)", "mz2", func(c, r int) byte { return mzSet2Data[c*8+r] })
 
 // mzROMSet2 is the second set of Sharp's ROM for each ROM font (by its id).
 var mzROMSet2 = map[string]*Font{}
@@ -150,7 +142,7 @@ func (a *App) mzSet2Font() *Font {
 	if f := mzROMSet2[a.font().id]; f != nil {
 		return f
 	}
-	return mzHexFont
+	return mzFreeSet2
 }
 
 func (a *App) drawMZCell(fb *FB, px, py, z int, v uint32) {

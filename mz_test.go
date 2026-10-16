@@ -56,9 +56,9 @@ func TestMZFonts(t *testing.T) {
 	if !validMZFkeys(mzFkeys) || validMZFkeys([][]int{{1, 2, 3, 4, 5, 6, 7, 8, 9, 512}}) {
 		t.Error("validMZFkeys")
 	}
-	// The second set without the ROM: each character its code.
-	if mzHexFont.row(mzCode(0xA5), 0) != 0xFF {
-		t.Error("the second set's boxes")
+	// The second set without the ROM: CharEdit's look-alike (chs_test.go).
+	if mzFreeSet2.row(mzCode(0x01), 0) == 0 {
+		t.Error("the second set's outlined A")
 	}
 }
 
@@ -106,8 +106,14 @@ func TestMZPage(t *testing.T) {
 	fb := &FB{}
 	fb.resize(8, 8)
 	a.drawCell(fb, 0, 0, 1, a.doc.get(5, 5))
-	if fb.px[0] != a.pal[6] { // the box's corner
-		t.Errorf("second set drawn %08X", fb.px[0])
+	for i := range 64 {
+		want := a.pal[2]
+		if mzFreeSet2.row(0x45, i/8)&(0x80>>(i%8)) != 0 {
+			want = a.pal[6]
+		}
+		if fb.px[i] != want {
+			t.Fatalf("second set drawn %08X at pixel %d", fb.px[i], i)
+		}
 	}
 }
 
