@@ -2,7 +2,7 @@
 
 Each version's section is also its release page on GitHub. Newest first.
 
-## Unreleased
+## 0.1b14 (2026-10-17)
 
 - **Lock a layer** (Lock in the Layers panel, Page > Lock the layer): no tool changes it, so you can draw
   around a finished part without touching it. IcyDraw files keep the lock.
