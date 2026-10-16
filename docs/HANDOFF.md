@@ -517,8 +517,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   h*62/400); "twice the size" is 1536 x 1088. *Verified*: the whole PNG, border included, is byte-identical to 9
   compo entries' own Caprice screenshots (the others' screenshots came from other tools: 1280x800, 768x576,
   320x200). A .psci has no border colour, so its picture differs there.
-- Not done: CharEdit's .bin has not run on a real CPC or an emulator (no CPC emulator here; the stub is checked by
-  the Z80 test only); play (m) of the stream;
+- Not done: CharEdit's .bin has not run on a real CPC (it runs in MAME: see "Machine files in real emulators"); play (m) of the stream;
   BASIC listing; flashing inks shown as their first colour; custom characters (SYMBOL) ignored.
 
 ## Minitel and Viewdata pages (2026-10-16, branch r2-videotex)
@@ -636,7 +635,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   chain / directory; CharPad files of every version give version 5's page; editor (undo, ECM painting, .prg/.d64
   save/open/Ctrl+S, .seq keeps the mode, autosave); `TestC64xMutations` (20000 mutated files; the fuzz engine
   stalls in this package), `FuzzC64x`, FuzzParsers has prg/d64/ctm.
-- Not done: DirArt (directory art) on the .d64; a run in VICE or on a real C64; Petmate/Marq .c files with modes
+- Not done: DirArt (directory art) on the .d64; a run on a real C64 (VICE: see "Machine files in real emulators"); Petmate/Marq .c files with modes
   (neither editor has them); CharPad writing; Petmate JSON with a custom charset.
 
 ## Atari ST IGS (2026-10-16, branch r2-igs; design: docs/igs-design.md)
@@ -803,10 +802,41 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   pixel, border included**; round trips; editor save/open/Ctrl+S with an own font; ROM font detection;
   .tap blocks byte for byte (headers, the tokenised BASIC, checksums), other tapes' loading screens, editor round
   trip with the border. FuzzParsers has xex/atr and tap.
-- Not run in an emulator: none installed. atari800 was built from source in ~/.cache/charcoal-mach/src
+- Run in atari800 and Fuse since (see "Machine files in real emulators"). atari800 was built from source in ~/.cache/charcoal-mach/src
   (`--target=libatari800`, needs `CFLAGS=-Wno-error`), but running it was not allowed in that session; fuse is
   not installed. Not done: pages taller than 24 rows in the .xex (only the first 24), a DOS 2 disk with the .xex
   as a file, a tape loader for an own Spectrum font (the .scr carries the pixels anyway), .tzx.
+
+## Machine files in real emulators (2026-10-16, branch r3-emu; tools/emucheck/README.md)
+
+- `emu_test.go` (off unless `CHARCOAL_EMU=1`): writes pages with `writeOut` as a user saves them, runs the file in
+  an emulator without any window, and compares the emulator's screen with `renderDoc` (the PNG export) pixel for
+  pixel, border ring included. Colours are matched as a one-to-one pairing (palettes differ), so what is checked is
+  every cell's glyph and which colour index it has. `emuFMatch` finds the screen at any offset and with a scale
+  (MAME's CPC is 1:1 across, 1:2 down); on a failure it lists the cells that differ.
+- **Result: every file shows exactly CharEdit's page; no writer bug found.** 14 C64 cases (Petmate's form upper
+  and lower, own set hi-res/MCM/ECM, ROM MCM/ECM in both cases, .d64 through the 1541, a 10-row page), 9 Atari
+  (.xex/.atr, 38/40, ROM/own font, 6-row page, 800XL and 800 with AltirraOS), 3 Spectrum .tap (ROM font, own font),
+  4 CPC .dsk (modes 0, 1, 2). Pictures in /tmp/charcoal-emu (`*-text-emu.png` are readable pages).
+- How each runs: VICE `x64sc -console -warp -limitcycles -exitscreenshot` (`.prg` injected); atari800's core
+  through `tools/emucheck/a800shot.c` (libatari800, built by `build-a800shot.sh` in ~/.cache/charcoal-emu); Fuse
+  (GTK) on GTK's Broadway backend (`broadwayd`, no screen) recording an uncompressed FMF movie, read by
+  `emuFFMF`; MAME `cpc6128 -video none -seconds_to_run` with Caprice32's ROMs (`get-cpc-roms.sh`). All with
+  `env -i`, a temporary HOME, `timeout -k 5` and a 4 GB scope.
+- **Colours** (logged by the tests): atari800's default PAL and NTSC palettes are CharEdit's `gtiaPAL`/`gtiaNTSC`
+  exactly (0 difference over all 128 colours each), so "darker than measured" is atari800's own default look.
+  atari800's act/ files are brighter (mean brightness 136-146 against our 99; $94 jakub #2D769D, Real #3E75A4,
+  ours #034653); Altirra 4.40's default PAL, computed from its palettegenerator.cpp (not run: Windows), is between
+  (mean 120, $94 #005F8A, grey 14 #EEEEEE against our #D3D3D3). VICE's default C64 palette differs from ours
+  (e.g. blue 2C3DEC vs 352879); MAME's CPC half level is 0x60, ours (Caprice's) 0x80. Licences: the act files are
+  part of atari800 (GPL-2+, no own notice; jakub.act by Jakub Bogusz, Real.act by Zdenek Eisenhammer per
+  DOC/CREDITS); Altirra is GPL-2+ and its palette is a model (constants), the position gtia.go took for atari800.
+- Traps: VICE's default (virtual drive) autostart is too slow for 4M cycles; Fuse ignores TERM (hence
+  `timeout -k`); Broadway's socket is abstract; systemd-run needs the session's XDG_RUNTIME_DIR, so the emulator's
+  own env goes through `env -i`; Arch's /usr/bin/mame writes ~/.mame (use /usr/lib/mame/mame); FMF has no flash
+  phase; Spectrum bright black = black.
+- Not done: flash on the Spectrum (not in the movie), C128/VIC-20/PET programs (x128/xvic/xpet not installed),
+  Plus/4 (another helper's area), a real machine, Altirra itself.
 
 ## Keys and safety (2026-10-13, evening)
 
