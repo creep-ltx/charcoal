@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // ---------------------------------------------------------------- PCBoard
@@ -30,12 +31,14 @@ func hexVal(c byte) int {
 }
 
 // parsePCBoard reads PCBoard's @X colour codes, @CLS@ and @POS:n@; the rest prints as on an 80-column screen.
-// @X00 and @XFF are no colours: @X00 keeps the current colour, @XFF brings
-// it back (one is kept; light grey before any; PCBoard's PPL guide, Synchronet's putmsg.cpp).
+// A file with both @X00 and @XFF uses them as PCBoard does: @X00 keeps the
+// current colour, @XFF brings it back (one is kept; light grey before any;
+// PCBoard's PPL guide, Synchronet's putmsg.cpp). Alone, each is a colour (black
+// on black, bright white on white), as art editors wrote them and ansilove reads them.
 func parsePCBoard(b []byte, cols int) *Doc {
 	d := newDoc(cols, 25)
 	x, y, attr := 0, 0, 0x07
-	saved := 0x07
+	saved, pair := 0x07, pcbSavesColour(b)
 	put := func(c byte) {
 		d.set(x, y, attrCell(c, byte(attr)))
 		if x++; x >= cols {
@@ -46,10 +49,10 @@ func parsePCBoard(b []byte, cols int) *Doc {
 		c := b[i]
 		switch {
 		case c == '@' && i+3 < len(b) && (b[i+1] == 'X' || b[i+1] == 'x') && isHex(b[i+2]) && isHex(b[i+3]):
-			switch v := hexVal(b[i+2])<<4 | hexVal(b[i+3]); v {
-			case 0x00:
+			switch v := hexVal(b[i+2])<<4 | hexVal(b[i+3]); {
+			case pair && v == 0x00:
 				saved = attr
-			case 0xFF:
+			case pair && v == 0xFF:
 				attr = saved
 			default:
 				attr = v
@@ -95,11 +98,12 @@ func writePCBoard(d *Doc, clear bool) []byte {
 		out = append(out, "@CLS@"...)
 	}
 	attr := -1
+	both := pcbBoth(d)
 	for y := 0; y < d.rows; y++ {
 		last := d.lastCol(y)
 		for x := 0; x <= last; x++ {
 			v := d.get(x, y)
-			a, c := pcbCell(v)
+			a, c := pcbCell(v, both)
 			if a != attr {
 				attr = a
 				out = append(out, fmt.Sprintf("@X%02X", a)...)
@@ -124,24 +128,54 @@ func writePCBoard(d *Doc, clear bool) []byte {
 	return append(out, "@X07"...)
 }
 
-// pcbCell is how a cell is written with @X codes: @X00 and @XFF save and
-// restore the colour, so black on black is written @X80 (blinking black on
-// black: it looks the same on PCBoard's screens, which blink, not iCE), and
-// bright white on white loses its blink (@X7F).
-func pcbCell(v uint32) (attr int, c byte) {
+// pcbSavesColour: the file uses @X00 and @XFF as PCBoard's save and restore
+// (it has both); otherwise each is a colour.
+func pcbSavesColour(b []byte) bool {
+	has := func(h string) bool {
+		for i := 0; i+3 < len(b); i++ {
+			if b[i] == '@' && (b[i+1] == 'X' || b[i+1] == 'x') && strings.EqualFold(string(b[i+2:i+4]), h) {
+				return true
+			}
+		}
+		return false
+	}
+	return has("00") && has("FF")
+}
+
+// pcbBoth: the page has black-on-black and bright-white-on-white cells, so
+// writing both @X00 and @XFF would make them PCBoard's save and restore.
+func pcbBoth(d *Doc) bool {
+	black, white := false, false
+	for y := 0; y < d.rows; y++ {
+		for x := 0; x <= d.lastCol(y); x++ {
+			switch cellAttr(d.get(x, y)) {
+			case 0x00:
+				black = true
+			case 0xFF:
+				white = true
+			}
+		}
+	}
+	return black && white
+}
+
+// pcbCell is how a cell is written with @X codes: as it is, but with both
+// black on black and bright white on white on the page the second is written
+// @X7F (its blink lost), so the file never has the pair that PCBoard reads as
+// save and restore.
+func pcbCell(v uint32, both bool) (attr int, c byte) {
 	attr, c = int(cellAttr(v)), byte(cellCh(v))
-	switch attr {
-	case 0x00:
-		attr = 0x80
-	case 0xFF:
+	if both && attr == 0xFF {
 		attr = 0x7F
 	}
 	return attr, c
 }
 
-// pcbLoss says what a page loses in @X codes ("" nothing): bright white on
-// white cells lose their blink.
+// pcbLoss says what a page loses in @X codes ("" nothing).
 func pcbLoss(d *Doc) string {
+	if !pcbBoth(d) {
+		return ""
+	}
 	white := 0
 	for y := 0; y < d.rows; y++ {
 		for x := 0; x <= d.lastCol(y); x++ {
@@ -150,10 +184,7 @@ func pcbLoss(d *Doc) string {
 			}
 		}
 	}
-	if white == 0 {
-		return ""
-	}
-	return fmt.Sprintf("%d bright white on white cells lost their blink (@XFF brings back a saved colour on PCBoard)", white)
+	return fmt.Sprintf("%d bright white on white cells lost their blink (@X00 with @XFF would save and restore the colour)", white)
 }
 
 // safeByte: bytes a terminal would act on are written as spaces.

@@ -401,14 +401,30 @@ func TestBrdBatchKeepsCodes(t *testing.T) {
 	}
 }
 
-// PCBoard: @X00 keeps the current colour and @XFF brings it back (light grey
-// before any); the writers never write either as a colour.
+// PCBoard: a file with both @X00 and @XFF keeps and brings back the colour
+// with them; alone each is a colour (black on black, bright white on white),
+// as art editors wrote them. A save never makes the pair of a page's colours.
 func TestBrdPCBoardSaveRestore(t *testing.T) {
 	d := parsePCBoard([]byte("@XFFa@X1Fb@X00c@X4Ed@XFFe@X00@X2Af@XffG"), 80)
 	want := []int{0x07, 0x1F, 0x1F, 0x4E, 0x1F, 0x2A, 0x1F}
 	for x, w := range want {
 		if a := bbsFAttr(d, x, 0); a != w {
-			t.Fatalf("cell %d (%c): %02X, want %02X", x, cellCh(d.get(x, 0)), a, w)
+			t.Fatalf("pair, cell %d (%c): %02X, want %02X", x, cellCh(d.get(x, 0)), a, w)
+		}
+	}
+	for _, c := range []struct {
+		src  string
+		want []int
+	}{{"@X1Fa@X00b@X4Ec", []int{0x1F, 0x00, 0x4E}}, {"@X1Fa@XFFb@X4Ec", []int{0x1F, 0xFF, 0x4E}}} {
+		d := parsePCBoard([]byte(c.src), 80)
+		for x, w := range c.want {
+			if a := bbsFAttr(d, x, 0); a != w {
+				t.Fatalf("%s: cell %d %02X, want %02X", c.src, x, a, w)
+			}
+		}
+		out := writePCBoard(d, false) // opened and saved: reads the same
+		if back := parsePCBoard(out, 80); bbsFAttr(back, 1, 0) != c.want[1] || pcbLoss(d) != "" {
+			t.Fatalf("%s saved as %q", c.src, out)
 		}
 	}
 	p := newDoc(80, 1)
@@ -416,18 +432,18 @@ func TestBrdPCBoardSaveRestore(t *testing.T) {
 	p.set(1, 0, attrCell('y', 0xFF))
 	p.set(2, 0, attrCell('z', 0x1E))
 	out := writePCBoard(p, false)
-	if bytes.Contains(out, []byte("@X00")) || bytes.Contains(out, []byte("@XFF")) {
-		t.Fatalf("written %q", out)
+	if pcbSavesColour(out) {
+		t.Fatalf("written with the pair: %q", out)
 	}
 	back := parsePCBoard(out, 80)
-	if bbsFAttr(back, 0, 0) != 0x80 || bbsFAttr(back, 1, 0) != 0x7F || bbsFAttr(back, 2, 0) != 0x1E || row(back, 0) != "xyz" {
+	if bbsFAttr(back, 0, 0) != 0x00 || bbsFAttr(back, 1, 0) != 0x7F || bbsFAttr(back, 2, 0) != 0x1E || row(back, 0) != "xyz" {
 		t.Fatalf("read back %q %02X %02X %02X", row(back, 0), bbsFAttr(back, 0, 0), bbsFAttr(back, 1, 0), bbsFAttr(back, 2, 0))
 	}
 	if n := pcbLoss(p); !strings.Contains(n, "1 bright white") {
 		t.Fatalf("loss %q", n)
 	}
-	// An animated file for PCBoard: a stream with black on black or bright
-	// white on white keeps its ANSI colours.
+	// An animated file for the PCBoard board (which always saves and restores
+	// with them): a stream with black on black or bright white on white keeps ANSI.
 	for _, s := range []string{"\x1b[0;30;40mx", "\x1b[0;1;5;37;47mx"} {
 		if boardColourer("pcb", []byte(s)) != nil {
 			t.Fatalf("%q converted to @X", s)
@@ -479,49 +495,61 @@ func TestBrdTelegard(t *testing.T) {
 	}
 }
 
-// Mystic's |T0-|T9 and Renegade's ^0-^9 show the boards' default colours,
-// and a save writes the codes again where the page has those colours.
+// Mystic's |T0-|T9 and Renegade's ^0-^9 show the boards' default colours; a
+// save writes a theme code again only for the cells drawn in it, and a file
+// with |T2 and an explicit |11 of the same colour saves byte for byte.
 func TestBrdThemeColours(t *testing.T) {
-	d := bbsFRead("pipe", "|T1a^8b|07c|T9d^x|PI")
-	want := []int{0x09, 0x8E, 0x87, 0x1F} // (|07 keeps the background and blink)
-	for x, w := range want {
-		if a := bbsFAttr(d, x, 0); a != w {
-			t.Fatalf("cell %d: %02X, want %02X", x, a, w)
-		}
+	d := bbsFRead("pipe", "|T1a^8b|07c|T9d|PI")
+	if row(d, 0) != "a^8bcd|" || bbsFAttr(d, 0, 0) != 0x09 || bbsFAttr(d, 4, 0) != 0x07 || bbsFAttr(d, 5, 0) != 0x1F {
+		t.Fatalf("pipe: %q %02X %02X %02X", row(d, 0), bbsFAttr(d, 0, 0), bbsFAttr(d, 4, 0), bbsFAttr(d, 5, 0))
 	}
-	if row(d, 0) != "abcd^x|" {
-		t.Fatalf("text %q", row(d, 0))
+	d = bbsFRead("renegade", "^8a|07b^xc|T1d|32e|PI")
+	if row(d, 0) != "ab^xc|T1de|PI" || bbsFAttr(d, 0, 0) != 0x8E || bbsFAttr(d, 1, 0) != 0x87 {
+		t.Fatalf("renegade: %q %02X %02X", row(d, 0), bbsFAttr(d, 0, 0), bbsFAttr(d, 1, 0))
+	}
+	if k := bbsCodesKind([]byte("^1Welcome |07to ^2the |15board |07now ^3x |11y\r\n"), "x.ans"); k == "renegade" {
+		t.Fatal("Renegade codes guessed")
 	}
 	a := testApp(t, "pc")
 	dir := t.TempDir()
-	p := filepath.Join(dir, "menu.ans")
-	src := "|T1Welcome |T5to ^8the |07board ^3now|07\r\n|T1again |15x\r\n"
-	os.WriteFile(p, []byte(src), 0o644)
-	a.openPath(p, "auto")
-	if a.codes != "pipe" || !strings.Contains(a.message, "Renegade's default") {
-		t.Fatalf("opened as %q: %s", a.codes, a.message)
-	}
-	keep := a.doc.clone()
-	a.dirty = true
-	if !a.writeOut(p, "pipe") {
-		t.Fatal("save failed")
-	}
-	b, _ := os.ReadFile(p)
-	for _, c := range []string{"|T1", "|T5", "^8", "^3"} {
-		if !bytes.Contains(b, []byte(c)) {
-			t.Fatalf("%s not written back: %q", c, b)
+	for _, c := range []struct{ kind, src string }{
+		{"pipe", "|T2Welcome |11to |T2the board\r\n|T5x|15y\r\n|07"},
+		{"renegade", "^3Welcome |11to ^3the board\r\n^0x|15y\r\n|07"},
+	} {
+		p := filepath.Join(dir, c.kind+".ans")
+		os.WriteFile(p, []byte(c.src), 0o644)
+		a.openPath(p, c.kind)
+		if a.codes != c.kind || a.saveFmt != c.kind || !strings.Contains(a.message, "default colours") {
+			t.Fatalf("%s opened as %q/%q: %s", c.kind, a.codes, a.saveFmt, a.message)
+		}
+		if bbsFAttr(a.doc, 0, 0) != 0x0B || bbsFAttr(a.doc, 8, 0) != 0x0B {
+			t.Fatalf("%s colours %02X %02X", c.kind, bbsFAttr(a.doc, 0, 0), bbsFAttr(a.doc, 8, 0))
+		}
+		a.dirty = true
+		if !a.writeOut(p, a.saveFmt) {
+			t.Fatal("save failed")
+		}
+		if b, _ := os.ReadFile(p); string(b) != c.src {
+			t.Fatalf("%s saved as\n%q, was\n%q", c.kind, b, c.src)
+		}
+		// A cell given another colour loses its theme code; the rest keep theirs.
+		a.openPath(p, c.kind)
+		a.doc.set(0, 0, attrCell('W', 0x0C))
+		a.dirty = true
+		a.writeOut(p, a.saveFmt)
+		b, _ := os.ReadFile(p)
+		if !strings.HasPrefix(string(b), "|12|16W") || strings.Count(string(b), c.src[:2]) != strings.Count(c.src, c.src[:2]) {
+			t.Fatalf("%s after an edit: %q", c.kind, b)
 		}
 	}
-	a.openPath(p, "auto")
-	sameCells(t, "reopened", keep, a.doc)
-	// Art with ^ before a digit is not taken for a colour.
-	q := newDoc(10, 1)
-	for i, c := range []byte("^5 ^x |T3") {
+	// Renegade's own characters in art are kept apart from codes.
+	q := newDoc(12, 1)
+	for i, c := range []byte("^5 ^x |12 |x") {
 		q.set(i, 0, attrCell(c, 0x1E))
 	}
-	out, _ := writeBBSCodes("pipe", q, false, false)
-	back, _, _ := parseArt(out, ParseOpts{codes: "pipe", forceCols: 10})
-	bbsFSame(t, "caret", q, back)
+	out, _ := writeBBSCodes("renegade", q, false, false)
+	back, _, _ := parseArt(out, ParseOpts{codes: "renegade", forceCols: 12})
+	bbsFSame(t, "renegade art", q, back)
 }
 
 // The DirArt header line: the page's first row is the disk's name, read
@@ -630,4 +658,42 @@ func TestEmuBrdDirArtHeader(t *testing.T) {
 		t.Fatalf("x64sc gave no screenshot:\n%s", out)
 	}
 	emuFCheck(t, s, c, emuFReadPNG(t, shot))
+}
+
+// A DirArt page with no header row (Marq's DIRART .c, a new page) saves every
+// row as a file, the disk named after the file, also on a second save over
+// that disk; opened from the disk, the header line comes first.
+func TestBrdDirArtNoHeader(t *testing.T) {
+	marq := []byte("unsigned char frame0000[]={\n" + strings.Repeat("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,\n", 3) + "};\n// META: 16 3 DIRART upper\n")
+	m := c64xFApp(t)
+	m.loadBytes(marq, "x.c", "", "auto")
+	if !m.dirart() || m.dirartHead {
+		t.Fatalf("Marq's DirArt: %s head %v", m.machine, m.dirartHead)
+	}
+	art := m.doc.clone()
+	p := filepath.Join(t.TempDir(), "art.d64")
+	for range 2 { // the second save goes over the disk the first wrote
+		m.dirty = true
+		if !m.writeOut(p, "dirart") {
+			t.Fatal(m.message)
+		}
+		img, _ := os.ReadFile(p)
+		if ents, _, _, _ := dirartEntries(img); len(ents) != 3 {
+			t.Fatalf("%d entries, want 3", len(ents))
+		}
+		if !strings.HasPrefix(string(dirartHeadName(img)), "ART") {
+			t.Fatalf("disk name %q", dirartHeadName(img))
+		}
+	}
+	b := chsFOpen(t, p)
+	if !b.dirartHead || b.doc.rows != 4 || cellCh(b.doc.get(0, 0)) != 0x81 { // reversed A of "ART"
+		t.Fatalf("reopened: head %v, %d rows, %d", b.dirartHead, b.doc.rows, cellCh(b.doc.get(0, 0)))
+	}
+	for y := 0; y < 3; y++ {
+		for x := 0; x < 16; x++ {
+			if cellCh(b.doc.get(x, y+1)) != cellCh(art.get(x, y)) {
+				t.Fatalf("art row %d changed", y)
+			}
+		}
+	}
 }

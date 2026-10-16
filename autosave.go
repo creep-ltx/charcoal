@@ -51,6 +51,7 @@ type autosaveMeta struct {
 	Notes        []string        `json:"notes,omitempty"`
 	Subpage      int             `json:"tti_subpage,omitempty"` // a .tti carousel's subpage, from 1 (saving keeps the others)
 	Screen       int             `json:"screen,omitempty"`      // 0.1b3: a .c / .petmate file's screen, from 1 (saving keeps the others)
+	DirArtHead   bool            `json:"dirart_head,omitempty"` // a DirArt page's first row is the disk's header line (dirarthead.go)
 	SrcKind      string          `json:"source_kind,omitempty"` // the kind of the page's file ("tti", "marq", "petmate" ...), read again from Path
 	Cur          int             `json:"frame,omitempty"`       // the frame being worked on
 	Frames       []autosaveFrame `json:"frames,omitempty"`      // a page of several frames: their cells follow one another in .cells
@@ -127,7 +128,7 @@ func writeAutosave(t *Tab) error {
 		Cols: d.cols, Rows: d.rows, Bg: d.bg, Border: d.border, Ink: d.ink, Glyph0: d.glyph0,
 		Title: t.info.title, Author: t.info.author, Group: t.info.group, WriteSauce: t.info.writeSauce,
 		Clear: t.info.clear, Notes: t.info.notes}
-	m.SrcKind, m.Order = t.srcKind, t.order
+	m.SrcKind, m.Order, m.DirArtHead = t.srcKind, t.order, t.dirartHead
 	m.GTIA = t.mode == "atari"
 	if t.mode == "uni" {
 		m.UniPairs = uniPairsSnapshot()
@@ -372,6 +373,7 @@ func (a *App) restoreAutosave(f autosaveFile) error {
 	if m.SaveFmt != "" {
 		a.saveFmt = m.SaveFmt
 	}
+	a.dirartHead = m.DirArtHead
 	a.info = Info{title: m.Title, author: m.Author, group: m.Group, writeSauce: m.WriteSauce, clear: m.Clear, notes: m.Notes}
 	a.source, a.srcKind, a.frames, a.cur = nil, "", nil, 0
 	kind, at := m.SrcKind, 0 // at: an autosave from before frames of one subpage or screen (from 1)

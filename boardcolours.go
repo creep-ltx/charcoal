@@ -85,7 +85,7 @@ func (c *sgrColours) knows(p int) bool {
 	case p == 0, p == 1, p == 22, p >= 30 && p <= 37, p == 39, p >= 40 && p <= 47, p == 49:
 		return true
 	case p == 5, p == 25:
-		return c.kind != "pipe" && c.kind != "celerity" // Mystic 1.10 eats |24-|31, Celerity has none: a blinking file keeps ANSI
+		return c.kind != "pipe" && c.kind != "celerity" && c.kind != "renegade" // Mystic 1.10 eats |24-|31, Celerity has none: a blinking file keeps ANSI
 	}
 	return false
 }

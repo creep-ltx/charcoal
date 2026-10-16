@@ -11,15 +11,15 @@ Each version's section is also its release page on GitHub. Newest first.
   Celerity or Telegard codes, given a draw order or an effect, is saved as its animation in those same codes
   (with your board's pauses). Animate a folder does the same: such files keep their codes and their names,
   instead of becoming `.ans` files in ANSI colours.
-- **PCBoard `@X00` and `@XFF`** are read as PCBoard reads them: `@X00` keeps the current colour, `@XFF` brings it
-  back. **Changed:** a `.pcb` whose author meant `@X00` as black on black shows those characters in the colour
-  before. CharEdit writes black on black as `@X80` (it looks the same) and never writes either code.
+- **PCBoard `@X00` and `@XFF`:** a `.pcb` with both is read as PCBoard reads it (`@X00` keeps the colour, `@XFF`
+  brings it back); with only one of them it is a colour, as before. A save never writes both.
 - **Telegard** `` `0E ``-style colour codes are read and written (Open as *PC: Telegard `XY*, Save as).
-- **Mystic's theme colours `|T0`-`|T9` and Renegade's user colours `^0`-`^9`** show in the boards' default
-  colours instead of as text, and are saved back as the same codes.
-- **DirArt: the disk's header line is part of the art.** The first row of a DirArt page is the disk's name, which
-  the C64 shows reversed above the files; the rows below are the files. **Changed:** a DirArt disk opens one row
-  taller (the header first).
+- **Mystic's theme colours `|T0`-`|T9`** show in the board's default colours instead of as text, and are saved
+  back as the same codes for the cells drawn in them. **Renegade pipe codes** (Open as and Save as) read its
+  user colours `^0`-`^9` the same way.
+- **DirArt: the disk's header line is part of the art.** A DirArt disk opens with the disk's name (shown
+  reversed, as the C64 lists it) as the first row, the files below it, and saves it back. **Changed:** a DirArt
+  disk opens one row taller. Pages without a header row (new ones, Marq's and Petmate9's) save as before.
 
 ## 0.1b13 (2026-10-16)
 

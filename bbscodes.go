@@ -174,6 +174,11 @@ type codeTerm struct {
 	pend  []byte   // the start of a code cut by the end of a write
 	stack []uint32 // Ctrl-A + pushes the colours, - pops them
 	done  bool     // Ctrl-A Z: the end of the file
+	// Theme colours (brdcodes.go): the code whose colours are on (|T3, ^3; ""
+	// none) and, when marks is not nil, where each cell drawn in them is.
+	theme     string
+	themeAttr int
+	marks     map[[2]int]string
 }
 
 func newCodeTerm(t *Term, kind string) *codeTerm { return &codeTerm{Term: t, kind: kind} }
@@ -200,6 +205,7 @@ func (c *codeTerm) feed(b []byte, final bool) {
 			return
 		}
 		if n == 0 {
+			c.mark(b[i]) // brdcodes.go
 			c.Term.byte(b[i])
 			n = 1
 		}
@@ -210,8 +216,8 @@ func (c *codeTerm) feed(b []byte, final bool) {
 // code reads the code at the start of b: the bytes it takes (0 = not a code,
 // shown as text), or more = it may be a code but b ends before it can tell.
 func (c *codeTerm) code(b []byte, final bool) (n int, more bool) {
-	want := map[string]int{"pipe": 3, "ctrla": 2, "wwiv": 3, "wildcat": 5, "celerity": 2, "telegard": 3}[c.kind]
-	lead := map[string]string{"pipe": "|^", "ctrla": "\x01", "wwiv": "|\x03", "wildcat": "@", "celerity": "|", "telegard": "`"}[c.kind]
+	want := map[string]int{"pipe": 3, "ctrla": 2, "wwiv": 3, "wildcat": 5, "celerity": 2, "telegard": 3, "renegade": 3}[c.kind]
+	lead := map[string]string{"pipe": "|", "ctrla": "\x01", "wwiv": "|\x03", "wildcat": "@", "celerity": "|", "telegard": "`", "renegade": "|^"}[c.kind]
 	if strings.IndexByte(lead, b[0]) < 0 {
 		return 0, false
 	}
@@ -221,6 +227,8 @@ func (c *codeTerm) code(b []byte, final bool) (n int, more bool) {
 	switch c.kind {
 	case "pipe":
 		return c.pipe(b), false
+	case "renegade":
+		return c.renegade(b), false // brdcodes.go
 	case "ctrla":
 		return c.ctrlA(b), false
 	case "wwiv":
@@ -276,20 +284,18 @@ func pipeActs(x, y byte) bool {
 // | + two characters (Mystic's |PO, |DE, |UN ... and Renegade's eaten |32-|99)
 // stays as text.
 func (c *codeTerm) pipe(b []byte) int {
-	if b[0] == '^' { // Renegade's user colours (brdcodes.go)
-		return c.renegadeColour(b)
-	}
 	if len(b) < 3 || !pipeActs(b[1], b[2]) {
 		return 0
 	}
 	switch {
 	case b[1] == 'T': // Mystic's theme colours (brdcodes.go)
-		c.setAttr(mysticThemeColours[b[2]-'0'])
+		c.setTheme(string(b[:3]), mysticThemeColours[b[2]-'0'])
 	case b[1] == 'C':
 		c.clearScreen()
 	case b[1] == 'P':
 		c.Term.byte('|')
 	default:
+		c.theme = "" // an explicit colour (brdcodes.go)
 		v := int(b[1]-'0')*10 + int(b[2]-'0')
 		switch {
 		case v < 16:
@@ -492,16 +498,17 @@ type bbsLoss struct {
 // change, rows ended with CR LF unless they fill the width, the board's clear
 // first when asked, normal colours at the end. ice: bit 7 is a bright
 // background (Ctrl-A E instead of I).
-func writeBBSCodes(kind string, d *Doc, clear, ice bool, themes ...map[int]string) ([]byte, bbsLoss) {
+func writeBBSCodes(kind string, d *Doc, clear, ice bool, themes ...map[[2]int]string) ([]byte, bbsLoss) {
 	var out []byte
-	var theme map[int]string // attribute -> |T0-|T9 / ^0-^9 code to write it with (bbsThemes)
+	var theme map[[2]int]string // cells drawn in a theme colour code (|T0-|T9, ^0-^9) -> the code (brdcodes.go)
 	if len(themes) > 0 {
 		theme = themes[0]
 	}
+	origin := "" // the theme code the colours came from ("" explicit codes)
 	var loss bbsLoss
 	if clear {
 		out = append(out, map[string]string{"pipe": "|CL", "ctrla": "\x01L", "wildcat": "@CLS@"}[kind]...)
-		if kind == "wwiv" || kind == "celerity" {
+		if kind == "wwiv" || kind == "celerity" || kind == "renegade" {
 			out = append(out, "\x1b[2J"...) // no code of their own: the boards pass ANSI on
 		}
 	}
@@ -521,7 +528,7 @@ func writeBBSCodes(kind string, d *Doc, clear, ice bool, themes ...map[int]strin
 			}
 			v := d.get(x, yy)
 			a := int(cellAttr(v))
-			if kind == "celerity" {
+			if kind == "celerity" || kind == "renegade" {
 				a &^= 0x80
 			}
 			return cellCh(v), a
@@ -530,20 +537,27 @@ func writeBBSCodes(kind string, d *Doc, clear, ice bool, themes ...map[int]strin
 		for x := 0; x <= last; x++ {
 			v := d.get(x, y)
 			a := int(cellAttr(v))
-			if kind == "celerity" && a&0x80 != 0 {
+			if (kind == "celerity" || kind == "renegade") && a&0x80 != 0 {
 				a &^= 0x80
 				loss.blink++
 			}
 			if kind == "pipe" && a&0x80 != 0 && (ice || cellCh(v) != 32) { // (blink on a space shows nothing)
 				loss.bright++
 			}
-			if a != attr {
-				if code, ok := theme[a]; ok && kind == "pipe" { // a theme or user colour the file had (brdcodes.go)
+			code := theme[[2]int{x, y}] // a cell the file drew in a theme colour, still in it (brdcodes.go)
+			if code != "" && themeColour(code) != a {
+				code = ""
+			}
+			if a != attr || code != origin {
+				switch {
+				case code != "":
 					out = append(out, code...)
-				} else {
+				case a == attr: // the same colours, given by a code of their own again
+					out = fmt.Appendf(out, "|%02d", a&15)
+				default:
 					out = appendCodes(kind, out, attr, a, ice)
 				}
-				attr = a
+				attr, origin = a, code
 			}
 			_, na := cellAt(x + 1)
 			codeNext := na >= 0 && na != a // the next cell starts with a colour code
@@ -586,8 +600,10 @@ func writeBBSCodes(kind string, d *Doc, clear, ice bool, themes ...map[int]strin
 				force = n2 >= 0 && isUpperHex(byte(n1)) && isUpperHex(byte(n2)) || n1 == 'C' && n2 == 'L' && n3 == 'S'
 			case kind == "celerity" && ch == '|':
 				force = n1 >= 0 && (n1 == 'S' || strings.IndexByte(celerityLetters, byte(n1)) >= 0)
-			case kind == "pipe" && ch == '^':
-				force = n1 >= 0 && isDigit(byte(n1)) // Renegade's user colour ^0-^9 (brdcodes.go)
+			case kind == "renegade" && ch == '^':
+				force = n1 >= 0 && isDigit(byte(n1)) // a user colour ^0-^9 (brdcodes.go)
+			case kind == "renegade" && ch == '|':
+				force = n2 >= 0 && isDigit(byte(n1)) && isDigit(byte(n2)) // two digits are always a code there
 			case kind == "telegard" && ch == '`':
 				force = n2 >= 0 && isUpperHex(byte(n1)) && isUpperHex(byte(n2))
 			}
@@ -614,7 +630,7 @@ func writeBBSCodes(kind string, d *Doc, clear, ice bool, themes ...map[int]strin
 // (-1: not known) to a, both PC attribute bytes.
 func appendCodes(kind string, out []byte, prev, a int, ice bool) []byte {
 	switch kind {
-	case "pipe", "wwiv":
+	case "pipe", "wwiv", "renegade":
 		// |00-|15 keep the background and blink; |16-|31 set both.
 		if prev < 0 || prev&15 != a&15 {
 			out = fmt.Appendf(out, "|%02d", a&15)

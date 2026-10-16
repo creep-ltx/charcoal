@@ -166,6 +166,7 @@ type Tab struct {
 	sourceBin           bool
 	sourceUTF8          bool   // source was decoded from a UTF-8 file
 	codes               string // the source's BBS colour codes (bbscodes.go: "pipe", "ctrla" ...), "" none
+	dirartHead          bool   // a DirArt page whose first row is its disk's header line (dirarthead.go)
 	sauce               *Sauce
 	sauceFlags          int  // the file's SAUCE letter spacing and aspect ratio bits (TFlags 1-4), written back
 	rawCtl              bool // the file (with SAUCE) held ○ ◘ • or character 0 as glyphs: saved so again
@@ -1621,7 +1622,7 @@ var seqExt = regexp.MustCompile(`(?i)\.(seq|pet)$`)
 // loadBytes reads a file into the current tab; as is "auto", "amiga", "pc" or "c64".
 func (a *App) loadBytes(b []byte, name, path, as string) {
 	a.srcKind, a.ownFont, a.ownLower, a.ownPal = "", nil, nil, nil
-	a.codes, a.sky = "", nil
+	a.codes, a.sky, a.dirartHead = "", nil, false
 	if a.loadUni(b, name, path, as) { // Unicode pages: UTF-8 ANSI, durdraw, mIRC (uniformats.go)
 		return
 	}
@@ -3023,7 +3024,7 @@ func (a *App) encodeFor(fmtID, board string, ps *[]pause) ([]byte, error) {
 		return writePCBoard(d, info.clear), nil
 	case "avt":
 		return writeAvatar(d, info.clear), nil
-	case "pipe", "ctrla", "wwiv", "wildcat", "celerity", "telegard":
+	case "pipe", "ctrla", "wwiv", "wildcat", "celerity", "telegard", "renegade":
 		if a.animatedCodes(fmtID, board) { // a draw order, or frames with a board's pauses (brdcodes.go)
 			return a.encodeCodesAnimated(fmtID, board, ps), nil
 		}

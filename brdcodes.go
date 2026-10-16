@@ -9,6 +9,7 @@ package main
 // and the board's pauses put in as for an .ans (bbsBoard.paceIn).
 
 import (
+	"bytes"
 	"fmt"
 	"slices"
 	"strings"
@@ -75,8 +76,8 @@ func codesEscape(kind string, stream []byte, i int, cc, track *sgrColours) strin
 			return again()
 		}
 	}
-	if kind == "pipe" && c == '^' && n1 >= 0 && isDigit(byte(n1)) { // Renegade's user colours
-		return again()
+	if kind == "renegade" && (c == '^' && n1 >= 0 && isDigit(byte(n1)) || c == '|' && n2 >= 0 && isDigit(byte(n1)) && isDigit(byte(n2))) {
+		return again() // a user colour, or two digits (always a code on Renegade)
 	}
 	return ""
 }
@@ -146,7 +147,11 @@ func (a *App) encodeCodesAnimated(kind, board string, ps *[]pause) []byte {
 // Theme and user colours: Mystic's |T0-|T9 set the colour to the theme's
 // colour n and Renegade's ^0-^9 to the caller's colour scheme's (any sysop or
 // caller can change them). CharEdit shows them in the boards' defaults and
-// writes the code again where the page has that colour (bbsThemes).
+// writes the code again for the cells the file drew in it, as long as they
+// keep that colour (themeMarks); every other cell keeps explicit codes. A ^ and
+// a digit is text to Mystic, so Renegade's codes are only read with Open as
+// "PC: Renegade pipe codes" (kind "renegade": no |CL, |PI or |T; two digits
+// after a | are always a code; |24-|99 show nothing, so no bit 7).
 
 func init() {
 	bbsCodeIDs = append(bbsCodeIDs, "telegard")
@@ -155,6 +160,12 @@ func init() {
 	formats = slices.Insert(formats, at+1, Format{"telegard", "Telegard `XY codes (.msg)", ".msg", "pc"})
 	openAs = append(openAs, "telegard")
 	openAsNames = append(openAsNames, "PC: Telegard `XY")
+	bbsCodeIDs = append(bbsCodeIDs, "renegade")
+	bbsCodeName["renegade"] = "Renegade pipe codes"
+	at = slices.IndexFunc(formats, func(f Format) bool { return f.id == "pipe" })
+	formats = slices.Insert(formats, at+1, Format{"renegade", "Renegade pipe codes |07 ^3 (.ans)", ".ans", "pc"})
+	openAs = append(openAs, "renegade")
+	openAsNames = append(openAsNames, "PC: Renegade pipe codes")
 }
 
 // mysticThemeColours: a new theme's colours in Mystic (1.10's theme editor,
@@ -165,13 +176,68 @@ var mysticThemeColours = [10]int{0x01, 0x09, 0x0B, 0x08, 0x07, 0x0F, 0x18, 0x17,
 // UserColor(n) = Scheme.Color[n+1], COMMON.PAS).
 var renegadeUserColours = [10]int{0x0F, 0x07, 0x0D, 0x0B, 0x09, 0x0E, 0x1F, 0x0C, 0x8E, 0x0A}
 
-// renegadeColour reads ^0-^9 at b[0] (0: a "^" shown as it is).
-func (c *codeTerm) renegadeColour(b []byte) int {
-	if len(b) < 2 || !isDigit(b[1]) {
+// renegade reads Renegade's codes (COMMON.PAS): | + two digits (00-15 the
+// foreground, 16-23 the background, 24-99 nothing) and ^0-^9 (0: shown as text).
+func (c *codeTerm) renegade(b []byte) int {
+	if len(b) < 2 || b[0] == '^' && !isDigit(b[1]) {
 		return 0
 	}
-	c.setAttr(renegadeUserColours[b[1]-'0'])
-	return 2
+	if b[0] == '^' {
+		c.theme = ""
+		c.setTheme(string(b[:2]), renegadeUserColours[b[1]-'0'])
+		return 2
+	}
+	if len(b) < 3 || !isDigit(b[1]) || !isDigit(b[2]) {
+		return 0
+	}
+	switch v := int(b[1]-'0')*10 + int(b[2]-'0'); {
+	case v < 16:
+		c.theme = ""
+		c.setFg(v)
+	case v < 24:
+		c.theme = ""
+		c.setBg(v-16, false)
+	}
+	return 3
+}
+
+// setTheme sets the colours of a theme or user colour code.
+func (c *codeTerm) setTheme(code string, attr int) {
+	c.setAttr(attr)
+	c.theme, c.themeAttr = code, attr
+}
+
+// mark notes, before the terminal draws byte b, that the cell it goes in is
+// drawn in a theme code's colours (while no other colour came since).
+func (c *codeTerm) mark(b byte) {
+	if c.theme == "" {
+		return
+	}
+	if c.bios() != c.themeAttr || c.state != 0 {
+		if c.bios() != c.themeAttr {
+			c.theme = "" // an ANSI colour since
+		}
+		return
+	}
+	if c.marks == nil || b < 0x20 && !c.glyphCtl {
+		return
+	}
+	x, y := c.x, c.y
+	if x >= c.doc.cols {
+		x, y = 0, y+1
+	}
+	c.marks[[2]int{x, y}] = c.theme
+}
+
+// themeColour is the colours a theme or user code shows (boards' defaults).
+func themeColour(code string) int {
+	switch {
+	case len(code) == 3 && code[:2] == "|T" && isDigit(code[2]):
+		return mysticThemeColours[code[2]-'0']
+	case len(code) == 2 && code[0] == '^' && isDigit(code[1]):
+		return renegadeUserColours[code[1]-'0']
+	}
+	return -1
 }
 
 // telegard reads "`" + two capital hex digits: the attribute (0: shown as text).
@@ -206,45 +272,40 @@ func telegardCodes(b []byte) int {
 	return 0
 }
 
-// themeCodes lists the theme and user colour codes in a pipe-code file: the
-// attribute each one shows -> the code (the first code for an attribute wins).
-func themeCodes(src []byte) map[int]string {
-	var m map[int]string
-	add := func(a int, code string) {
-		if m == nil {
-			m = map[int]string{}
-		}
-		if _, ok := m[a]; !ok {
-			m[a] = code
-		}
-	}
-	for i := 0; i+2 < len(src); i++ {
-		switch {
-		case src[i] == '|' && src[i+1] == 'T' && isDigit(src[i+2]):
-			add(mysticThemeColours[src[i+2]-'0'], string(src[i:i+3]))
-		case src[i] == '|' && src[i+1] == 'P' && src[i+2] == 'I':
-			i += 2
-		case src[i] == '^' && isDigit(src[i+1]):
-			add(renegadeUserColours[src[i+1]-'0'], string(src[i:i+2]))
-		}
-	}
-	return m
-}
-
-// bbsThemes: for a page read from a file in pipe codes, its theme and user
-// colours (nil: none), so a save writes |T1 or ^3 again where the page has
-// that colour; the board then shows its own theme's colour there.
-func (a *App) bbsThemes(kind string) map[int]string {
-	if kind != "pipe" || a.codes != "pipe" {
+// themeMarks: the cells a file in kind's codes draws in a theme or user
+// colour code's colours -> the code (nil: none), read as the page is read.
+func themeMarks(src []byte, kind string, cols int) map[[2]int]string {
+	if kind != "pipe" && kind != "renegade" || cols <= 0 {
 		return nil
 	}
-	return themeCodes(a.source)
+	if !bytes.Contains(src, []byte("|T")) && !bytes.Contains(src, []byte("^")) {
+		return nil
+	}
+	t := newTerm(newDoc(cols, 25), false)
+	ct := newCodeTerm(t, kind)
+	ct.marks = map[[2]int]string{}
+	ct.write(src[:dataEnd(src)])
+	ct.flush()
+	if len(ct.marks) == 0 {
+		return nil
+	}
+	return ct.marks
+}
+
+// bbsThemes: for a page read from a file in pipe or Renegade codes, the cells
+// it drew in theme or user colours (nil: none), so a save writes those codes
+// again for them (only where the cell still has that colour).
+func (a *App) bbsThemes(kind string) map[[2]int]string {
+	if a.codes != kind {
+		return nil
+	}
+	return themeMarks(a.source, kind, a.doc.cols)
 }
 
 // bbsThemeNote tells, when a file is opened, that its theme or user colours
 // are shown in the boards' defaults ("" none).
 func bbsThemeNote(kind string, src []byte) string {
-	if kind != "pipe" || themeCodes(src) == nil {
+	if themeMarks(src, kind, 80) == nil {
 		return ""
 	}
 	return "; |T0-|T9 and ^0-^9 shown in Mystic's and Renegade's default colours, written back as codes"

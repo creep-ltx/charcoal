@@ -175,11 +175,12 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   as TEDSE saves it) and in the BASIC listing (the set POKEd to `$E000`) and ACME source (the set at `$2000`);
   all checked in VICE's xplus4, pixel for pixel.
 - **DirArt** (Model: DirArt): art made of a C64 disk's directory. `LOAD"$",8` and `LIST` show one line per file,
-  its 16-character name in quotes: the page is 16 columns wide, light blue on blue. The **first row is the disk's
-  header line** (its 16-character name, which `LIST` shows reversed before the files: the row reads and saves its
-  characters reversed), then a row per file (up to 144). Save as *C64 disk whose directory shows it* (`.d64`):
-  the first row the disk's name, each other row a DEL file of 0 blocks; the disk ID and DOS type (`CE 2A` on a new
-  disk) are kept from the disk the page came from. Characters a name cannot hold (the quote, and reversed characters other than the control codes: as Marq's
+  its 16-character name in quotes: the page is 16 columns wide, light blue on blue. A page opened from a disk has
+  **the disk's header line as its first row** (its 16-character name, which `LIST` shows reversed before the
+  files), then a row per file (up to 144); saved, the first row is the disk's name again. A page made in CharEdit
+  or opened from Marq's or Petmate9's files has no header row: every row is a file and the disk is named after
+  the saved file. Save as *C64 disk whose directory shows it* (`.d64`): each file row a DEL file of 0 blocks; the
+  disk ID and DOS type (`CE 2A` on a new disk) are kept from the disk the page came from. Characters a name cannot hold (the quote, and reversed characters other than the control codes: as Marq's
   editor and Petmate9 mark them) become spaces, and the save says how many. A `.d64` without a screen program
   of CharEdit's opens as a DirArt page (Open as "C64 DirArt" opens any disk's directory); saved again, it is
   written over that disk: its programs, and the names that did not change, stay as they were. Marq's `DIRART`
@@ -304,9 +305,9 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   one read from Telstar keeps every other field when saved, a new one is numbered by its name, `200a.json` is
   page 200 frame a). Teletext files open as Viewdata with Open as; a Viewdata page also saves as `.tti` and an
   edit.tf link. **Play** sends the stream to a Viewdata terminal on screen.
-- **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save (`@X00` keeps the colour and `@XFF`
-  brings it back, as PCBoard and Synchronet read them: black on black is written `@X80`, bright white on white
-  `@X7F`); iCEDraw (.idf), ArtWorx (.adf) and
+- **PC BBS formats**: PCBoard `@X` (.pcb) and Avatar (.avt) open and save (a file with both `@X00` and `@XFF` uses
+  them as PCBoard does, to keep a colour and bring it back; alone each is a colour, as art editors wrote them; a
+  save never writes both); iCEDraw (.idf), ArtWorx (.adf) and
   TundraDraw (.tnd) open with their own fonts and colours and save (see Files for other editors). The same art
   in five formats (ansilove's test files, `testdata/alove`) gives the same page in all of them. PC attribute
   bytes are in BIOS colour order and are converted.
@@ -317,8 +318,9 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   write bright backgrounds and blink as `|24`-`|31` (WWIV, Synchronet and IcyDraw show them, Mystic 1.10 and
   Renegade do not: the save says how many cells), a `|` as Mystic's `|PI`. A board's code CharEdit cannot show (a pause, the caller's name, `|PO`, Ctrl-A `P`) stays on the
   page as text and is written back as it came, so it still works on the board. Colours a sysop or caller sets
-  up (Mystic's theme colours `|T0`-`|T9`, Renegade's `^0`-`^9`) show in the boards' default colours and are
-  written back as those codes where the page has those colours.
+  up (Mystic's theme colours `|T0`-`|T9`; Renegade's `^0`-`^9` with Open as *PC: Renegade pipe codes*, since Mystic
+  prints them) show in the boards' default colours and are written back as those codes for the cells drawn in
+  them (a cell given another colour gets an ordinary code).
 
   | Format | Codes | Read as |
   |---|---|---|
@@ -327,6 +329,7 @@ tag has a "b"). The Windows program also builds here, with MinGW and SDL2's MinG
   | WWIV (`.msg`) | Ctrl-C (♥) + `0`-`9` (each caller's colours: the defaults are read), `\|nn`, `\|#n` | WWIV 5's `outstr`; written with `\|nn` only, since hearts differ per caller (a ♥ in the art becomes a space) |
   | Wildcat! (`.bbs`) | `@BF@`, background and foreground as capital hex digits, `@CLS@` | Synchronet's Wildcat! mode |
   | Celerity (`.ans`, Open as only) | `\|k \|b \|g \|c \|r \|m \|y \|w`, `\|d \|B ... \|W` bright, `\|S` swap | Synchronet's Celerity mode (no blink: it is dropped, and the save says so) |
+  | Renegade pipe codes (`.ans`, Open as only) | `\|00`-`\|23` as pipe codes (`\|24`-`\|99` show nothing), `^0`-`^9` the caller's colours | Renegade's own reading (no blink: dropped, and the save says so) |
   | Telegard (`.msg`) | `` ` `` + the attribute as two capital hex digits (`` `0E `` yellow, `` `1F `` white on blue) | Telegard 3's sample screens (its `~XX` codes stay text) |
 - **C64 page**: PETSCII `.seq` files (the stream a C64 BBS sends): 40 columns, colour and reverse codes, both
   character sets, one screen colour, cursor moves, clear/home, insert/delete. The character set is the C64's

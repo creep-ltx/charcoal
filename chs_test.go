@@ -740,16 +740,16 @@ func TestChsDirArtEditor(t *testing.T) {
 	}
 	a.doc = chsFDirArtPage(7, 12)
 	d := a.doc.clone()
-	for x := 0; x < 16; x++ { // the first row is the header line: LIST shows it reversed (dirarthead.go)
-		d.set(x, 0, makeCell(cellCh(d.get(x, 0))|0x80, 1, 0, 0))
-	}
 	p := filepath.Join(t.TempDir(), "art.d64")
 	if !a.writeOut(p, "dirart") || a.srcKind != "dirart" {
 		t.Fatal(a.message)
 	}
 	b := chsFOpen(t, p)
-	if !b.dirart() || b.saveFmt != "dirart" || chsFSameCodes(d, b.doc) != "" {
-		t.Fatalf("reopened: %s %s %s", b.machine, b.saveFmt, chsFSameCodes(d, b.doc))
+	// A page with no header row: every row a file; it opens with the disk's header line above them (dirarthead.go).
+	body := newDoc(16, max(1, b.doc.rows-1))
+	copy(body.cells, b.doc.cells[16:])
+	if !b.dirart() || b.saveFmt != "dirart" || b.doc.rows != 13 || chsFSameCodes(d, body) != "" {
+		t.Fatalf("reopened: %s %s %d rows %s", b.machine, b.saveFmt, b.doc.rows, chsFSameCodes(d, body))
 	}
 	// Ctrl+S after a change: written over the same disk.
 	b.doc.set(0, 0, makeCell(0x41, 1, 0, 0))
@@ -757,7 +757,7 @@ func TestChsDirArtEditor(t *testing.T) {
 	if !b.writeOut(p, b.saveFmt) {
 		t.Fatal(b.message)
 	}
-	if c := chsFOpen(t, p); cellCh(c.doc.get(0, 0)) != 0xC1 || c.doc.rows != 12 {
+	if c := chsFOpen(t, p); cellCh(c.doc.get(0, 0)) != 0xC1 || c.doc.rows != 13 {
 		t.Error("Ctrl+S")
 	}
 	// Other pages do not offer it; a disk with a screen program still opens as the screen.

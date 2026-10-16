@@ -552,30 +552,39 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   `batchNotArt` accepts `.msg`/`.bbs` files `bbsCodesKind` finds. `animFormat(f)` gives Animate's cost and its
   Make label the codes. A codes file on another kind's board (a Ctrl-A file for Mystic) gets that board's escapes
   (|PI): right for that board, not for the kind's own readers.
-- **PCBoard @X00/@XFF** (`pcformats.go`): `parsePCBoard` keeps a saved colour (light grey at first): @X00 saves,
-  @XFF restores (Synchronet putmsg.cpp; PCBoard's PPL guide: one saved colour). `pcbCell`: black on black is
-  written @X80 (looks the same with blink), bright white on white @X7F (`pcbLoss` note). `boardColourer("pcb")`
-  returns nil (ANSI kept) when a stream reaches attribute 00 or FF. The bbspause_test PCBoard model acts on them.
-  **Changed reading**: ansilove's bs-alove.pcb writes black ░▒▓ as @X00 (formats5_test skips those cells).
+- **PCBoard @X00/@XFF** (`pcformats.go`; the rule from the main session: opening and saving never change how a
+  real file reads): `pcbSavesColour(b)` = the file has both; only then @X00 saves and @XFF restores (Synchronet
+  putmsg.cpp; PCBoard's PPL guide: one saved colour, light grey at first). Alone, each is a colour (ansilove's
+  bs-alove.pcb draws black ░▒▓ with @X00; five formats still give one page). Writer: `pcbBoth(d)` (both colours on
+  the page) -> bright white on white as @X7F (`pcbLoss` note), so a save never makes the pair.
+  `boardColourer("pcb")` (files paced for the PCBoard board, which always saves/restores) keeps ANSI when a
+  stream reaches 00 or FF; the bbspause_test PCBoard model acts on them.
 - **Telegard** (`brdcodes.go`): kind "telegard" (appended to `bbsCodeIDs`, format after celerity, Open as
   "PC: Telegard `XY"): `` ` `` + two capital hex digits = the attribute (CUSTOM.DOC of the tgarts pack: "color
   codes - `xx or |xx"; all of its 26 sample .MSG files use only that, upper case). Its `|xx` and `~XX` stay text
   (no source for 3.x; 2.5's source uses WWIV hearts). Detection `telegardCodes` (3+, 2+ different, repeated, half
   the backticks); hooked at the end of bbsCodesKind. Writer: appendCodes "telegard", writeBBSCodes `force`.
-- **Theme/user colours**: the pipe reader (`codeTerm.pipe`, lead `|^`) reads `|T0`-`|T9` as Mystic 1.10's new
-  theme colours (`mysticThemeColours`, bbs_cfg_theme.pas; bbs_io.pas sends Attr2Ansi of the whole attribute) and
-  `^0`-`^9` as Renegade's "Default Color Scheme" (`renegadeUserColours`, BOOT.PAS; UserColor = Scheme.Color[n+1]).
-  `pipeActs` includes `T`+digit (so art "|T5" is |PI'd), the detection counts |Tn as pipe codes. Saving:
-  `a.bbsThemes(kind)` = `themeCodes(a.source)` (attribute -> the first code that gave it) passed to
-  writeBBSCodes, which writes that code where the attribute changes to one of them. So an explicit |11 cell with
-  the same colour as a |T2 also becomes |T2 (asked the user). A `^` + digit in Mystic art now reads as a colour.
+- **Theme/user colours**: the pipe reader reads `|T0`-`|T9` as Mystic 1.10's new theme colours
+  (`mysticThemeColours`, bbs_cfg_theme.pas; bbs_io.pas sends Attr2Ansi of the whole attribute); `pipeActs`
+  includes `T`+digit (art "|T5" is |PI'd), the detection counts |Tn as pipe codes. **Renegade** is its own kind
+  "renegade" (Open as "PC: Renegade pipe codes", Save as; never guessed, since Mystic prints `^5`): `codeTerm.renegade`
+  reads `|` + two digits (00-15 fg, 16-23 bg, 24-99 nothing) and `^0`-`^9` = the "Default Color Scheme"
+  (`renegadeUserColours`, BOOT.PAS; UserColor = Scheme.Color[n+1]); no |CL/|PI/|T; no bit 7 (loss note). Saving
+  keeps a theme code **per cell**: `themeMarks(a.source, kind, cols)` reads the source again with
+  `codeTerm.marks` on (`mark` notes each cell drawn while a theme code's colours are on; an explicit colour code
+  or an ANSI colour ends it) and writeBBSCodes writes the code for a marked cell only while it has that code's
+  colour (`themeColour`), else explicit codes; switching origin with the same colours writes `|nn` again. So a
+  file with |T2 and an explicit |11 of the same colour saves byte for byte (test). Marks are by position: rows
+  inserted above move them (the colour check catches most).
 - **DirArt header** (`dirarthead.go`): `readDirArtPage` = row 0 the BAM's name ($90-$9F) with every cell |0x80
   (LIST prints the header reversed), then readDirArt's rows; `writeDirArtPage` = writeDirArt of rows 1.. then the
   name: kept byte for byte when the row reads the same (`dirartHeadSame`), else `screenToName(sc &^ 0x80)` (a
   non-reversed non-space cell counted in `dirartNote.plain`). The ID/DOS type ($A2-$A6) are the source's or
-  writeD64's "CE 2A". readDirArt/writeDirArt are unchanged (chs tests and fuzz still use them); the app glue
-  (reparseDirArt, encodeDirArt) uses the page versions; every DirArt page's first row is the header (Marq's/
-  Petmate9's DirArt pages too, when saved as .d64). LIST shows the header's name 3 columns left of the entries'.
+  writeD64's "CE 2A". readDirArt/writeDirArt are unchanged (chs tests and fuzz still use them). `Tab.dirartHead` (set by
+  reparseDirArt, cleared by loadBytes, kept in autosaves as `dirart_head`): only such a page (opened from a
+  .d64) has the header as row 0 and encodeDirArt writes it with `writeDirArtPage`; others (new, converted, Marq's,
+  Petmate9's) use writeDirArt: every row a file, the disk's name from the file name (or the disk saved over).
+  LIST shows the header's name 3 columns left of the entries'.
 - **Tests** (`brd_test.go`, helpers `brdF*`): models of FAME's and CNet's MCI (registered in `boardModels`, so
   TestBBSPausesThroughBoards runs them) and Image 1.2's £W; units/rounding, waited, files byte for byte, Save's
   note/cost/Play; codes files animated for every kind (read back = the plain animation, no SGR left), with Mystic,
@@ -587,7 +596,7 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
   through bbsCodeIDs. Big check: 29 issues, no page type changed.
 - Sources fetched (not in the repo): ~/.cache/charcoal-boards (CNet 3.05c from Aminet, Telegard 3.09 and tgarts
   from the bbsdocumentary mirror at mirrors.archeobits.com, Synchronet putmsg.cpp, Mystic/Renegade/Telegard 2.5
-  sources from GitHub). FAME.guide: the user's own FAME install (not public).
+  sources from GitHub). FAME.guide: the user's own FAME install (not public); no text of it is in the repo, only facts in own words.
 - Not done: FAME's `~SR_` random screens in Animate a folder; Telegard's `|xx`; the 5 ID bytes of the DirArt
   header as art; theme colours in animated codes files (the stream's colours become |nn there); nothing tried on
   a running FAME, CNet, Telegard, Image or PCBoard.

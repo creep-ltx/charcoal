@@ -398,7 +398,7 @@ func (a *App) reparseDirArt() bool {
 		return false
 	}
 	if d, err := readDirArtPage(a.source); err == nil { // the header line first (dirarthead.go)
-		a.doc = d
+		a.doc, a.dirartHead = d, true
 	}
 	a.cx, a.cy, a.sel, a.float = 0, 0, nil, nil
 	return true
@@ -417,7 +417,10 @@ func (a *App) encodeDirArt(fmtID string, d *Doc) ([]byte, bool, error) {
 	if name == "" {
 		name = a.name
 	}
-	img, note := writeDirArtPage(d, src, name) // the first row is the header line (dirarthead.go)
+	img, note := writeDirArt(d, src, name) // every row a file, the disk's name the file's (or its disk's)
+	if a.dirartHead {
+		img, note = writeDirArtPage(d, src, name) // the first row is the header line (dirarthead.go)
+	}
 	dirartLastNote = note.String()
 	return img, true, nil
 }
