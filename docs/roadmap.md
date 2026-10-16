@@ -159,6 +159,9 @@ against each platform's best editor. Each step says what it wins.
   Image BBS's £ codes read (colours, clear, reverse) and saved back with them. Later: Image's whole-second £W and
   Color 64 (open questions to the user), C-Net/DMBBS/Centipede codes (not found), a run on a real board.
 
+- **Sharp MZ-700**: a free look-alike of the second character set (Sharp's ROM cannot be shipped; without it those
+  cells show hex boxes, and real MZ art uses that set a lot).
+
 ## Later
 
 - Collaboration in Moebius's protocol (IcyDraw and Moebius speak it).

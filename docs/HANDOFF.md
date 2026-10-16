@@ -897,6 +897,13 @@ CharView: n/p/arrows, q/Esc, a auto-scroll (smooth/step with s, speed [ ]), wide
 
 ## MSX and Sharp MZ-700 pages (2026-10-16, branch r4-msxmz)
 
+- **Decided (2026-10-16, the user trusts these calls):** C-BIOS's font as the MSX default (a real MSX shows its
+  ROM font; only an own font travels); MSX pictures at openMSX's 320x240, MZ at the bare 320x200; the MSX .bin
+  loads at $9000 and resets to SCREEN 0 on a key, the cartridge never returns; MZ display codes 0x00/0x20 swapped
+  inside CharEdit (files hold the real codes). The MZ second set without Sharp's ROM: drawing a free look-alike is
+  on the roadmap (real MZ art uses it a lot; hex boxes until then). CharView lists .mzf .xex .atr .tap .dur .irc
+  .ig .igs .psci .icy .xp .msg too.
+
 - **MSX** (`msx.go`): page type "msx" (`a.msx()`). `Tab.msxSet msxSetup` = mode (0 SCREEN 0 40x24, 1 SCREEN 1
   32x24, 2 SCREEN 0 WIDTH 80), fg/bg (SCREEN 0: the whole screen; border = bg), border (SCREEN 1's backdrop),
   `ct [32]byte` (SCREEN 1's colour table, fg<<4|bg per 8 characters). **A cell holds only its character**
