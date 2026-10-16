@@ -14,6 +14,7 @@ package main
 import (
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // Layer is one picture of a page of several on top of one another.
@@ -565,4 +566,52 @@ func (a *App) everyLayerDo(op func()) {
 // together stay under maxPageCells.
 func (a *App) layersMaxRows() int {
 	return max(1, (maxPageCells-a.otherLayerCells())/max(1, a.doc.cols))
+}
+
+// ---------------------------------------------------------------- drawing
+
+// drawLayersRow draws row y of a page of layers, columns x0-x1, at (ox, py):
+// each cell as it is seen; with the other layers dim, a cell that comes from
+// another layer than the current one faint; with them hidden, only the current one.
+func (a *App) drawLayersRow(fb *FB, ox, py, colPx, rowPx, z, x0, x1, y int) {
+	only := -1
+	if a.others == 2 {
+		only = a.lay
+	}
+	for x := x0; x < x1; x++ {
+		v, from := a.shownAt(x, y, only)
+		px := ox + x*colPx
+		a.drawCellXY(fb, px, py, z, x, y, v)
+		if a.others == 1 && from != a.lay {
+			fb.blend(Rect{px, py, colPx, rowPx}, a.layerPaper(v), 150)
+		}
+	}
+}
+
+// layerPaper is the colour a faint cell fades towards: the page's paper.
+func (a *App) layerPaper(v uint32) uint32 {
+	switch {
+	case a.atari():
+		return a.atariRGB(a.doc.bg)
+	case a.screen():
+		return a.screenRGB(a.doc.bg)
+	case a.st():
+		return a.pal[cellBg(v)&15]
+	}
+	return uint32(cPaper)
+}
+
+// copySeen copies the selection as it is seen (every visible layer), not only
+// the current layer's cells.
+func (a *App) copySeen() {
+	if a.sel == nil {
+		a.msg("Select a block first (Select tool)")
+		return
+	}
+	r := a.selRect()
+	p := a.seen()
+	a.clip = p.copyRect(r.x, r.y, r.w, r.h)
+	a.clipText = strings.Join(docText(p, a.runeOf, r.x, r.y, r.w, r.h), "\n")
+	setClipboard(a.clipText)
+	a.msg(fmt.Sprintf("Copied %dx%d as it is seen", r.w, r.h))
 }

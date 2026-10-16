@@ -898,6 +898,10 @@ func (a *App) drawPage(u *UI, id string) {
 			}
 			continue
 		}
+		if a.layers != nil && a.playing == nil { // the layers put together (layers.go)
+			a.drawLayersRow(fb, ox, oy+y*rowPx, colPx, rowPx, z, x0, x1, y)
+			continue
+		}
 		for x := x0; x < x1; x++ {
 			a.drawCellXY(fb, ox+x*colPx, oy+y*rowPx, z, x, y, a.doc.get(x, y))
 		}
@@ -1236,10 +1240,13 @@ func (a *App) drawStatus(u *UI, r Rect) {
 	if n := a.nFrames(); n > 1 {
 		pos += fmt.Sprintf("  Frame %d/%d", a.cur+1, n)
 	}
+	if n := a.nLayers(); n > 1 {
+		pos += fmt.Sprintf("  Layer %d/%d %s", a.lay+1, n, a.layerName(a.lay))
+	}
 	pos += a.orderNote()
 	x = fb.text(x, y, pos, cText) + 24
 	if a.hover != nil {
-		v := a.doc.get(a.hover.x, a.hover.y)
+		v := a.shownCell(a.hover.x, a.hover.y)
 		c := cellCh(v)
 		x = fb.text(x, y, fmt.Sprintf("Mouse %d,%d: ", a.hover.x+1, a.hover.y+1), cText)
 		if a.uni() {

@@ -437,3 +437,55 @@ func layFStyleCount() int {
 	defer uniStyles.RUnlock()
 	return len(uniStyles.list)
 }
+
+// layFDraw draws the page into a fresh picture and gives its pixels.
+func layFDraw(a *App) []uint32 {
+	u := &UI{fb: &FB{}}
+	u.fb.resize(500, 300)
+	a.page = Rect{0, 0, 480, 280}
+	a.blink = false
+	a.drawPage(u, "0")
+	return slices.Clone(u.fb.px)
+}
+
+// A page of layers is drawn as its flattened page of one layer is; dim and hidden others differ.
+func TestLayDrawn(t *testing.T) {
+	for _, mode := range []string{"pc", "c64", "uni", "atari", "st"} {
+		a := testApp(t, mode)
+		layFArt(a, 3)
+		flat := layFDraw(a)
+		layFSplit(a)
+		a.layers[1].clear = 0
+		if got := layFDraw(a); !slices.Equal(got, flat) {
+			t.Errorf("%s: two layers are not drawn as the page", mode)
+		}
+		a.others = 1
+		dim := layFDraw(a)
+		a.others = 2
+		only := layFDraw(a)
+		a.others = 0
+		if slices.Equal(dim, flat) || slices.Equal(only, flat) || slices.Equal(dim, only) {
+			t.Errorf("%s: dim / hidden others look the same as shown", mode)
+		}
+	}
+}
+
+func TestLayPickAndCopySeen(t *testing.T) {
+	a := testApp(t, "pc")
+	a.doc.set(0, 0, makeCell('a', 5, 3, 0))
+	a.newLayer(false)
+	a.doc.set(1, 0, makeCell('b', 6, 0, 0))
+	a.pick(0, 0)
+	if a.brush != 'a' || a.fg != 5 {
+		t.Fatalf("pick what is seen: %c %d", a.brush, a.fg)
+	}
+	a.sel = &Sel{0, 0, 1, 0}
+	a.copySel(false)
+	if a.clip.cells[0] != blank || a.clip.cells[1] != makeCell('b', 6, 0, 0) {
+		t.Fatal("Copy copies the current layer")
+	}
+	a.copySeen()
+	if a.clip.cells[0] != makeCell('a', 5, 3, 0) || a.clip.cells[1] != makeCell('b', 6, 0, 0) {
+		t.Fatal("Copy what is seen")
+	}
+}

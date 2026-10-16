@@ -1036,7 +1036,7 @@ func (a *App) floodFill(x, y int) {
 }
 
 func (a *App) pick(x, y int) {
-	v := a.doc.get(x, y)
+	v := a.shownCell(x, y) // what is seen, on a page of layers too (layers.go)
 	if a.uni() {
 		a.uniPick(v)
 		return
