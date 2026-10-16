@@ -126,7 +126,7 @@ func checkOne(path, group string, sample bool, sampleDir string) (res checkResul
 		"ata": ".ata", "marq": ".c", "petmate": ".petmate", "prg": ".prg",
 		// other editors' files: .adf and .xp are known by their name only, as in the app
 		"idf": ".idf", "adf": ".adf", "tnd": ".tnd", "icy": ".icy", "xp": ".xp", "psci": ".psci", "pet": ".pet", "pmjson": ".json",
-		"uniansi": ".ans", "mirc": ".irc", "dur": ".dur"}[fmtID]
+		"uniansi": ".ans", "mirc": ".irc", "dur": ".dur", "dirart": ".d64"}[fmtID]
 	as := mode
 	if fmtID == "xbin" || fmtID == "marq" || fmtID == "petmate" || fmtID == "prg" {
 		as = "auto"
