@@ -9,6 +9,8 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 rm -rf "$out"
 mkdir -p "$out/licences"
 cp "$root/README.md" "$root/LICENSE" "$out/"
+mkdir -p "$out/docs"
+cp -R "$root/docs/manual" "$root/docs/screenshots" "$out/docs/"
 cp "$root"/fonts/*NOTICE* "$root"/fonts/*LICENSE* "$root"/third_party/*LICENSE* "$out/licences/"
 case $os in
 linux)

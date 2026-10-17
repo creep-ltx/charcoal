@@ -64,7 +64,7 @@ renamed by the user on 2026-10-13. Public at github.com/creep-ltx/charcoal (remo
 
 The table holds the first seven page types (to 0.1b7). The eleven added on 2026-10-16/17 (CPC, Unicode, Minitel,
 Viewdata, Plus/4, MSX, MZ-700, and the C64 modes, IGS, SkyPix, DirArt) each have their own section below; the
-README's "What it does" lists every page and format.
+manual (docs/manual/, one page per machine) describes every page and format.
 
 | Page | Files |
 |---|---|
